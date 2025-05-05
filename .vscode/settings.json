@@ -1,7 +1,7 @@
 {
     "editor.tabSize": 4,
     "workbench.colorCustomizations": {
-        "titleBar.activeBackground": "#2A5677",
+        "titleBar.activeBackground": "#93cffd",
         "titleBar.activeForeground": "#000000"
     },
     "[jsonc]": {
