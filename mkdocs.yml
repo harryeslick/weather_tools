@@ -32,7 +32,7 @@ plugins:
         kernel_name: python3
         include_source: True
         ignore_h1_titles: True
-        execute: True
+        execute: false
         allow_errors: false
         remove_tag_config:
             remove_input_tags:
