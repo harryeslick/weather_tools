@@ -1,7 +1,7 @@
-site_name: py_project_template
-site_description: A Python package template
+site_name: weather tools
+site_description: personal collection of functions for common weather data operations
 site_author: harryeslick
-repo_url: https://github.com/DPIRD-FSI/pydst
+repo_url: https://harryeslick.github.io/weather_tools/
 
 theme:
     name: material
@@ -60,9 +60,8 @@ nav:
         - read silo module: api_docs/read_silo.md
 
   - Examples:
-    - Notebooks:
-        - 1. Basic usage: notebooks/example.ipynb
-        - 2. Example plots: notebooks/example_plots.ipynb
+      - 1. Basic usage: notebooks/example.ipynb
+      - 2. Example plots: notebooks/example_plots.ipynb
 
 extra_javascript:
   - https://cdn.plot.ly/plotly-2.32.0.min.js

@@ -1,23 +1,7 @@
-# Welcome to MkDocs
+# Welcome to weather tools
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+personal collection of functions for common weather data operations
 
-## Commands
+This is a python package for personal commonly used functions for working with weather data. Primarily for loading and using SILO weather data from local netCDF files.
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-```
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        # Other markdown pages, images and other files.
-        api_docs/
-            hello_world.md   # API docs are stored here
-        notebooks/
-            example.py  # ipynb notebooks are stored here for examples. 
-```
+To use this package you will need to download the netCDF files which you require from SILO. A complete list of netCDF files available on AWS S3 can be found here: <https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/index.html>
