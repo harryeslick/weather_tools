@@ -1,7 +1,15 @@
-# Python Project Template
+# Weather tools
 
-This is a repository template for building python projects.
-It uses:
+[![Deploy MkDocs GitHub Pages](https://github.com/harryeslick/weather_tools/actions/workflows/mkdocs.yml/badge.svg)](https://github.com/harryeslick/weather_tools/actions/workflows/mkdocs.yml)
+
+This is a python package for personal commonly used functions for working with weather data.
+Primarily for loading and using [SILO weather data](https://www.longpaddock.qld.gov.au/silo/gridded-data/) from local netCDF files.
+
+To use this package you will need to download the netCDF files which you require from SILO.
+A complete list of netCDF files available on AWS S3 can be found here:
+<https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/index.html>
+
+Package uses:
 
 - `rye` for package and dependency management
 - `uv` is used for dependencies within the dev container, using the `rye` `requirements.lock` file
