@@ -1,0 +1,35 @@
+name: Deploy MkDocs GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Deploy docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v2
+
+      - name: Install the latest version of rye
+        uses: eifinger/setup-rye@v4
+        with:
+          enable-cache: true
+
+      # - name: Sync dependencies
+
+      # - name: Lint
+      # run: rye lint
+
+      - name: Deploy
+        run: |
+          rye sync
+          source .venv/bin/activate
+          mkdocs gh-deploy --force
+
+
+        # uses: mhausenblas/mkdocs-deploy-gh-pages@master
+        # env:
+          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

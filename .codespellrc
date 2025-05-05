@@ -1,0 +1,5 @@
+[codespell]
+write = true
+ignore-words-list = hary,teh,recieve
+skip = *.md, *.lock, *.toml
+quiet-level = 2

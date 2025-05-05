@@ -1,0 +1,89 @@
+[project]
+name = "py_template"
+authors = [{ name = "Harry Eslick", email = "harry.eslick@mmm.com" }]
+description = "Sample Python Project for creating a new Python Module"
+readme = "README.md"
+classifiers = [
+    # "Development Status :: 3 - Alpha",
+    # "Intended Audience :: Developers",
+    # "License :: OSI Approved :: MIT License",1
+    # "Programming Language :: Python :: 3.8",
+    # "Programming Language :: Python :: 3.9",
+    # "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+]
+# requires-python = ">=3.8.1"
+dynamic = ["version"]
+dependencies = [
+    "pandas>=2.2.3",
+    "ipykernel>=6.29.5",
+    "numpy>=2.1.3",
+]
+
+[tool.rye]
+dev-dependencies = [
+    "mkdocs-material>=9.5.47",
+    "mkdocs-jupyter>=0.25.1",
+    "mkdocstrings[python]>=0.27.0",
+    "bandit[toml]==1.7.5",
+    "pre-commit==3.3.1",
+    "pylint==2.17.4",
+    "pylint_junit",
+    "pytest-cov==4.0.0",
+    "pytest-mock<3.10.1",
+    "pytest-runner",
+    "pytest==7.3.1",
+    "pytest-github-actions-annotate-failures",
+    "plotly>=5.24.1",
+    "mkdocs-git-revision-date-plugin>=0.3.2",
+]
+
+# [project.urls]
+# Documentation = "https://github.com/microsoft/python-package-template/tree/main#readme"
+# Source = "https://github.com/microsoft/python-package-template"
+# Tracker = "https://github.com/microsoft/python-package-template/issues"
+
+# [tool.flit.module]
+# name = "python_package"
+
+# [tool.bandit]
+# exclude_dirs = ["build", "dist", "tests", "scripts"]
+# number = 4
+# recursive = true
+# targets = "src"
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = false
+
+[tool.coverage.run]
+branch = true
+
+# [tool.coverage.report]
+# fail_under = 100
+
+# reportMissingImports = true
+# reportMissingTypeStubs = false
+
+# pythonVersion = "3.7"
+# pythonPlatform = "Linux"
+
+# executionEnvironments = [{ root = "src" }]
+
+[tool.pytest.ini_options]
+addopts = "--cov-report term --cov src --cov-fail-under 0 --cov-append -m 'not integration'"
+pythonpath = ["src"]
+testpaths = "tests"
+markers = [
+    "integration: marks as integration test",
+    "notebooks: marks as notebook test",
+    "gpu: marks as gpu test",
+    "slow: marks tests as slow",
+    "unit: fast offline tests",
+]

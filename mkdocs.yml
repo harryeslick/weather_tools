@@ -1,0 +1,72 @@
+site_name: py_project_template
+site_description: A Python package template
+site_author: harryeslick
+# repo_url: https://github.com/DPIRD-FSI/pydst
+# site_url: https://gh-pages.dtosf5dosh8hw.amplifyapp.com
+
+theme:
+    name: material
+    icon:
+        repo: fontawesome/brands/github
+    # logo: assets/logo.png
+    # favicon: assets/favicon.png
+    features:
+        - navigation.instant
+        - navigation.tracking
+        - navigation.tabs
+        - navigation.top
+        - search.highlight
+        - search.share
+
+    # font:
+    #     text: Google Sans
+    #     code: Regular
+
+plugins:
+    - search
+    - mkdocstrings
+    # - mermaid2
+    - git-revision-date
+    # - page-to-pdf
+    # - pdf-export
+    - mkdocs-jupyter:
+        kernel_name: python3
+        include_source: True
+        ignore_h1_titles: True
+        execute: True
+        allow_errors: false
+        remove_tag_config:
+            remove_input_tags:
+                - hide_code
+        ignore:
+          - "**/old/**"
+        execute_ignore:
+          - "**/old/**"
+
+markdown_extensions:
+    - admonition
+    - abbr
+    - attr_list
+    - def_list
+    - footnotes
+    - meta
+    - md_in_html
+    - toc:
+          permalink: true
+
+nav:
+  - Home: index.md
+  - Changelog: CHANGELOG.md
+  # - Report Issues: https://github.com/DPIRD-FSI/pydst/issues
+  - API Reference:
+        - Hello module: api_docs/hello_world.md
+
+  - Examples:
+    - Notebooks:
+        - 1. Notebook example: notebooks/example.py
+
+extra_javascript:
+  - https://cdn.plot.ly/plotly-2.32.0.min.js
+
+extra_css:
+  - style.css
