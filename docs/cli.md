@@ -122,6 +122,7 @@ weather-tools extract [OPTIONS]
 | `--output` | TEXT | Output CSV filename | `weather_data.csv` |
 | `--variables` | TEXT | Weather variables to extract (see below) | `daily` |
 | `--silo-dir` | PATH | Path to SILO data directory | `~/Developer/DATA/silo_grids` |
+| `--tolerance` | FLOAT | Maximum distance (in degrees) for nearest neighbor selection | `0.1` |
 | `--help` | | Show help message and exit | |
 
 #### Variable Options
@@ -174,6 +175,22 @@ weather-tools extract \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --silo-dir /path/to/my/silo/data \
   --output custom_weather_data.csv
+```
+
+##### Using Custom Tolerance
+
+```bash
+# Use stricter tolerance (0.01 degrees ≈ 1.1 km)
+weather-tools extract \
+  --lat -27.5 --lon 153.0 \
+  --start-date 2020-01-01 --end-date 2020-12-31 \
+  --tolerance 0.01
+
+# Use more permissive tolerance (0.5 degrees ≈ 55 km)
+weather-tools extract \
+  --lat -27.5 --lon 153.0 \
+  --start-date 2020-01-01 --end-date 2020-12-31 \
+  --tolerance 0.5
 ```
 
 #### Sample Output
@@ -275,6 +292,37 @@ To use this package, you need to download the netCDF files from SILO:
 - The CLI automatically selects the nearest grid point to your coordinates
 - SILO data has approximately 5km resolution
 - Coordinates are returned in the output to show the actual grid point used
+
+### Tolerance Parameter
+
+The `--tolerance` parameter controls the maximum distance (in degrees) for nearest neighbor selection:
+
+- **Default value**: 0.1 degrees (approximately 11 km)
+- **Purpose**: Prevents selection of grid points that are too far from your requested coordinates
+- **When to adjust**:
+  - Use **smaller values** (e.g., 0.01) when you need strict spatial accuracy
+  - Use **larger values** (e.g., 0.5) when working near data boundaries or with sparse grids
+  - The selection will fail if no grid point exists within the tolerance distance
+
+**Distance reference** (at mid-latitudes):
+- 0.01 degrees ≈ 1.1 km
+- 0.1 degrees ≈ 11 km (default)
+- 0.5 degrees ≈ 55 km
+- 1.0 degrees ≈ 111 km
+
+**Example scenarios**:
+
+```bash
+# Strict tolerance for urban planning (must be very close)
+weather-tools extract --lat -27.5 --lon 153.0 \
+  --start-date 2020-01-01 --end-date 2020-12-31 \
+  --tolerance 0.01
+
+# Permissive tolerance for regional analysis
+weather-tools extract --lat -27.5 --lon 153.0 \
+  --start-date 2020-01-01 --end-date 2020-12-31 \
+  --tolerance 0.5
+```
 
 ### Error Handling
 

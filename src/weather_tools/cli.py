@@ -24,13 +24,15 @@ def extract(
     end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD format)")],
     output: Annotated[str, typer.Option(help="Output CSV filename")] = "weather_data.csv",
     variables: Annotated[
-        Optional[List[str]], 
-        typer.Option(help="Weather variables to extract. Use 'daily' or 'monthly' for presets, or specify individual variables")
+        Optional[List[str]],
+        typer.Option(
+            help="Weather variables to extract. Use 'daily' or 'monthly' for presets, or specify individual variables"
+        ),
     ] = None,
-    silo_dir: Annotated[
-        Optional[Path], 
-        typer.Option(help="Path to SILO data directory")
-    ] = None,
+    silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
+    tolerance: Annotated[
+        float, typer.Option(help="Maximum distance (in degrees) for nearest neighbor selection")
+    ] = 0.1,
 ) -> None:
     """
     Extract weather data for a specific location and date range, saving results to CSV.
@@ -68,7 +70,7 @@ def extract(
         
         # Extract data for the specified location and date range
         df = (
-            ds.sel(lat=lat, lon=lon, method="nearest")
+            ds.sel(lat=lat, lon=lon, method="nearest", tolerance=tolerance)
             .sel(time=slice(start_date, end_date))
             .to_dataframe()
             .reset_index()

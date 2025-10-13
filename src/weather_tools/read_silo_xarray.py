@@ -37,20 +37,23 @@ def read_silo_xarray(
 
     dss = []
     for variable in variables:
-        file_paths = (silo_dir / variable).glob("*.nc")
+        # Convert generator to sorted list of file paths
+        file_paths = sorted((silo_dir / variable).glob("*.nc"))
 
         # Use open_mfdataset to open all years for a single variable
         ds = xr.open_mfdataset(
-            file_paths,  # Sort file paths to ensure proper time order
-            # chunks="auto",
+            file_paths,
             chunks={"time": "auto"},
             combine="nested",  # Use nested combining for files that share dimensions
             concat_dim="time",  # Dimension along which to concatenate
-            # parallel=True              # Enable parallel processing
+            data_vars="minimal",  # Only data variables in which concat_dim appears are included
+            compat="no_conflicts",  # Values must be equal or have disjoint (non-overlapping) coordinates
+            join="outer",  # Use outer join for combining coordinates
+            # parallel=True  # Enable parallel processing if needed
         ).sortby("time")  # Ensure the 'time' dimension is sorted
         dss.append(ds)
 
-    # merge combines different variables with the same dimesions (eg. time, lat, lon)
-    merged = xr.merge(dss)
+    # merge combines different variables with the same dimensions (eg. time, lat, lon)
+    merged = xr.merge(dss, compat="override")
     [ds.close() for ds in dss]
     return merged
