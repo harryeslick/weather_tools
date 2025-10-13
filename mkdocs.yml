@@ -4,18 +4,7 @@ site_author: harryeslick
 repo_url: https://harryeslick.github.io/weather_tools/
 
 theme:
-    name: material
-    icon:
-        repo: fontawesome/brands/github
-    # logo: assets/logo.png
-    # favicon: assets/favicon.png
-    features:
-        - navigation.instant
-        - navigation.tracking
-        - navigation.tabs
-        - navigation.top
-        - search.highlight
-        - search.share
+    name: mkdocs
 
     # font:
     #     text: Google Sans
@@ -55,6 +44,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - CLI Reference: cli.md
   - Changelog: CHANGELOG.md
   - API Reference:
         - read silo module: api_docs/read_silo.md
