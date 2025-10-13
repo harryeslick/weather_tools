@@ -123,6 +123,7 @@ weather-tools extract [OPTIONS]
 | `--variables` | TEXT | Weather variables to extract (see below) | `daily` |
 | `--silo-dir` | PATH | Path to SILO data directory | `~/Developer/DATA/silo_grids` |
 | `--tolerance` | FLOAT | Maximum distance (in degrees) for nearest neighbor selection | `0.1` |
+| `--keep-location` | BOOLEAN | Keep location columns (crs, lat, lon) in output CSV | `False` (columns are dropped by default) |
 | `--help` | | Show help message and exit | |
 
 #### Variable Options
@@ -193,6 +194,19 @@ weather-tools extract \
   --tolerance 0.5
 ```
 
+##### Keeping Location Columns
+
+By default, location columns (crs, lat, lon) are dropped from the output CSV. Use `--keep-location` to retain them:
+
+```bash
+# Keep location columns in output
+weather-tools extract \
+  --lat -27.5 --lon 153.0 \
+  --start-date 2020-01-01 --end-date 2020-12-31 \
+  --keep-location \
+  --output data_with_coords.csv
+```
+
 #### Sample Output
 
 ```
@@ -202,16 +216,16 @@ Loading SILO dataset...  [####################################]  100%
 Extracting data for location: lat=-27.5, lon=153.0
 Date range: 2020-01-01 to 2020-12-31
 ✅ Data extracted successfully!
-📊 Shape: 366 rows, 8 columns
+📊 Shape: 366 rows, 5 columns
 💾 Saved to: /path/to/weather_data.csv
 
 📋 Preview (first 5 rows):
-        time  max_temp  crs   lat    lon  min_temp  daily_rain  evap_syn
-0 2020-01-01      30.5  b'' -27.5  153.0      21.7         0.1       7.6
-1 2020-01-02      31.0  b'' -27.5  153.0      21.0         0.0       7.2
-2 2020-01-03      31.1  b'' -27.5  153.0      20.2         0.0       7.7
-3 2020-01-04      31.7  b'' -27.5  153.0      20.4         0.0       8.1
-4 2020-01-05      32.1  b'' -27.5  153.0      19.8         0.0       8.1
+        time  max_temp  min_temp  daily_rain  evap_syn
+0 2020-01-01      30.5      21.7         0.1       7.6
+1 2020-01-02      31.0      21.0         0.0       7.2
+2 2020-01-03      31.1      20.2         0.0       7.7
+3 2020-01-04      31.7      20.4         0.0       8.1
+4 2020-01-05      32.1      19.8         0.0       8.1
 ```
 
 ## Output Format
@@ -221,10 +235,13 @@ The CLI generates CSV files with the following structure:
 | Column | Description |
 |--------|-------------|
 | `time` | Date/time index (YYYY-MM-DD format) |
-| `lat` | Latitude (nearest grid point to your coordinates) |
-| `lon` | Longitude (nearest grid point to your coordinates) |
-| `crs` | Coordinate reference system information |
+| `lat` | Latitude (nearest grid point to your coordinates) - **dropped by default** |
+| `lon` | Longitude (nearest grid point to your coordinates) - **dropped by default** |
+| `crs` | Coordinate reference system information - **dropped by default** |
 | Weather variables | Columns for each requested variable (e.g., `max_temp`, `min_temp`, `daily_rain`, `evap_syn`) |
+
+!!! note "Location Columns"
+    By default, the `crs`, `lat`, and `lon` columns are dropped from the output CSV to reduce file size. Use the `--keep-location` flag if you need these columns in your output.
 
 ### Units
 

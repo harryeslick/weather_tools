@@ -33,6 +33,9 @@ def extract(
     tolerance: Annotated[
         float, typer.Option(help="Maximum distance (in degrees) for nearest neighbor selection")
     ] = 0.1,
+    keep_location: Annotated[
+        bool, typer.Option(help="Keep location columns (crs, lat, lon) in output CSV")
+    ] = False,
 ) -> None:
     """
     Extract weather data for a specific location and date range, saving results to CSV.
@@ -75,6 +78,13 @@ def extract(
             .to_dataframe()
             .reset_index()
         )
+        
+        # Drop location columns by default unless --keep-location is specified
+        if not keep_location:
+            columns_to_drop = [col for col in ["crs", "lat", "lon"] if col in df.columns]
+            if columns_to_drop:
+                df = df.drop(columns=columns_to_drop)
+                typer.echo(f"🗑️  Dropped location columns: {', '.join(columns_to_drop)}")
         
         # Save to CSV
         output_path = Path(output)
