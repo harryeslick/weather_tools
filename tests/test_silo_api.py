@@ -13,9 +13,11 @@ Tests cover:
 9. Caching functionality
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 import requests
+
 from weather_tools.silo_api import SiloAPI, SiloAPIError
 
 
