@@ -58,11 +58,12 @@ nav:
   - CLI Reference: cli.md
   - Changelog: CHANGELOG.md
   - API Reference:
-        - read silo module: api_docs/read_silo.md
-
+        - SILO API: silo_api.md
+        - Local NetCDF: api_docs/read_silo.md
   - Examples:
-      - 1. Basic usage: notebooks/example.ipynb
-      - 2. Example plots: notebooks/example_plots.ipynb
+      - Local NetCDF: notebooks/example.ipynb
+      - Plotting: notebooks/example_plots.ipynb
+      - SILO API: notebooks/silo_api_example.ipynb
 
 extra_javascript:
   - https://cdn.plot.ly/plotly-2.32.0.min.js

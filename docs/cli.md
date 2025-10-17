@@ -1,22 +1,20 @@
 # Command Line Interface (CLI)
 
-The weather-tools package provides a powerful command-line interface for extracting weather data from SILO datasets. The CLI is built with [Typer](https://typer.tiangolo.com/) and provides an intuitive way to work with weather data.
+The weather-tools package provides a powerful command-line interface for working with SILO weather data. You can query data directly from the SILO API or extract data from local netCDF files.
 
 ## Installation
 
-### Using uvx (Recommended)
-
-The easiest way to use the CLI is with `uvx`, which automatically handles dependencies and isolation:
+### Using uv (Recommended)
 
 ```bash
-# Run directly from GitHub
-uvx git+https://github.com/harryeslick/weather_tools.git --help
+# Install with uv
+uv pip install weather-tools
 
-# Or run from local directory
-uvx . --help
+# Or run directly with uvx (no installation)
+uvx weather-tools --help
 ```
 
-### Traditional Installation
+### Using pip
 
 ```bash
 # Install from local directory
@@ -26,21 +24,53 @@ pip install -e .
 pip install git+https://github.com/harryeslick/weather_tools.git
 ```
 
-After installation, the `weather-tools` command will be available system-wide.
-
-## Quick Start
-
-```bash
-# Extract weather data for Brisbane for January 2020
-weather-tools extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2020-01-31 --output brisbane_jan2020.csv
-```
+After installation, the `weather-tools` command will be available.
 
 ## Commands Overview
 
-The CLI provides two main commands:
+The CLI provides two command groups:
 
-- **`info`** - Display information about available SILO data
-- **`extract`** - Extract weather data for a specific location and date range
+### SILO API Commands (Online)
+- **`silo patched-point`** - Query SILO PatchedPoint dataset (station-based data)
+- **`silo data-drill`** - Query SILO DataDrill dataset (gridded data)
+- **`silo search`** - Search for SILO stations by name or find nearby stations
+
+### Local NetCDF Commands (Offline)
+- **`local info`** - Display information about available local SILO data
+- **`local extract`** - Extract weather data from local netCDF files
+
+## Quick Start Examples
+
+### Query SILO API (No Downloads Required)
+
+```bash
+# Set your API key
+export SILO_API_KEY="your_api_key_here"
+
+# Query station data (PatchedPoint)
+weather-tools silo patched-point --station 30043 \
+  --start-date 2023-01-01 --end-date 2023-01-31 --output data.csv
+
+# Query gridded data (DataDrill)
+weather-tools silo data-drill --lat -27.5 --lon 151.0 \
+  --start-date 2023-01-01 --end-date 2023-01-31 --output gridded_data.csv
+
+# Search for stations
+weather-tools silo search --name "Brisbane"
+weather-tools silo search --station 30043 --radius 50
+```
+
+### Use Local NetCDF Files
+
+```bash
+# Display available local SILO data
+weather-tools local info
+
+# Extract data from local files
+weather-tools local extract --lat -27.5 --lon 153.0 \
+  --start-date 2020-01-01 --end-date 2020-12-31 \
+  --output brisbane_2020.csv
+```
 
 ## Command Reference
 
@@ -49,18 +79,180 @@ The CLI provides two main commands:
 ```
 Usage: weather-tools [OPTIONS] COMMAND [ARGS]...
 
+Commands:
+  silo      Query SILO API directly (requires API key)
+  info      Display information about available local SILO data
+  extract   Extract weather data from local netCDF files
+
 Options:
   --install-completion    Install completion for the current shell
   --show-completion      Show completion for the current shell
   --help                 Show this message and exit
 ```
 
-### `info` Command
+---
+
+## SILO API Commands
+
+These commands query the SILO API directly - no local files required!
+
+### `silo patched-point` Command
+
+Query the SILO PatchedPoint dataset for station-based weather data.
+
+```bash
+weather-tools silo patched-point [OPTIONS]
+```
+
+#### Required Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--station` | TEXT | Station code (e.g., 30043) |
+| `--start-date` | TEXT | Start date in YYYYMMDD format |
+| `--end-date` | TEXT | End date in YYYYMMDD format |
+
+#### Optional Parameters
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--format` | TEXT | Output format: 'csv', 'json', 'apsim', 'standard' | Auto-detected from output filename |
+| `--variables` | TEXT | Weather variables (can be used multiple times) | All available |
+| `--output` | PATH | Output filename | Required |
+| `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
+
+#### Examples
+
+```bash
+# Basic station data query
+weather-tools silo patched-point --station 30043 \
+    --start-date 20230101 --end-date 20230131 \
+    --output data.csv
+
+# Query with specific variables
+weather-tools silo patched-point --station 30043 \
+    --start-date 20230101 --end-date 20230131 \
+    --variables R --variables X --variables N \
+    --output station_data.csv
+
+# Auto-detect format from extension
+weather-tools silo patched-point --station 30043 \
+    --start-date 20230101 --end-date 20230131 \
+    --output data.json  # Automatically uses JSON format
+```
+
+### `silo data-drill` Command
+
+Query the SILO DataDrill dataset for gridded weather data.
+
+```bash
+weather-tools silo data-drill [OPTIONS]
+```
+
+#### Required Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--lat` | FLOAT | Latitude coordinate |
+| `--lon` | FLOAT | Longitude coordinate |
+| `--start-date` | TEXT | Start date in YYYYMMDD format |
+| `--end-date` | TEXT | End date in YYYYMMDD format |
+
+#### Optional Parameters
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--format` | TEXT | Output format: 'csv', 'json', 'apsim', 'standard' | Auto-detected from output filename |
+| `--variables` | TEXT | Weather variables (can be used multiple times) | All available |
+| `--output` | PATH | Output filename | Required |
+| `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
+
+#### Examples
+
+```bash
+# Query gridded data for Brisbane
+weather-tools silo data-drill --lat -27.5 --lon 153.0 \
+    --start-date 20230101 --end-date 20230131 \
+    --output brisbane_weather.csv
+
+# Query with APSIM format
+weather-tools silo data-drill --lat -27.5 --lon 153.0 \
+    --start-date 20230101 --end-date 20230131 \
+    --output weather.apsim  # Auto-detects APSIM format
+```
+
+### `silo search` Command
+
+Search for SILO weather stations by name or find stations near a location.
+
+```bash
+weather-tools silo search [OPTIONS]
+```
+
+#### Search Options (choose one)
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--name` | TEXT | Search stations by name |
+| `--station` | TEXT | Find stations near this station code |
+| `--lat` | FLOAT | Latitude for proximity search (requires --lon) |
+| `--lon` | FLOAT | Longitude for proximity search (requires --lat) |
+
+#### Optional Parameters
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `--radius` | FLOAT | Search radius in km | `50.0` |
+| `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
+| `--output` | TEXT | Output filename (optional) | |
+
+#### Examples
+
+```bash
+# Search by station name
+weather-tools silo search --name "Brisbane"
+
+# Find stations near a specific station
+weather-tools silo search --station 30043 --radius 50
+
+# Find stations near coordinates
+weather-tools silo search --lat -27.5 --lon 153.0 --radius 100
+
+# Save results to file
+weather-tools silo search --name "Sydney" --output sydney_stations.txt
+```
+
+### Setting Your API Key
+
+For security, it's best to set your API key as an environment variable:
+
+```bash
+# In your terminal or .bashrc/.zshrc
+export SILO_API_KEY="your_api_key_here"
+
+# Then you can use commands without --api-key option
+weather-tools silo patched-point --station 30043 ...
+```
+
+Or create a `.env` file in your project:
+
+```bash
+# .env file
+SILO_API_KEY=your_api_key_here
+```
+
+---
+
+## Local NetCDF Commands
+
+These commands work with downloaded SILO gridded data files.
+
+### `local info` Command
 
 Display information about available SILO data directories and files.
 
 ```bash
-weather-tools info [OPTIONS]
+weather-tools local info [OPTIONS]
 ```
 
 #### Options
@@ -74,10 +266,10 @@ weather-tools info [OPTIONS]
 
 ```bash
 # Show info for default SILO directory
-weather-tools info
+weather-tools local info
 
 # Show info for custom SILO directory
-weather-tools info --silo-dir /path/to/my/silo/data
+weather-tools local info --silo-dir /path/to/my/silo/data
 ```
 
 #### Sample Output
@@ -98,12 +290,12 @@ SILO data directory: /Users/user/Developer/DATA/silo_grids
     📅 Years: 1889-2024
 ```
 
-### `extract` Command
+### `local extract` Command
 
 Extract weather data for a specific location and date range, saving results to CSV.
 
 ```bash
-weather-tools extract [OPTIONS]
+weather-tools local extract [OPTIONS]
 ```
 
 #### Required Options
@@ -142,14 +334,14 @@ The `--variables` option accepts the following values:
 
 ```bash
 # Extract daily variables for Brisbane in 2020
-weather-tools extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2020-12-31
+weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2020-12-31
 ```
 
 ##### Monthly Data
 
 ```bash
 # Extract monthly rainfall data
-weather-tools extract \
+weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --variables monthly \
@@ -160,7 +352,7 @@ weather-tools extract \
 
 ```bash
 # Extract only temperature data
-weather-tools extract \
+weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --variables max_temp --variables min_temp \
@@ -171,7 +363,7 @@ weather-tools extract \
 
 ```bash
 # Use custom SILO directory and output file
-weather-tools extract \
+weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --silo-dir /path/to/my/silo/data \
@@ -182,13 +374,13 @@ weather-tools extract \
 
 ```bash
 # Use stricter tolerance (0.01 degrees ≈ 1.1 km)
-weather-tools extract \
+weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --tolerance 0.01
 
 # Use more permissive tolerance (0.5 degrees ≈ 55 km)
-weather-tools extract \
+weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --tolerance 0.5
@@ -200,7 +392,7 @@ By default, location columns (crs, lat, lon) are dropped from the output CSV. Us
 
 ```bash
 # Keep location columns in output
-weather-tools extract \
+weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --keep-location \
@@ -331,12 +523,12 @@ The `--tolerance` parameter controls the maximum distance (in degrees) for neare
 
 ```bash
 # Strict tolerance for urban planning (must be very close)
-weather-tools extract --lat -27.5 --lon 153.0 \
+weather-tools local extract --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --tolerance 0.01
 
 # Permissive tolerance for regional analysis
-weather-tools extract --lat -27.5 --lon 153.0 \
+weather-tools local extract --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --tolerance 0.5
 ```
@@ -374,7 +566,7 @@ locations=(
 
 for location in "${locations[@]}"; do
   IFS=',' read -r lat lon name <<< "$location"
-  weather-tools extract --lat "$lat" --lon "$lon" \
+  weather-tools local extract --lat "$lat" --lon "$lon" \
     --start-date 2020-01-01 --end-date 2020-12-31 \
     --output "${name}_2020.csv"
 done

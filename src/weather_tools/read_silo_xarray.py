@@ -12,9 +12,11 @@ def read_silo_xarray(
     Read SILO data from a directory containing the SILO netCDF files and return a merged xarray dataset.
 
     Args:
-        variables: list of silo variable, matching the directory names. Literal "daily"/"monthly" Defaults to "daily".
-        silo_dir: _description_. Defaults to Path.home()/"Developer/DATA/silo_grids".
-            expects the following structure:
+        variables: list of silo variable names matching the directory names, or a literal "daily"/"monthly".
+            Defaults to "daily".
+        silo_dir: Path to the directory containing variable subdirectories (each containing .nc files).
+            Defaults to Path.home()/"Developer/DATA/silo_grids".
+            Expects the following structure:
                 ~/Developer/DATA/silo_grids
                 ├── daily_rain
                 ├── evap_syn
@@ -25,9 +27,22 @@ def read_silo_xarray(
                     ├── 2023.monthly_rain.nc
                     └── 2024.monthly_rain.nc
 
-
     Returns:
-        _description_
+        xr.Dataset: merged xarray Dataset containing the requested variables concatenated along the
+        'time' dimension. Coordinates typically include 'time', 'lat', and 'lon'.
+
+    Example:
+        >>> from pathlib import Path
+        >>> from weather_tools.read_silo_xarray import read_silo_xarray
+        >>> # Read the daily variables from the default silo_dir
+        >>> ds = read_silo_xarray(variables="daily")
+        >>> print(ds)
+        >>> # Or specify variables explicitly and a custom directory
+        >>> ds2 = read_silo_xarray(variables=["monthly_rain"], silo_dir=Path("/data/silo_grids"))
+        >>> make a smaller subset to reduce size in memeory
+        >>> ds3 = read_silo_xarray().sel(lat=slice(-39, -26), lon=slice(133, 154), time=slice("2020-01-01", "2025-01-01")).compute()
+        >>> print(ds3)
+
     """
     if isinstance(variables, str):
         if variables == "daily":

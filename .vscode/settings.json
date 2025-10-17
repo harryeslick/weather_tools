@@ -23,5 +23,13 @@
     "python.analysis.inlayHints.functionReturnTypes": true,
     "python.analysis.extraPaths": [
         "${workspaceFolder}/src"
-    ]
+    ],
+    "chat.tools.terminal.autoApprove": {
+        "uv run weather-tools":true,
+        
+
+
+
+
+}
 }

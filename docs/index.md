@@ -6,19 +6,35 @@ This package provides both a Python API and a powerful CLI for loading and using
 
 ## Features
 
-- **Command-Line Interface**: Extract weather data with simple commands
+- **Dual Mode Access**: Query SILO API directly or work with local NetCDF files
+- **Command-Line Interface**: Simple commands for both online API and offline data
 - **Python API**: Programmatic access to SILO data using xarray
-- **Multiple Variables**: Support for daily and monthly weather variables
-- **Flexible Output**: Export data to CSV format
+- **Multiple Data Sources**: PatchedPoint (station) and DataDrill (gridded) datasets
+- **Flexible Output**: Export data to CSV, JSON, APSIM, or standard formats
+- **Station Search**: Find weather stations by name or proximity
 - **Easy Installation**: Use with `uvx` for zero-installation usage
 
 ## Quick Start
 
 ### CLI Usage
 
+**SILO API (Online - requires API key):**
 ```bash
-# Extract weather data for Brisbane in 2020
-uvx git+https://github.com/harryeslick/weather_tools.git extract \
+# Query station data
+uvx git+https://github.com/harryeslick/weather_tools.git silo patched-point \
+  --station 30043 --start-date 2023-01-01 --end-date 2023-01-31 \
+  --output station_data.csv
+
+# Query gridded data  
+uvx git+https://github.com/harryeslick/weather_tools.git silo data-drill \
+  --lat -27.5 --lon 153.0 --start-date 2023-01-01 --end-date 2023-01-31 \
+  --output brisbane_2023.csv
+```
+
+**Local NetCDF files (Offline):**
+```bash
+# Extract weather data for Brisbane from local files
+uvx git+https://github.com/harryeslick/weather_tools.git local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
   --output brisbane_2020.csv
