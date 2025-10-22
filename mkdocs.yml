@@ -59,6 +59,9 @@ nav:
   - Changelog: CHANGELOG.md
   - API Reference:
         - SILO API: silo_api.md
+        - Met.no API: metno_api.md
+        - Met.no Models: metno_models.md
+        - Merge Weather Data: merge_weather_data.md
         - Local NetCDF: api_docs/read_silo.md
   - Examples:
       - Local NetCDF: notebooks/example.ipynb
