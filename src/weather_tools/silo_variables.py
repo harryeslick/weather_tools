@@ -214,3 +214,189 @@ def expand_variable_preset(preset_or_vars: str | list[str]) -> list[str]:
             else:
                 expanded.append(item)
         return expanded
+
+
+# ===========================
+# Met.no to SILO Variable Mapping
+# ===========================
+
+class MetNoVariableMapping(BaseModel):
+    """Mapping from met.no variable to SILO variable."""
+    metno_name: str
+    silo_name: str
+    conversion_func: Optional[str] = None  # Name of conversion function if needed
+    requires_other_vars: Optional[list[str]] = None  # Other variables needed for conversion
+
+
+# Mappings from met.no daily summary fields to SILO column names
+METNO_TO_SILO_MAPPING = {
+    # Direct mappings (same units, no conversion needed)
+    "min_temperature": MetNoVariableMapping(
+        metno_name="min_temperature",
+        silo_name="min_temp"
+    ),
+    "max_temperature": MetNoVariableMapping(
+        metno_name="max_temperature",
+        silo_name="max_temp"
+    ),
+    "total_precipitation": MetNoVariableMapping(
+        metno_name="total_precipitation",
+        silo_name="daily_rain"
+    ),
+    "avg_pressure": MetNoVariableMapping(
+        metno_name="avg_pressure",
+        silo_name="mslp"
+    ),
+
+    # Approximate mappings (may need conversion)
+    "avg_relative_humidity": MetNoVariableMapping(
+        metno_name="avg_relative_humidity",
+        silo_name="vp",
+        conversion_func="rh_to_vapor_pressure",
+        requires_other_vars=["min_temperature", "max_temperature"]
+    ),
+
+    # Met.no only variables (no SILO equivalent)
+    "avg_wind_speed": MetNoVariableMapping(
+        metno_name="avg_wind_speed",
+        silo_name="wind_speed"
+    ),
+    "max_wind_speed": MetNoVariableMapping(
+        metno_name="max_wind_speed",
+        silo_name="wind_speed_max"
+    ),
+    "avg_cloud_fraction": MetNoVariableMapping(
+        metno_name="avg_cloud_fraction",
+        silo_name="cloud_fraction"
+    ),
+    "dominant_weather_symbol": MetNoVariableMapping(
+        metno_name="dominant_weather_symbol",
+        silo_name="weather_symbol"
+    ),
+}
+
+# SILO variables that have no met.no equivalent
+SILO_ONLY_VARIABLES = [
+    "evap_pan",      # E - Class A pan evaporation
+    "evap_syn",      # S - Synthetic evaporation
+    "evap_comb",     # C - Combination evaporation
+    "radiation",     # J - Solar radiation (met.no has UV, not global radiation)
+    "vp_deficit",    # D - Vapor pressure deficit
+    "rh_tmax",       # H - RH at time of max temp
+    "rh_tmin",       # G - RH at time of min temp
+    "et_short_crop", # F - FAO56 ET
+    "et_tall_crop",  # T - ASCE tall crop ET
+    "et_morton_actual",     # A
+    "et_morton_potential",  # P
+    "et_morton_wet",        # W
+    "evap_morton_lake",     # L
+]
+
+
+def rh_to_vapor_pressure(relative_humidity: float, temperature: float) -> float:
+    """
+    Convert relative humidity to vapor pressure using August-Roche-Magnus approximation.
+
+    Args:
+        relative_humidity: Relative humidity (%)
+        temperature: Air temperature (°C)
+
+    Returns:
+        Vapor pressure (hPa)
+
+    Formula:
+        es = 6.1094 * exp(17.625 * T / (T + 243.04))  [saturation vapor pressure]
+        e = (RH / 100) * es                            [actual vapor pressure]
+    """
+    import math
+
+    # Saturation vapor pressure (hPa)
+    es = 6.1094 * math.exp((17.625 * temperature) / (temperature + 243.04))
+
+    # Actual vapor pressure (hPa)
+    e = (relative_humidity / 100.0) * es
+
+    return e
+
+
+def convert_metno_to_silo_columns(df, include_extra: bool = False) -> dict:
+    """
+    Convert met.no DataFrame column names to SILO format.
+
+    Args:
+        df: DataFrame with met.no daily summaries
+        include_extra: If True, include met.no-only variables (wind, clouds)
+
+    Returns:
+        Dictionary mapping met.no columns to SILO columns
+    """
+    import pandas as pd
+
+    column_mapping = {}
+
+    for metno_col in df.columns:
+        if metno_col == "date":
+            column_mapping[metno_col] = "date"
+        elif metno_col in METNO_TO_SILO_MAPPING:
+            mapping = METNO_TO_SILO_MAPPING[metno_col]
+
+            # Skip met.no-only variables unless requested
+            if not include_extra and mapping.silo_name in ["wind_speed", "wind_speed_max", "cloud_fraction", "weather_symbol"]:
+                continue
+
+            column_mapping[metno_col] = mapping.silo_name
+
+    return column_mapping
+
+
+def get_silo_column_order() -> list[str]:
+    """
+    Return standard SILO CSV column order.
+
+    Returns:
+        List of column names in standard SILO order
+    """
+    return [
+        "date",
+        "day",
+        "year",
+        "daily_rain",
+        "max_temp",
+        "min_temp",
+        "vp",
+        "evap_pan",
+        "evap_syn",
+        "evap_comb",
+        "evap_morton_lake",
+        "radiation",
+        "rh_tmax",
+        "rh_tmin",
+        "et_short_crop",
+        "et_tall_crop",
+        "et_morton_actual",
+        "et_morton_potential",
+        "et_morton_wet",
+        "mslp",
+    ]
+
+
+def add_silo_date_columns(df):
+    """
+    Add SILO-specific date columns (day, year) from date column.
+
+    Args:
+        df: DataFrame with 'date' column
+
+    Returns:
+        DataFrame with added 'day' and 'year' columns
+    """
+    import pandas as pd
+
+    df = df.copy()
+
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"])
+        df["day"] = df["date"].dt.dayofyear
+        df["year"] = df["date"].dt.year
+
+    return df
