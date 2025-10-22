@@ -64,6 +64,7 @@ nav:
       - Local NetCDF: notebooks/example.ipynb
       - Plotting: notebooks/example_plots.ipynb
       - SILO API: notebooks/silo_api_example.ipynb
+      - Forecast data: notebooks/metno_forecast_example.ipynb
 
 extra_javascript:
   - https://cdn.plot.ly/plotly-2.32.0.min.js
