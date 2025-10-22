@@ -16,6 +16,15 @@ from .silo_models import (
     SiloFormat,
     SiloResponse,
 )
+from .silo_variables import (
+    SILO_VARIABLES,
+    NETCDF_TO_API,
+    API_TO_NETCDF,
+    VARIABLE_PRESETS,
+    get_variable_metadata,
+    expand_variable_preset,
+)
+from .download_silo import download_silo_gridded, SiloDownloadError
 
 __all__ = [
     "read_silo_xarray",
@@ -30,4 +39,12 @@ __all__ = [
     "SiloDateRange",
     "SiloFormat",
     "SiloResponse",
+    "download_silo_gridded",
+    "SiloDownloadError",
+    "SILO_VARIABLES",
+    "NETCDF_TO_API",
+    "API_TO_NETCDF",
+    "VARIABLE_PRESETS",
+    "get_variable_metadata",
+    "expand_variable_preset",
 ]

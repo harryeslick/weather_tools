@@ -32,6 +32,7 @@ weather-tools
 │   ├── data-drill       # Query gridded data
 │   └── search           # Search for stations
 └── local         # Local netCDF file commands
+    ├── download         # Download SILO data from AWS S3
     ├── extract          # Extract data for a location
     └── info             # View available local data
 ```
@@ -61,6 +62,9 @@ weather-tools silo search --name Brisbane
 ### Using Local Files (Offline)
 
 ```bash
+# Download SILO data from AWS S3
+weather-tools local download --var daily --start-year 2020 --end-year 2023
+
 # View available data
 weather-tools local info
 
@@ -191,7 +195,95 @@ weather-tools silo search --station 30043 --details
 
 ## Local File Commands
 
-These commands work with local SILO netCDF files - **requires downloaded data**.
+These commands work with local SILO netCDF files.
+
+### `local download`
+
+Download SILO gridded NetCDF files directly from AWS S3 public data.
+
+```bash
+weather-tools local download [OPTIONS]
+```
+
+**Required Options:**
+- `--var TEXT` - Climate variable(s) to download (can be used multiple times)
+- `--start-year INTEGER` - First year to download (1889-present, varies by variable)
+- `--end-year INTEGER` - Last year to download (1889-present, varies by variable)
+
+**Optional Options:**
+- `--silo-dir PATH` - Directory to save files (default: ~/Developer/DATA/silo_grids)
+- `--force` - Re-download and overwrite existing files
+
+**Variable Options:**
+
+Individual variables:
+- `daily_rain` - Daily rainfall (~410MB per year)
+- `monthly_rain` - Monthly rainfall (~14MB per year)
+- `max_temp` - Maximum temperature (~410MB per year)
+- `min_temp` - Minimum temperature (~410MB per year)
+- `evap_syn` - Synthetic evaporation (~410MB per year)
+- `evap_pan` - Pan evaporation (~410MB per year, 1970+)
+- `radiation` - Solar radiation (~410MB per year)
+- `vp` - Vapour pressure (~410MB per year)
+- `mslp` - Mean sea level pressure (~410MB per year, 1957+)
+
+Preset groups:
+- `daily` - Expands to: daily_rain, max_temp, min_temp, evap_syn (~1.6GB per year)
+- `monthly` - Expands to: monthly_rain (~14MB per year)
+- `temperature` - Expands to: max_temp, min_temp (~820MB per year)
+
+**Examples:**
+
+```bash
+# Download daily variables for recent years (~6.4GB)
+weather-tools local download --var daily --start-year 2020 --end-year 2023
+
+# Download specific variables
+weather-tools local download --var daily_rain --var max_temp \
+    --start-year 2022 --end-year 2023
+
+# Download monthly rainfall (small files, ~56MB)
+weather-tools local download --var monthly_rain \
+    --start-year 2020 --end-year 2023
+
+# Use preset for temperature data
+weather-tools local download --var temperature \
+    --start-year 2020 --end-year 2023
+
+# Download to custom directory
+weather-tools local download --var daily \
+    --start-year 2020 --end-year 2023 \
+    --silo-dir /data/silo_grids
+
+# Force overwrite existing files
+weather-tools local download --var daily_rain \
+    --start-year 2023 --end-year 2023 --force
+```
+
+**Output:**
+
+Files are organized by variable in subdirectories:
+```
+~/Developer/DATA/silo_grids/
+├── daily_rain/
+│   ├── 2020.daily_rain.nc
+│   ├── 2021.daily_rain.nc
+│   ├── 2022.daily_rain.nc
+│   └── 2023.daily_rain.nc
+├── max_temp/
+│   ├── 2020.max_temp.nc
+│   └── ...
+└── min_temp/
+    ├── 2020.min_temp.nc
+    └── ...
+```
+
+**Notes:**
+- Downloads are from AWS S3 public data (no authentication required)
+- Existing files are skipped by default (use `--force` to re-download)
+- Progress bars show download speed and estimated time
+- Some variables have different start years (mslp: 1957+, evap_pan: 1970+)
+- Daily variable files are ~410MB each, monthly files are ~14MB each
 
 ### `local extract`
 
@@ -306,9 +398,25 @@ When using `local extract`, use these full names:
 
 ## Setting Up Local Files
 
-If you want to use the `local` commands, you need to download SILO netCDF files.
+To use `local extract` and `local info` commands, you need SILO netCDF files.
 
-**Download Location:**  
+**Option 1: Download via CLI (Recommended)**
+
+Use the `local download` command to automatically download files from AWS S3:
+
+```bash
+# Download daily variables for 2020-2023
+weather-tools local download --var daily --start-year 2020 --end-year 2023
+
+# Download monthly rainfall (smaller files)
+weather-tools local download --var monthly_rain --start-year 2020 --end-year 2023
+```
+
+See `weather-tools local download --help` for all options.
+
+**Option 2: Manual Download**
+
+Download files manually from AWS S3:
 <https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/index.html>
 
 **Expected Directory Structure:**
@@ -321,7 +429,7 @@ If you want to use the `local` commands, you need to download SILO netCDF files.
 │   └── ...
 ├── evap_syn/
 │   ├── 2020.evap_syn.nc
-│   ├── 2021.evap_syn.nc  
+│   ├── 2021.evap_syn.nc
 │   └── ...
 ├── max_temp/
 │   ├── 2020.max_temp.nc
@@ -383,15 +491,17 @@ weather-tools local extract --help
 
 | Feature | SILO API | Local Files |
 |---------|----------|-------------|
-| **Setup** | Just need email address | Download ~GB of netCDF files |
+| **Setup** | Just need email address | Use `local download` command |
 | **Speed** | Depends on internet | Fast (local disk) |
 | **Data Range** | 1889-present | Only years you download |
-| **Variables** | 18 climate variables | 5 common variables |
+| **Variables** | 18 climate variables | 9 gridded variables |
 | **Location** | Any coordinates in Australia | Any coordinates in Australia |
 | **Caching** | Optional response caching | N/A (already local) |
 | **Formats** | csv, json, apsim, alldata, standard | CSV only |
 | **Station Search** | Yes (search, nearby, details) | No |
+| **Disk Space** | None (data streamed) | ~410MB per variable per year |
+| **Download** | N/A | `local download` with progress bars |
 
 **Recommendation:**
-- Use **API** for ad-hoc queries, recent data, or many variables
-- Use **Local** for bulk processing, offline work, or repeated queries
+- Use **API** for ad-hoc queries, recent data, or quick lookups
+- Use **Local** for bulk processing, offline work, or repeated queries on same data

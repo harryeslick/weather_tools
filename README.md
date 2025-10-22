@@ -88,9 +88,44 @@ print(response.raw_data)
 
 ### Local NetCDF Files
 
-Download SILO gridded data from: https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/index.html
+#### Downloading SILO Data
 
-Expected directory structure:
+
+SILO's gridded datasets are hosted on Amazon Web Services under the [AWS Public Data Program](https://registry.opendata.aws).
+The available data can be found here:  https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/index.html
+
+Download SILO gridded NetCDF files directly from AWS S3 using the CLI:
+
+```bash
+# Download daily variables for recent years
+weather-tools local download --var daily --start-year 2020 --end-year 2023
+
+# Download specific variables
+weather-tools local download --var daily_rain --var max_temp \
+    --start-year 2022 --end-year 2023
+
+# Download monthly rainfall (smaller files)
+weather-tools local download --var monthly_rain \
+    --start-year 2020 --end-year 2023
+
+# Download to custom directory
+weather-tools local download --var daily \
+    --start-year 2020 --end-year 2023 \
+    --silo-dir /data/silo_grids
+
+# Force overwrite existing files
+weather-tools local download --var daily_rain \
+    --start-year 2023 --end-year 2023 --force
+```
+
+**Variable Presets:**
+- `daily` - Daily rainfall, max/min temp, evaporation (4 variables, ~1.6GB/year)
+- `monthly` - Monthly rainfall (1 variable, ~14MB/year)
+- `temperature` - Max and min temperature (2 variables, ~820MB/year)
+
+Or download manually from: https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/index.html
+
+**Expected directory structure:**
 ```
 ~/Developer/DATA/silo_grids/
 ├── daily_rain/
@@ -104,7 +139,7 @@ Expected directory structure:
     └── 2021.min_temp.nc
 ```
 
-#### Command Line
+#### Working with Local Files
 
 ```bash
 # View available data
@@ -164,6 +199,7 @@ weather-tools silo search           # Search/find stations
 ### Local NetCDF Commands
 
 ```bash
+weather-tools local download        # Download SILO data from AWS S3
 weather-tools local info            # View available data
 weather-tools local extract         # Extract data from files
 ```
@@ -210,3 +246,106 @@ https://www.longpaddock.qld.gov.au/silo/
 This software package is not affiliated with or endorsed by the Queensland Government, Queensland Treasury, or the Australian Bureau of Meteorology. It is an independent tool for accessing and processing publicly available SILO climate data.
 
 We acknowledge the work of the SILO team in providing freely accessible, high-quality climate data for Australia.
+
+## Module Relationships
+
+```mermaid
+flowchart TD
+    subgraph CLI["src/weather_tools/cli.py"]
+        TyperApp["Typer app\n(main)"]
+        LocalExtract["local.extract()"]
+        LocalInfo["local.info()"]
+        SiloPatched["silo.patched_point()"]
+        SiloDrill["silo.data_drill()"]
+        SiloSearch["silo.search()"]
+    end
+
+    subgraph Read["src/weather_tools/read_silo_xarray.py"]
+        ReadFunc["read_silo_xarray()"]
+    end
+
+    subgraph API["src/weather_tools/silo_api.py"]
+        APIClass["SiloAPI"]
+        QueryPatched["query_patched_point()"]
+        QueryDrill["query_data_drill()"]
+        GetStation["get_station_data()"]
+        GetGrid["get_gridded_data()"]
+        SearchStations["search_stations()"]
+        Recent["get_recent_data()"]
+        MakeRequest["_make_request()"]
+        ParseResponse["_parse_response()"]
+        ResponseToDf["_response_to_dataframe()"]
+        ParseStations["parse_station_data()"]
+        CacheOps["clear_cache()/get_cache_size()"]
+    end
+
+    subgraph Models["src/weather_tools/silo_models.py"]
+        SiloDatasetEnum["SiloDataset"]
+        SiloFormatEnum["SiloFormat"]
+        ClimateEnum["ClimateVariable"]
+        DateRange["SiloDateRange"]
+        Coordinates["AustralianCoordinates"]
+        PatchedQuery["PatchedPointQuery"]
+        DrillQuery["DataDrillQuery"]
+        ResponseModel["SiloResponse"]
+        StationInfoModel["StationInfo"]
+    end
+
+    subgraph Init["src/weather_tools/__init__.py"]
+        InitExports["__all__ exports"]
+    end
+
+    TyperApp --> LocalExtract
+    TyperApp --> LocalInfo
+    TyperApp --> SiloPatched
+    TyperApp --> SiloDrill
+    TyperApp --> SiloSearch
+
+    LocalExtract --> ReadFunc
+
+    SiloPatched --> PatchedQuery
+    SiloPatched --> QueryPatched
+    SiloDrill --> DrillQuery
+    SiloDrill --> QueryDrill
+    SiloSearch --> PatchedQuery
+    SiloSearch --> SearchStations
+
+    APIClass --> QueryPatched
+    APIClass --> QueryDrill
+    APIClass --> GetStation
+    APIClass --> GetGrid
+    APIClass --> SearchStations
+    APIClass --> Recent
+    APIClass --> CacheOps
+
+    QueryPatched --> MakeRequest
+    QueryDrill --> MakeRequest
+    MakeRequest --> ParseResponse
+    ParseResponse --> ResponseModel
+
+    GetStation --> QueryPatched
+    GetGrid --> QueryDrill
+    SearchStations --> QueryPatched
+    Recent --> GetStation
+    Recent --> GetGrid
+
+    GetStation --> ResponseToDf
+    GetGrid --> ResponseToDf
+    SearchStations --> ResponseToDf
+    ResponseToDf --> ParseStations
+    ResponseToDf --> ResponseModel
+
+    PatchedQuery --> DateRange
+    PatchedQuery --> ClimateEnum
+    DrillQuery --> Coordinates
+    DrillQuery --> DateRange
+    DrillQuery --> ClimateEnum
+    ResponseModel --> SiloFormatEnum
+    ResponseModel --> SiloDatasetEnum
+
+    InitExports --> TyperApp
+    InitExports --> ReadFunc
+    InitExports --> APIClass
+    InitExports --> PatchedQuery
+    InitExports --> DrillQuery
+```

@@ -4,7 +4,7 @@ SILO API client for Australian climate data.
 This module provides a type-safe, validated interface to the SILO
 (Scientific Information for Land Owners) API using Pydantic models.
 """
-
+# TODO add debug term to print constructed URLs
 import hashlib
 import io
 import json
@@ -144,7 +144,7 @@ class SiloAPI:
         """Generate a cache key from URL and parameters."""
         param_str = json.dumps(params, sort_keys=True)
         combined = f"{url}:{param_str}"
-        return hashlib.md5(combined.encode()).hexdigest()
+        return hashlib.md5(combined.encode(), usedforsecurity=False).hexdigest()
 
     def _make_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Make the HTTP request with retry logic and caching."""

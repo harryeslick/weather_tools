@@ -3,6 +3,8 @@ from pathlib import Path
 
 import xarray as xr
 
+from .silo_variables import expand_variable_preset
+
 
 def read_silo_xarray(
     variables: list | str = "daily",
@@ -44,11 +46,8 @@ def read_silo_xarray(
         >>> print(ds3)
 
     """
-    if isinstance(variables, str):
-        if variables == "daily":
-            variables = ["max_temp", "min_temp", "daily_rain", "evap_syn"]
-        elif variables == "monthly":
-            variables = ["monthly_rain"]
+    # Use centralized variable preset expansion
+    variables = expand_variable_preset(variables)
 
     dss = []
     for variable in variables:

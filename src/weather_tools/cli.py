@@ -6,9 +6,11 @@ from typing import Annotated, Optional, Union
 import pandas as pd
 import typer
 from typing_extensions import List
+from rich.console import Console
 
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_api import SiloAPI, SiloAPIError
+from weather_tools.download_silo import download_silo_gridded, SiloDownloadError
 
 app = typer.Typer(
     name="weather-tools",
@@ -164,6 +166,92 @@ def info(
             
             if years:
                 typer.echo(f"    📅 Years: {min(years)}-{max(years)}")
+
+
+@local_app.command()
+def download(
+    start_year: Annotated[int, typer.Option(help="First year to download (inclusive)")],
+    end_year: Annotated[int, typer.Option(help="Last year to download (inclusive)")],
+    variables: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--var",
+            help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple."
+        ),
+    ] = None,
+    silo_dir: Annotated[
+        Optional[Path],
+        typer.Option(help="Output directory for downloaded files")
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(help="Overwrite existing files")
+    ] = False,
+    timeout: Annotated[
+        int,
+        typer.Option(help="Download timeout in seconds")
+    ] = 600,
+) -> None:
+    """
+    Download SILO gridded NetCDF files from AWS S3.
+
+    Files are organized in the same structure expected by 'weather-tools local extract':
+        output_dir/
+        ├── daily_rain/
+        │   ├── 2020.daily_rain.nc
+        │   └── 2021.daily_rain.nc
+        ├── max_temp/
+        │   └── ...
+        └── ...
+
+    By default, existing files are skipped. Use --force to re-download.
+
+    Examples:
+        # Download daily variables for 2020-2023
+        weather-tools local download --var daily --start-year 2020 --end-year 2023
+
+        # Download specific variables
+        weather-tools local download --var daily_rain --var max_temp \\
+            --start-year 2022 --end-year 2023
+
+        # Download to custom directory
+        weather-tools local download --var monthly \\
+            --start-year 2020 --end-year 2023 \\
+            --silo-dir /data/silo_grids
+
+        # Force re-download existing files
+        weather-tools local download --var daily_rain \\
+            --start-year 2023 --end-year 2023 --force
+    """
+    # Set defaults
+    if variables is None:
+        variables = ["daily"]
+
+    if silo_dir is None:
+        silo_dir = Path.home() / "Developer/DATA/silo_grids"
+
+    console = Console()
+
+    try:
+        downloaded = download_silo_gridded(
+            variables=variables,
+            start_year=start_year,
+            end_year=end_year,
+            output_dir=silo_dir,
+            force=force,
+            timeout=timeout,
+            console=console,
+        )
+
+    except ValueError as e:
+        console.print(f"[red]❌ Validation error: {e}[/red]")
+        raise typer.Exit(1)
+    except SiloDownloadError as e:
+        console.print(f"[red]❌ Download error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Unexpected error: {e}[/red]")
+        raise typer.Exit(1)
 
 
 @silo_app.command(name="patched-point")

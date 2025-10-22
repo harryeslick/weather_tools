@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.longpaddock.qld.gov.au)",
+      "Bash(uv run pytest :*)",
+      "Bash(uv run weather_tools :*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
