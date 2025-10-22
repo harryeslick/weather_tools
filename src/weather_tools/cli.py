@@ -1,5 +1,6 @@
 """Command-line interface for weather_tools."""
 
+import datetime
 from pathlib import Path
 from typing import Annotated, Optional, Union
 
@@ -11,6 +12,7 @@ from rich.console import Console
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_api import SiloAPI, SiloAPIError
 from weather_tools.download_silo import download_silo_gridded, SiloDownloadError
+from weather_tools.silo_geotiff import download_geotiff_range, SiloGeoTiffError
 
 app = typer.Typer(
     name="weather-tools",
@@ -34,6 +36,14 @@ local_app = typer.Typer(
 )
 app.add_typer(local_app, name="local")
 
+# Create subapp for GeoTIFF commands
+geotiff_app = typer.Typer(
+    name="geotiff",
+    help="Work with SILO Cloud-Optimized GeoTIFF files",
+    no_args_is_help=True,
+)
+app.add_typer(geotiff_app, name="geotiff")
+
 
 @local_app.command()
 def extract(
@@ -52,9 +62,7 @@ def extract(
     tolerance: Annotated[
         float, typer.Option(help="Maximum distance (in degrees) for nearest neighbor selection")
     ] = 0.1,
-    keep_location: Annotated[
-        bool, typer.Option(help="Keep location columns (crs, lat, lon) in output CSV")
-    ] = False,
+    keep_location: Annotated[bool, typer.Option(help="Keep location columns (crs, lat, lon) in output CSV")] = False,
 ) -> None:
     """
     Extract weather data from local netCDF files for a specific location and date range.
@@ -70,26 +78,26 @@ def extract(
         variables_to_use = variables[0].lower()
     else:
         variables_to_use = variables
-    
+
     if silo_dir is None:
         silo_dir = Path.home() / "Developer/DATA/silo_grids"
-    
+
     try:
         # Validate date formats
         pd.to_datetime(start_date)
         pd.to_datetime(end_date)
-        
+
         typer.echo(f"Loading SILO data from: {silo_dir}")
         typer.echo(f"Variables: {variables_to_use}")
-        
+
         # Load the dataset
         with typer.progressbar(length=1, label="Loading SILO dataset...") as progress:
             ds = read_silo_xarray(variables=variables_to_use, silo_dir=silo_dir)
             progress.update(1)
-        
+
         typer.echo(f"Extracting data for location: lat={lat}, lon={lon}")
         typer.echo(f"Date range: {start_date} to {end_date}")
-        
+
         # Extract data for the specified location and date range
         df = (
             ds.sel(lat=lat, lon=lon, method="nearest", tolerance=tolerance)
@@ -97,27 +105,27 @@ def extract(
             .to_dataframe()
             .reset_index()
         )
-        
+
         # Drop location columns by default unless --keep-location is specified
         if not keep_location:
             columns_to_drop = [col for col in ["crs", "lat", "lon"] if col in df.columns]
             if columns_to_drop:
                 df = df.drop(columns=columns_to_drop)
                 typer.echo(f"🗑️  Dropped location columns: {', '.join(columns_to_drop)}")
-        
+
         # Save to CSV
         output_path = Path(output)
         df.to_csv(output_path, index=False)
-        
+
         typer.echo("✅ Data extracted successfully!")
         typer.echo(f"📊 Shape: {df.shape[0]} rows, {df.shape[1]} columns")
         typer.echo(f"💾 Saved to: {output_path.absolute()}")
-        
+
         # Show a preview of the data
         if not df.empty:
             typer.echo("\n📋 Preview (first 5 rows):")
             typer.echo(df.head().to_string())
-            
+
     except Exception as e:
         typer.echo(f"❌ Error: {e}", err=True)
         raise typer.Exit(1)
@@ -125,45 +133,42 @@ def extract(
 
 @local_app.command()
 def info(
-    silo_dir: Annotated[
-        Optional[Path], 
-        typer.Option(help="Path to SILO data directory")
-    ] = None,
+    silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
 ) -> None:
     """
     Display information about available local SILO data.
     """
     if silo_dir is None:
         silo_dir = Path.home() / "Developer/DATA/silo_grids"
-    
+
     typer.echo(f"SILO data directory: {silo_dir}")
-    
+
     if not silo_dir.exists():
         typer.echo(f"❌ Directory does not exist: {silo_dir}", err=True)
         raise typer.Exit(1)
-    
+
     typer.echo("\n📁 Available variable directories:")
     variable_dirs = [d for d in silo_dir.iterdir() if d.is_dir()]
-    
+
     if not variable_dirs:
         typer.echo("  No variable directories found")
         return
-    
+
     for var_dir in sorted(variable_dirs):
         nc_files = list(var_dir.glob("*.nc"))
         typer.echo(f"  📂 {var_dir.name}: {len(nc_files)} files")
-        
+
         if nc_files:
             years = []
             for file in nc_files:
                 # Extract year from filename (assuming format like "2023.variable.nc")
                 try:
-                    year = file.stem.split('.')[0]
+                    year = file.stem.split(".")[0]
                     if year.isdigit():
                         years.append(int(year))
                 except Exception:
                     pass
-            
+
             if years:
                 typer.echo(f"    📅 Years: {min(years)}-{max(years)}")
 
@@ -176,21 +181,12 @@ def download(
         Optional[List[str]],
         typer.Option(
             "--var",
-            help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple."
+            help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.",
         ),
     ] = None,
-    silo_dir: Annotated[
-        Optional[Path],
-        typer.Option(help="Output directory for downloaded files")
-    ] = None,
-    force: Annotated[
-        bool,
-        typer.Option(help="Overwrite existing files")
-    ] = False,
-    timeout: Annotated[
-        int,
-        typer.Option(help="Download timeout in seconds")
-    ] = 600,
+    silo_dir: Annotated[Optional[Path], typer.Option(help="Output directory for downloaded files")] = None,
+    force: Annotated[bool, typer.Option(help="Overwrite existing files")] = False,
+    timeout: Annotated[int, typer.Option(help="Download timeout in seconds")] = 600,
 ) -> None:
     """
     Download SILO gridded NetCDF files from AWS S3.
@@ -233,7 +229,7 @@ def download(
     console = Console()
 
     try:
-        downloaded = download_silo_gridded(
+        download_silo_gridded(
             variables=variables,
             start_year=start_year,
             end_year=end_year,
@@ -251,6 +247,143 @@ def download(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]❌ Unexpected error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@geotiff_app.command(name="download")
+def geotiff_download(
+    start_date: Annotated[str, typer.Option(help="Start date (YYYY-MM-DD format)")],
+    end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD format)")],
+    variables: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--var",
+            help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.",
+        ),
+    ] = None,
+    output_dir: Annotated[Optional[Path], typer.Option(help="Output directory for downloaded GeoTIFF files")] = None,
+    bbox: Annotated[
+        Optional[List[float]],
+        typer.Option(
+            help="Bounding box: min_lon min_lat max_lon max_lat (4 values, mutually exclusive with --geometry)"
+        ),
+    ] = None,
+    geometry: Annotated[
+        Optional[Path],
+        typer.Option(help="Path to GeoJSON file with Polygon for clipping (mutually exclusive with --bbox)"),
+    ] = None,
+    force: Annotated[bool, typer.Option(help="Overwrite existing files")] = False,
+) -> None:
+    """
+    Download SILO GeoTIFF files for a date range, optionally clipped to geometry/bbox.
+
+    Files are organized in the structure:
+        output_dir/
+        ├── daily_rain/
+        │   ├── 2023/
+        │   │   ├── 20230101.daily_rain.tif
+        │   │   └── 20230102.daily_rain.tif
+        │   └── ...
+        └── ...
+
+    By default, existing files are skipped. Use --force to re-download.
+
+    Examples:
+        # Download entire files for daily rainfall
+        weather-tools geotiff download \\
+            --var daily_rain --var max_temp \\
+            --start-date 2023-01-01 --end-date 2023-01-31
+
+        # Download with bounding box clipping
+        weather-tools geotiff download \\
+            --var daily_rain \\
+            --start-date 2023-01-01 --end-date 2023-01-31 \\
+            --bbox 150.5 -28.5 154.0 -26.0
+
+        # Download with geometry file clipping
+        weather-tools geotiff download \\
+            --var daily_rain \\
+            --start-date 2023-01-01 --end-date 2023-01-31 \\
+            --geometry region.geojson
+    """
+    # Set defaults
+    if variables is None:
+        variables = ["daily_rain"]
+
+    if output_dir is None:
+        output_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
+
+    console = Console()
+
+    # Validate that bbox and geometry are mutually exclusive
+    if bbox is not None and geometry is not None:
+        console.print("[red]Error: Cannot specify both --bbox and --geometry[/red]")
+        raise typer.Exit(1)
+
+    # Validate bbox format
+    if bbox is not None:
+        if len(bbox) != 4:
+            console.print("[red]Error: --bbox requires exactly 4 values: min_lon min_lat max_lon max_lat[/red]")
+            raise typer.Exit(1)
+
+    # Parse dates
+    try:
+        start = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError as e:
+        console.print(f"[red]Error parsing dates: {e}[/red]")
+        console.print("[yellow]Expected format: YYYY-MM-DD[/yellow]")
+        raise typer.Exit(1)
+
+    # Load geometry from file if provided
+    geom_obj = None
+    if geometry is not None:
+        try:
+            import geopandas as gpd
+
+            gdf = gpd.read_file(geometry)
+            if len(gdf) == 0:
+                console.print(f"[red]Error: No geometries found in {geometry}[/red]")
+                raise typer.Exit(1)
+            # Use the first geometry
+            geom_obj = gdf.geometry.iloc[0]
+            console.print(f"[cyan]Loaded geometry from {geometry}[/cyan]")
+        except ImportError:
+            console.print("[red]Error: geopandas is required for reading GeoJSON files[/red]")
+            console.print("[yellow]Install with: uv sync --extra geotiff[/yellow]")
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error loading geometry file: {e}[/red]")
+            raise typer.Exit(1)
+
+    # Convert bbox to bounding box tuple
+    bbox_tuple = None
+    if bbox is not None:
+        bbox_tuple = tuple(bbox)
+        console.print(f"[cyan]Bounding box: {bbox_tuple}[/cyan]")
+
+    try:
+        download_geotiff_range(
+            variables=variables,
+            start_date=start,
+            end_date=end,
+            output_dir=output_dir,
+            geometry=geom_obj,
+            bounding_box=bbox_tuple,
+            force=force,
+            console=console,
+        )
+
+        console.print("\n[bold green]Download complete![/bold green]")
+
+    except ValueError as e:
+        console.print(f"[red]Validation error: {e}[/red]")
+        raise typer.Exit(1)
+    except SiloGeoTiffError as e:
+        console.print(f"[red]Download error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Unexpected error: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -555,17 +688,14 @@ def silo_search(
             # Get station details
             typer.echo(f"� Getting details for station {station}...")
             query = PatchedPointQuery(format=SiloFormat.ID, station_code=station)
-            format_type = "id"
         elif name:
             # Search by name
             typer.echo(f"🔍 Searching for stations matching '{name}'...")
             query = PatchedPointQuery(format=SiloFormat.NAME, name_fragment=name)
-            format_type = "name"
         elif station:
             # Nearby search
             typer.echo(f"🔍 Searching for stations near {station} within {radius}km...")
             query = PatchedPointQuery(format=SiloFormat.NEAR, station_code=station, radius=radius)
-            format_type = "near"
         else:
             typer.echo(
                 "❌ Error: Provide --name for name search, --station for nearby search, or --station --details for info",

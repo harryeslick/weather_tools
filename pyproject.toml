@@ -29,6 +29,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "requests>=2.31.0",
     "rich>=13.0.0",
+    "shapely>=2.0.0",
 ]
 
 [project.urls]
@@ -36,6 +37,11 @@ Homepage = "https://github.com/harryeslick/weather_tools"
 Documentation = "https://harryeslick.github.io/weather_tools/"
 Repository = "https://github.com/harryeslick/weather_tools.git"
 Issues = "https://github.com/harryeslick/weather_tools/issues"
+
+[project.optional-dependencies]
+geotiff = [
+    "geopandas>=0.14.0",  # For loading GeoJSON geometries
+]
 
 [project.scripts]
 weather-tools = "weather_tools.cli:main"
@@ -58,6 +64,10 @@ docstring-code-format = false
 [tool.coverage.run]
 branch = true
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests that require network access or real data (deselect with '-m \"not integration\"')",
+]
 
 [dependency-groups]
 dev = [
