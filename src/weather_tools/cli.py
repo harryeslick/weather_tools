@@ -6,13 +6,21 @@ from typing import Annotated, Optional, Union
 
 import pandas as pd
 import typer
-from typing_extensions import List
 from rich.console import Console
+from typing_extensions import List
 
+from weather_tools.download_silo import SiloDownloadError, download_silo_gridded
+from weather_tools.merge_weather_data import (
+    MergeValidationError,
+    get_merge_summary,
+    merge_historical_and_forecast,
+)
+from weather_tools.metno_api import MetNoAPI
+from weather_tools.metno_models import MetNoAPIError, MetNoRateLimitError
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_api import SiloAPI, SiloAPIError
-from weather_tools.download_silo import download_silo_gridded, SiloDownloadError
-from weather_tools.silo_geotiff import download_geotiff_range, SiloGeoTiffError
+from weather_tools.silo_geotiff import SiloGeoTiffError, download_geotiff_range
+from weather_tools.silo_models import AustralianCoordinates
 
 app = typer.Typer(
     name="weather-tools",
@@ -35,6 +43,14 @@ local_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(local_app, name="local")
+
+# Create subapp for met.no API commands
+metno_app = typer.Typer(
+    name="metno",
+    help="Query met.no forecast API for Australian locations",
+    no_args_is_help=True,
+)
+app.add_typer(metno_app, name="metno")
 
 # Create subapp for GeoTIFF commands
 geotiff_app = typer.Typer(
@@ -131,8 +147,8 @@ def extract(
         raise typer.Exit(1)
 
 
-@local_app.command()
-def info(
+@local_app.command(name="info")
+def local_info(
     silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
 ) -> None:
     """
@@ -726,6 +742,245 @@ def silo_search(
     except Exception as e:
         typer.echo(f"❌ Error: {e}", err=True)
         raise typer.Exit(1)
+
+
+@metno_app.command()
+def forecast(
+    lat: Annotated[float, typer.Option(help="Latitude coordinate (-9 to -44 for Australia)")],
+    lon: Annotated[float, typer.Option(help="Longitude coordinate (113 to 154 for Australia)")],
+    days: Annotated[int, typer.Option(help="Number of forecast days (1-9)")] = 7,
+    output: Annotated[Optional[str], typer.Option(help="Output CSV filename (optional)")] = None,
+    format_silo: Annotated[bool, typer.Option(help="Convert to SILO column names")] = True,
+    user_agent: Annotated[Optional[str], typer.Option(help="Custom User-Agent for met.no API")] = None,
+) -> None:
+    """
+    Get met.no weather forecast for an Australian location.
+
+    Retrieves up to 9 days of forecast data from met.no's locationforecast API.
+    Daily summaries are automatically aggregated from hourly forecasts.
+
+    Example:
+        weather-tools metno forecast --lat -27.5 --lon 153.0 --days 7 --output brisbane_forecast.csv
+    """
+    console = Console()
+
+    try:
+        # Validate coordinates
+        coords = AustralianCoordinates(latitude=lat, longitude=lon)
+
+        # Validate days parameter
+        if not 1 <= days <= 9:
+            console.print("[red]❌ Error: days must be between 1 and 9[/red]")
+            raise typer.Exit(1)
+
+        console.print(f"[cyan]📡 Fetching met.no forecast for {coords.latitude}, {coords.longitude}...[/cyan]")
+
+        # Create API client
+        api = MetNoAPI(user_agent=user_agent)
+
+        # Get daily forecast
+        daily_forecasts = api.get_daily_forecast(latitude=coords.latitude, longitude=coords.longitude, days=days)
+
+        console.print(f"[green]✓ Retrieved {len(daily_forecasts)} days of forecast data[/green]")
+
+        # Convert to DataFrame
+        forecast_df = pd.DataFrame([f.model_dump() for f in daily_forecasts])
+
+        if format_silo:
+            # Rename columns to SILO format
+            from weather_tools.silo_variables import add_silo_date_columns, convert_metno_to_silo_columns
+
+            column_mapping = convert_metno_to_silo_columns(forecast_df, include_extra=False)
+            forecast_df = forecast_df.rename(columns=column_mapping)
+            forecast_df = add_silo_date_columns(forecast_df)
+
+        # Save or display
+        if output:
+            forecast_df.to_csv(output, index=False)
+            console.print(f"[green]✓ Forecast saved to: {output}[/green]")
+        else:
+            console.print("\n[bold]Met.no Forecast:[/bold]")
+            console.print(forecast_df.to_string(index=False))
+
+    except ValueError as e:
+        console.print(f"[red]❌ Validation Error: {e}[/red]")
+        raise typer.Exit(1)
+    except MetNoRateLimitError as e:
+        console.print(f"[red]❌ Rate Limit Exceeded: {e}[/red]")
+        console.print("[yellow]Please wait a few minutes before retrying[/yellow]")
+        raise typer.Exit(1)
+    except MetNoAPIError as e:
+        console.print(f"[red]❌ met.no API Error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@metno_app.command()
+def merge(
+    lat: Annotated[float, typer.Option(help="Latitude coordinate (-9 to -44 for Australia)")],
+    lon: Annotated[float, typer.Option(help="Longitude coordinate (113 to 154 for Australia)")],
+    start_date: Annotated[str, typer.Option(help="Historical data start date (YYYY-MM-DD)")],
+    end_date: Annotated[str, typer.Option(help="Historical data end date (YYYY-MM-DD)")],
+    output: Annotated[str, typer.Option(help="Output CSV filename")],
+    forecast_days: Annotated[int, typer.Option(help="Number of forecast days to append (1-9)")] = 7,
+    silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
+    variables: Annotated[
+        Optional[List[str]],
+        typer.Option(help="Weather variables for historical data (use 'daily' preset)"),
+    ] = None,
+    fill_missing: Annotated[bool, typer.Option(help="Fill missing SILO variables with estimates")] = False,
+    user_agent: Annotated[Optional[str], typer.Option(help="Custom User-Agent for met.no API")] = None,
+) -> None:
+    """
+    Merge SILO historical data with met.no forecast data.
+
+    Combines historical observations from local SILO files with met.no forecast data
+    for seamless downstream analysis.
+
+    Example:
+        weather-tools metno merge --lat -27.5 --lon 153.0 \\
+            --start-date 2023-01-01 --end-date 2023-12-31 \\
+            --forecast-days 7 --output combined_weather.csv
+    """
+    console = Console()
+
+    try:
+        # Validate coordinates
+        coords = AustralianCoordinates(latitude=lat, longitude=lon)
+
+        # Validate forecast days
+        if not 1 <= forecast_days <= 9:
+            console.print("[red]❌ Error: forecast_days must be between 1 and 9[/red]")
+            raise typer.Exit(1)
+
+        # Step 1: Get SILO historical data
+        console.print(f"[cyan]📁 Loading SILO historical data from {start_date} to {end_date}...[/cyan]")
+
+        if variables is None:
+            variables = ["daily"]
+
+        ds = read_silo_xarray(
+            variables=variables,
+            silo_dir=silo_dir,
+        )
+
+        # Extract data for location
+        point_ds = ds.sel(lat=coords.latitude, lon=coords.longitude, method="nearest")
+        silo_df = point_ds.to_dataframe().reset_index()
+
+        # Filter by date range
+        silo_df = silo_df[
+            (silo_df["time"] >= pd.to_datetime(start_date)) & (silo_df["time"] <= pd.to_datetime(end_date))
+        ]
+
+        # Rename 'time' to 'date'
+        silo_df = silo_df.rename(columns={"time": "date"})
+
+        console.print(f"[green]✓ Loaded {len(silo_df)} days of SILO historical data[/green]")
+
+        # Step 2: Get met.no forecast
+        console.print(f"[cyan]📡 Fetching {forecast_days} days of met.no forecast...[/cyan]")
+
+        api = MetNoAPI(user_agent=user_agent)
+        daily_forecasts = api.get_daily_forecast(
+            latitude=coords.latitude, longitude=coords.longitude, days=forecast_days
+        )
+
+        metno_df = pd.DataFrame([f.model_dump() for f in daily_forecasts])
+
+        console.print(f"[green]✓ Retrieved {len(metno_df)} days of forecast data[/green]")
+
+        # Step 3: Merge datasets
+        console.print("[cyan]🔗 Merging historical and forecast data...[/cyan]")
+
+        merged_df = merge_historical_and_forecast(
+            silo_df, metno_df, validate=True, fill_missing=fill_missing, overlap_strategy="prefer_silo"
+        )
+
+        # Get merge summary
+        summary = get_merge_summary(merged_df)
+
+        console.print(f"[green]✓ Merge complete![/green]")
+        console.print(f"  • Total records: {summary['total_records']}")
+        console.print(f"  • SILO records: {summary['silo_records']}")
+        console.print(f"  • met.no records: {summary['metno_records']}")
+        console.print(
+            f"  • Date range: {summary['date_range']['start'].date()} to {summary['date_range']['end'].date()}"
+        )
+        console.print(f"  • Transition date: {summary['transition_date'].date()}")
+
+        # Save to CSV
+        merged_df.to_csv(output, index=False)
+        console.print(f"[green]✓ Merged data saved to: {output}[/green]")
+
+    except ValueError as e:
+        console.print(f"[red]❌ Validation Error: {e}[/red]")
+        raise typer.Exit(1)
+    except MergeValidationError as e:
+        console.print(f"[red]❌ Merge Error: {e}[/red]")
+        raise typer.Exit(1)
+    except MetNoAPIError as e:
+        console.print(f"[red]❌ met.no API Error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Error: {e}[/red]")
+        import traceback
+
+        traceback.print_exc()
+        raise typer.Exit(1)
+
+
+@metno_app.command(name="info")
+def metno_info() -> None:
+    """
+    Display information about the met.no API and variable mappings.
+
+    Shows available variables, data coverage, and API details.
+    """
+    console = Console()
+
+    console.print("\n[bold cyan]met.no locationforecast API Information[/bold cyan]\n")
+
+    console.print("[bold]API Details:[/bold]")
+    console.print("  • Provider: Norwegian Meteorological Institute (met.no)")
+    console.print("  • Endpoint: https://api.met.no/weatherapi/locationforecast/2.0/")
+    console.print("  • Coverage: Global (optimized for Norwegian locations)")
+    console.print("  • Forecast horizon: Up to 9 days")
+    console.print("  • Update frequency: Hourly")
+    console.print("  • Rate limit: Fair use policy (requires User-Agent)")
+
+    console.print("\n[bold]Available Variables (Daily Aggregates):[/bold]")
+    console.print("  • min_temperature (°C) → min_temp")
+    console.print("  • max_temperature (°C) → max_temp")
+    console.print("  • total_precipitation (mm) → daily_rain")
+    console.print("  • avg_pressure (hPa) → mslp")
+    console.print("  • avg_relative_humidity (%) → vp (converted)")
+    console.print("  • avg_wind_speed (m/s) → wind_speed")
+    console.print("  • max_wind_speed (m/s) → wind_speed_max")
+    console.print("  • avg_cloud_fraction (%) → cloud_fraction")
+    console.print("  • dominant_weather_symbol → weather_symbol")
+
+    console.print("\n[bold]SILO-Only Variables (Not Available from met.no):[/bold]")
+    console.print("  • evap_pan - Class A pan evaporation")
+    console.print("  • evap_syn - Synthetic evaporation")
+    console.print("  • radiation - Solar radiation (MJ/m²)")
+    console.print("  • vp_deficit - Vapor pressure deficit")
+    console.print("  • et_short_crop - FAO56 reference evapotranspiration")
+
+    console.print("\n[bold]Usage Examples:[/bold]")
+    console.print("  # Get 7-day forecast for Brisbane")
+    console.print("  weather-tools metno forecast --lat -27.5 --lon 153.0 --days 7")
+    console.print("")
+    console.print("  # Merge historical SILO with 7-day forecast")
+    console.print("  weather-tools metno merge --lat -27.5 --lon 153.0 \\")
+    console.print("      --start-date 2023-01-01 --end-date 2023-12-31 \\")
+    console.print("      --forecast-days 7 --output combined.csv")
+
+    console.print("\n[bold]Note:[/bold] The met.no API is best used for Australian locations")
+    console.print("near the coast. Inland locations may have less accurate forecasts.")
+    console.print("For optimal results, use with SILO historical data.\n")
 
 
 def main():
