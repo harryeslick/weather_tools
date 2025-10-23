@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import requests
 
+from weather_tools.logging_utils import configure_logging, get_package_logger, resolve_log_level
 from weather_tools.metno_models import (
     DailyWeatherSummary,
     MetNoAPIError,
@@ -77,7 +78,7 @@ class MetNoAPI:
         retry_delay: float = 1.0,
         enable_cache: bool = True,
         cache_expiry_hours: int = 1,
-        debug: bool = False,
+        log_level: int | str = logging.INFO,
     ):
         """
         Initialize the met.no API client.
@@ -89,7 +90,7 @@ class MetNoAPI:
             retry_delay: Base delay between retries in seconds (default: 1.0)
             enable_cache: Whether to cache API responses (default: True)
             cache_expiry_hours: Hours before cache expires (default: 1)
-            debug: Whether to print debug information including constructed URLs (default: False)
+            log_level: Logging level for API diagnostics (default: ``INFO``)
 
         Example:
             >>> # Using default User-Agent
@@ -99,7 +100,7 @@ class MetNoAPI:
             >>> api = MetNoAPI(user_agent="MyApp/1.0 (contact@example.com)")
             >>>
             >>> # With additional options
-            >>> api = MetNoAPI(enable_cache=True, timeout=60, debug=True)
+            >>> api = MetNoAPI(enable_cache=True, timeout=60, log_level="DEBUG")
         """
         # Set User-Agent (required by met.no API)
         if user_agent is None:
@@ -112,8 +113,32 @@ class MetNoAPI:
         self.retry_delay = retry_delay
         self.enable_cache = enable_cache
         self.cache_expiry_hours = cache_expiry_hours
-        self.debug = debug
+        self.log_level = resolve_log_level(log_level)
         self._cache: Optional[Dict[str, Tuple[Any, dt.datetime]]] = {} if enable_cache else None
+
+        # Ensure logging is configured with a basic setup if not already done.
+        # This is a fallback for library usage outside of CLI context.
+        root_logger = logging.getLogger()
+        if not any(isinstance(h, logging.Handler) for h in root_logger.handlers):
+            configure_logging(level=logging.INFO)
+
+        # Set the level on the package logger to control weather_tools.* logging
+        # without affecting other libraries or the root logger configuration.
+        # We always set the level (not conditionally) to support changing levels
+        # between API instances (e.g., DEBUG -> INFO -> DEBUG).
+        package_logger = get_package_logger()
+        package_logger.setLevel(self.log_level)
+
+        # Also adjust the handler level to match the most restrictive setting.
+        # The handler level acts as a global minimum - it should be set to the
+        # lowest (most verbose) level requested by any active API instance.
+        # Since we can't track all instances, we conservatively match this instance's level.
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.Handler) and getattr(handler, "_weather_tools_handler", False):
+                # Always update handler to match the current API instance level
+                # This allows users to control verbosity by creating new instances
+                handler.setLevel(self.log_level)
+                break
 
     def _get_endpoint(self, format: MetNoFormat) -> str:
         """Get the API endpoint for a given format."""
@@ -136,12 +161,12 @@ class MetNoAPI:
 
     def _make_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Make the HTTP request with retry logic and caching."""
-        # Print constructed URL if debug mode is enabled
-        if self.debug:
+        # Emit constructed URL when debug logging is enabled
+        if logger.isEnabledFor(logging.DEBUG):
             param_str = "&".join([f"{k}={v}" for k, v in params.items()])
             full_url = f"{url}?{param_str}"
-            print(f"🌐 Constructed URL: {full_url}")
-            print(f"📋 User-Agent: {self.user_agent}")
+            logger.debug("🌐 Constructed URL: %s", full_url)
+            logger.debug("📋 User-Agent: %s", self.user_agent)
 
         # Check cache first
         if self.enable_cache and self._cache is not None:
@@ -174,7 +199,7 @@ class MetNoAPI:
                     )
                 elif response.status_code == 429:
                     raise MetNoRateLimitError(
-                        f"Met.no API rate limit exceeded. Please wait before making more requests."
+                        "Met.no API rate limit exceeded. Please wait before making more requests."
                     )
                 elif response.status_code >= 400:
                     raise MetNoAPIError(f"HTTP {response.status_code}: {response.reason}\n{response.text}")
@@ -244,7 +269,7 @@ class MetNoAPI:
         return MetNoResponse(raw_data=raw_data, format=query.format, coordinates=query.coordinates)
 
     def get_daily_forecast(
-        self, latitude: float, longitude: float, days: int = 7, altitude: Optional[int] = None
+        self, latitude: float, longitude: float, days: int = 9, altitude: Optional[int] = None
     ) -> List[DailyWeatherSummary]:
         """
         Convenience method: Get daily forecast summaries.
@@ -440,6 +465,7 @@ class MetNoAPI:
 
         return most_severe
 
+    # TODO confirm if metno timezones are handled correctly, else add timezone support. output should match SILO timezone.
     def to_dataframe(self, response: MetNoResponse, aggregate_to_daily: bool = True) -> pd.DataFrame:
         """
         Convert met.no response to pandas DataFrame.

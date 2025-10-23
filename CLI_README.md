@@ -99,7 +99,7 @@ weather-tools silo patched-point [OPTIONS]
 - `--output, -o TEXT` - Output filename (extension auto-corrected to match format)
 - `--api-key TEXT` - SILO API key (or set SILO_API_KEY env var)  
 - `--enable-cache` - Enable response caching
-- `--debug` - Print constructed URL for debugging
+- `--log-level TEXT` - Logging level for SILO client (e.g., INFO, DEBUG)
 
 **Format Auto-Detection:**
 File extensions automatically determine output format:
@@ -147,7 +147,7 @@ weather-tools silo data-drill [OPTIONS]
 - `--output, -o TEXT` - Output filename
 - `--api-key TEXT` - SILO API key (or set SILO_API_KEY env var)
 - `--enable-cache` - Enable response caching
-- `--debug` - Print constructed URL for debugging
+- `--log-level TEXT` - Logging level for SILO client (e.g., INFO, DEBUG)
 
 **Examples:**
 
@@ -178,7 +178,7 @@ weather-tools silo search [OPTIONS]
 - `--details` - Get detailed info for a specific station
 - `--api-key TEXT` - SILO API key (or set SILO_API_KEY env var)
 - `--output, -o TEXT` - Output filename
-- `--debug` - Print constructed URL for debugging
+- `--log-level TEXT` - Logging level for SILO client (e.g., INFO, DEBUG)
 
 **Examples:**
 

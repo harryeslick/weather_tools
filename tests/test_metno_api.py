@@ -3,8 +3,9 @@ Tests for met.no API client.
 
 Tests API client functionality with mocked responses.
 """
-import json
 import datetime as dt
+import json
+import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -13,11 +14,11 @@ import requests
 
 from weather_tools.metno_api import MetNoAPI
 from weather_tools.metno_models import (
-    MetNoQuery,
-    MetNoFormat,
     MetNoAPIError,
-    MetNoUserAgentError,
+    MetNoFormat,
+    MetNoQuery,
     MetNoRateLimitError,
+    MetNoUserAgentError,
 )
 from weather_tools.silo_models import AustralianCoordinates
 
@@ -63,7 +64,7 @@ class TestMetNoAPIInitialization:
             retry_delay=2.0,
             enable_cache=False,
             cache_expiry_hours=2,
-            debug=True
+            log_level="DEBUG",
         )
 
         assert api.timeout == 60
@@ -71,7 +72,7 @@ class TestMetNoAPIInitialization:
         assert api.retry_delay == 2.0
         assert api.enable_cache is False
         assert api.cache_expiry_hours == 2
-        assert api.debug is True
+        assert api.log_level == logging.DEBUG
 
 
 class TestMetNoAPIEndpoints:

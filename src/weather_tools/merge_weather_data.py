@@ -76,6 +76,9 @@ def merge_historical_and_forecast(
     silo_df = silo_data.copy()
     metno_df = metno_data.copy()
 
+    if "metadata" in silo_df.columns:
+        silo_df = silo_df.drop(columns="metadata")
+
     # Ensure date columns are datetime
     silo_df["date"] = pd.to_datetime(silo_df["date"])
     metno_df["date"] = pd.to_datetime(metno_df["date"])
@@ -95,7 +98,7 @@ def merge_historical_and_forecast(
     if validate:
         is_valid, issues = validate_merge_compatibility(silo_df, metno_df, transition_date, overlap_strategy)
         if not is_valid:
-            raise MergeValidationError(f"Merge validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues))
+            raise MergeValidationError("Merge validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues))
 
     # Handle overlapping dates
     if overlap_strategy == "error":
@@ -258,66 +261,6 @@ def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame, fill_
                 else np.nan,
                 axis=1,
             )
-
-    # Add SILO date columns (day, year) if not already present
-    if "day" not in metno_df.columns or "year" not in metno_df.columns:
-        metno_df = add_silo_date_columns(metno_df)
-
-    # Fill missing SILO variables if requested
-    if fill_missing:
-        metno_df = fill_missing_silo_variables(metno_df, silo_df)
-
-    return metno_df
-
-
-def fill_missing_silo_variables(
-    metno_df: pd.DataFrame, silo_df: pd.DataFrame, strategy: str = "default"
-) -> pd.DataFrame:
-    """
-    Fill missing SILO variables in met.no data.
-
-    Args:
-        metno_df: met.no DataFrame
-        silo_df: SILO DataFrame (for reference values)
-        strategy: Filling strategy:
-                 - "default": Use reasonable defaults
-                 - "last_known": Use last known SILO value
-                 - "median": Use median from SILO data
-
-    Returns:
-        DataFrame with filled variables
-    """
-    metno_df = metno_df.copy()
-
-    # Default values for common variables (conservative estimates)
-    defaults = {
-        "radiation": 20.0,  # MJ/m² - conservative daily solar radiation
-        "evap_syn": 5.0,  # mm - moderate evaporation
-        "evap_pan": np.nan,  # Not estimable without pan data
-        "et_short_crop": 4.0,  # mm - moderate reference ET
-        "vp_deficit": np.nan,  # Requires more calculation
-    }
-
-    silo_cols = silo_df.columns.tolist()
-
-    for col in SILO_ONLY_VARIABLES:
-        if col in silo_cols and col not in metno_df.columns:
-            if strategy == "default":
-                metno_df[col] = defaults.get(col, np.nan)
-            elif strategy == "last_known":
-                # Use last value from SILO
-                if len(silo_df) > 0 and col in silo_df.columns:
-                    last_val = silo_df[col].iloc[-1]
-                    metno_df[col] = last_val if pd.notna(last_val) else defaults.get(col, np.nan)
-                else:
-                    metno_df[col] = defaults.get(col, np.nan)
-            elif strategy == "median":
-                # Use median from SILO
-                if len(silo_df) > 0 and col in silo_df.columns:
-                    median_val = silo_df[col].median()
-                    metno_df[col] = median_val if pd.notna(median_val) else defaults.get(col, np.nan)
-                else:
-                    metno_df[col] = defaults.get(col, np.nan)
 
     return metno_df
 
