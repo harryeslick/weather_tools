@@ -13,6 +13,7 @@ import os
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union
+from rapidfuzz import fuzz
 
 import pandas as pd
 import requests
@@ -542,6 +543,14 @@ class SiloAPI:
 
         # Parse to DataFrame
         df = self._response_to_dataframe(response)
+
+        # Sort the DataFrame based on fuzzy matching
+        if df.shape[0] > 1 and name_fragment:
+            df = df.sort_values(
+                by="name",
+                key=lambda x: x.map(lambda name: (fuzz.ratio(name_fragment.lower(), name.lower()))),
+                ascending=False,
+            )
 
         if return_metadata:
             metadata = {
