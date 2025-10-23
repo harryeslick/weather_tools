@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import requests
 
-from weather_tools.logging_utils import ensure_logging_configured, resolve_log_level
+from weather_tools.logging_utils import configure_logging, get_package_logger, resolve_log_level
 from weather_tools.metno_models import (
     DailyWeatherSummary,
     MetNoAPIError,
@@ -116,9 +116,29 @@ class MetNoAPI:
         self.log_level = resolve_log_level(log_level)
         self._cache: Optional[Dict[str, Tuple[Any, dt.datetime]]] = {} if enable_cache else None
 
-        ensure_logging_configured(level=self.log_level)
-        if logger.getEffectiveLevel() > self.log_level:
-            logger.setLevel(self.log_level)
+        # Ensure logging is configured with a basic setup if not already done.
+        # This is a fallback for library usage outside of CLI context.
+        root_logger = logging.getLogger()
+        if not any(isinstance(h, logging.Handler) for h in root_logger.handlers):
+            configure_logging(level=logging.INFO)
+
+        # Set the level on the package logger to control weather_tools.* logging
+        # without affecting other libraries or the root logger configuration.
+        # We always set the level (not conditionally) to support changing levels
+        # between API instances (e.g., DEBUG -> INFO -> DEBUG).
+        package_logger = get_package_logger()
+        package_logger.setLevel(self.log_level)
+
+        # Also adjust the handler level to match the most restrictive setting.
+        # The handler level acts as a global minimum - it should be set to the
+        # lowest (most verbose) level requested by any active API instance.
+        # Since we can't track all instances, we conservatively match this instance's level.
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.Handler) and getattr(handler, "_weather_tools_handler", False):
+                # Always update handler to match the current API instance level
+                # This allows users to control verbosity by creating new instances
+                handler.setLevel(self.log_level)
+                break
 
     def _get_endpoint(self, format: MetNoFormat) -> str:
         """Get the API endpoint for a given format."""

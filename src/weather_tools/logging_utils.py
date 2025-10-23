@@ -15,7 +15,7 @@ from functools import lru_cache
 from rich.console import Console
 from rich.logging import RichHandler
 
-__all__ = ["get_console", "configure_logging", "ensure_logging_configured", "resolve_log_level"]
+__all__ = ["get_console", "configure_logging", "get_package_logger", "resolve_log_level"]
 
 _LEVEL_MAP = {
     "CRITICAL": logging.CRITICAL,
@@ -64,54 +64,58 @@ def configure_logging(
     present) so that all log records render via Rich. The handler uses the
     shared console returned by :func:`get_console` to ensure compatibility
     with progress bars and other Rich features.
+
+    Args:
+        level: Logging level (name or numeric). Applied to both root logger and handler.
+        rich_tracebacks: Enable rich exception formatting.
+        show_path: Show file paths in log output.
+
+    Note:
+        This function is idempotent - calling it multiple times will update
+        the existing handler's level rather than creating duplicates.
     """
 
     console = get_console()
     root_logger = logging.getLogger()
-
-    # Avoid registering duplicate Rich handlers if configure_logging is called
-    # multiple times (e.g. by tests importing the CLI).
     numeric_level = resolve_log_level(level)
 
+    # Check if our handler is already attached
     for handler in root_logger.handlers:
         if isinstance(handler, RichHandler) and getattr(handler, "_weather_tools_handler", False):
+            # Update both root logger and handler levels
             root_logger.setLevel(numeric_level)
+            handler.setLevel(numeric_level)
             return
 
+    # Create and attach new handler
     rich_handler = RichHandler(
         console=console,
         rich_tracebacks=rich_tracebacks,
         markup=True,
         show_path=show_path,
     )
+    rich_handler.setLevel(numeric_level)  # Set level on handler
     rich_handler.setFormatter(logging.Formatter("%(message)s"))
-    # Flag the handler so future configure_logging calls can detect it.
     setattr(rich_handler, "_weather_tools_handler", True)
 
     root_logger.addHandler(rich_handler)
     root_logger.setLevel(numeric_level)
 
 
-def ensure_logging_configured(
-    level: int | str = logging.INFO,
-    *,
-    rich_tracebacks: bool = True,
-    show_path: bool = False,
-) -> None:
-    """Ensure a Rich-backed logging handler is attached.
+@lru_cache(maxsize=1)
+def get_package_logger() -> logging.Logger:
+    """Get the package-level logger for weather_tools.
 
-    This helper is safe to call multiple times. If the weather_tools Rich handler
-    has already been registered, it simply adjusts the root logger level when
-    needed; otherwise it delegates to :func:`configure_logging`.
+    This logger sits at the top of the weather_tools.* hierarchy and can be
+    used to control logging verbosity for the entire package without affecting
+    other libraries or the root logger.
+
+    Returns:
+        The weather_tools package logger.
+
+    Example:
+        >>> # Control all weather_tools logging
+        >>> pkg_logger = get_package_logger()
+        >>> pkg_logger.setLevel(logging.DEBUG)
     """
-
-    root_logger = logging.getLogger()
-    numeric_level = resolve_log_level(level)
-
-    for handler in root_logger.handlers:
-        if isinstance(handler, RichHandler) and getattr(handler, "_weather_tools_handler", False):
-            if root_logger.level > numeric_level:
-                root_logger.setLevel(numeric_level)
-            return
-
-    configure_logging(level=numeric_level, rich_tracebacks=rich_tracebacks, show_path=show_path)
+    return logging.getLogger("weather_tools")
