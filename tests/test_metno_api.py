@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pandas as pd
 import pytest
 import requests
 
@@ -257,47 +258,48 @@ class TestMetNoAPIDailyAggregation:
     """Test daily aggregation from hourly forecasts."""
 
     def test_aggregate_to_daily(self, mock_metno_response, sample_coords):
-        """Test aggregation of hourly data to daily summaries."""
+        """Test aggregation of hourly data to daily summaries using DataFrame approach."""
         api = MetNoAPI()
 
         timeseries = mock_metno_response["properties"]["timeseries"]
-        daily_summaries = api._aggregate_to_daily(timeseries, sample_coords)
+        df = api._timeseries_to_dataframe(timeseries)
+        daily_df = api._resample(df, "D")
 
-        assert len(daily_summaries) == 2  # 2 days in fixture
+        assert len(daily_df) == 2  # 2 days in fixture
 
         # Check first day
-        day1 = daily_summaries[0]
-        assert day1.date == dt.date(2023, 1, 15)
-        assert day1.min_temperature is not None
-        assert day1.max_temperature is not None
-        assert day1.total_precipitation is not None
+        assert daily_df.iloc[0]["date"].date() == dt.date(2023, 1, 15)
+        assert pd.notna(daily_df.iloc[0]["min_temperature"])
+        assert pd.notna(daily_df.iloc[0]["max_temperature"])
+        assert pd.notna(daily_df.iloc[0]["total_precipitation"])
 
         # Check second day
-        day2 = daily_summaries[1]
-        assert day2.date == dt.date(2023, 1, 16)
+        assert daily_df.iloc[1]["date"].date() == dt.date(2023, 1, 16)
 
     def test_aggregate_temperature_min_max(self, mock_metno_response, sample_coords):
-        """Test temperature min/max calculation."""
+        """Test temperature min/max calculation using DataFrame approach."""
         api = MetNoAPI()
 
         timeseries = mock_metno_response["properties"]["timeseries"]
-        daily_summaries = api._aggregate_to_daily(timeseries, sample_coords)
+        df = api._timeseries_to_dataframe(timeseries)
+        daily_df = api._resample(df, "D")
 
-        day1 = daily_summaries[0]
+        day1 = daily_df.iloc[0]
         # From fixture: 25.5, 26.2, 27.1
-        assert day1.min_temperature == 25.5
-        assert day1.max_temperature == 27.1
+        assert day1["min_temperature"] == 25.5
+        assert day1["max_temperature"] == 27.1
 
     def test_aggregate_precipitation_sum(self, mock_metno_response, sample_coords):
-        """Test precipitation summation."""
+        """Test precipitation summation using DataFrame approach."""
         api = MetNoAPI()
 
         timeseries = mock_metno_response["properties"]["timeseries"]
-        daily_summaries = api._aggregate_to_daily(timeseries, sample_coords)
+        df = api._timeseries_to_dataframe(timeseries)
+        daily_df = api._resample(df, "D")
 
-        day1 = daily_summaries[0]
+        day1 = daily_df.iloc[0]
         # From fixture: 0.0, 0.2, 0.8 = 1.0
-        assert day1.total_precipitation == pytest.approx(1.0, abs=0.01)
+        assert day1["total_precipitation"] == pytest.approx(1.0, abs=0.01)
 
     def test_get_dominant_symbol(self):
         """Test weather symbol selection."""
@@ -321,7 +323,7 @@ class TestMetNoAPIConvenience:
     """Test convenience methods."""
 
     def test_get_daily_forecast(self, mock_metno_response):
-        """Test get_daily_forecast convenience method."""
+        """Test get_daily_forecast convenience method returns DataFrame."""
         api = MetNoAPI()
 
         with patch("requests.get") as mock_get:
@@ -330,11 +332,13 @@ class TestMetNoAPIConvenience:
             mock_response.json.return_value = mock_metno_response
             mock_get.return_value = mock_response
 
-            forecasts = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=7)
+            df = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=7)
 
-            assert len(forecasts) <= 7
-            assert all(hasattr(f, "date") for f in forecasts)
-            assert all(hasattr(f, "min_temperature") for f in forecasts)
+            # Should return DataFrame
+            assert isinstance(df, pd.DataFrame)
+            assert len(df) <= 7
+            assert "date" in df.columns
+            assert "min_temperature" in df.columns
 
     def test_get_daily_forecast_invalid_days(self):
         """Test validation of days parameter."""

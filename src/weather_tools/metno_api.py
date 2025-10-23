@@ -11,7 +11,6 @@ import json
 import logging
 import sys
 import time
-from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -19,7 +18,6 @@ import requests
 
 from weather_tools.logging_utils import configure_logging, get_package_logger, resolve_log_level
 from weather_tools.metno_models import (
-    DailyWeatherSummary,
     MetNoAPIError,
     MetNoFormat,
     MetNoQuery,
@@ -270,9 +268,9 @@ class MetNoAPI:
 
     def get_daily_forecast(
         self, latitude: float, longitude: float, days: int = 9, altitude: Optional[int] = None
-    ) -> List[DailyWeatherSummary]:
+    ) -> pd.DataFrame:
         """
-        Convenience method: Get daily forecast summaries.
+        Convenience method: Get daily forecast summaries as DataFrame.
 
         Args:
             latitude: Latitude in decimal degrees
@@ -281,19 +279,15 @@ class MetNoAPI:
             altitude: Optional elevation in meters
 
         Returns:
-            List of daily weather summaries
+            DataFrame with daily aggregated forecasts
 
         Raises:
             ValueError: If days is not between 1 and 9
 
         Example:
-            >>> daily_forecasts = api.get_daily_forecast(
-            ...     latitude=-27.5,
-            ...     longitude=153.0,
-            ...     days=7
-            ... )
-            >>> for forecast in daily_forecasts:
-            ...     print(f"{forecast.date}: {forecast.min_temperature}°C - {forecast.max_temperature}°C")
+            >>> api = MetNoAPI()
+            >>> df = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=7)
+            >>> print(df[['date', 'min_temperature', 'max_temperature', 'total_precipitation']])
         """
         if days < 1 or days > 9:
             raise ValueError(f"Days must be between 1 and 9, got {days}")
@@ -305,126 +299,113 @@ class MetNoAPI:
         query = MetNoQuery(coordinates=coords, format=MetNoFormat.COMPACT)
         response = self.query_forecast(query)
 
-        # Aggregate to daily summaries
+        # Convert to DataFrame and aggregate to daily
         timeseries = response.get_timeseries()
-        daily_summaries = self._aggregate_to_daily(timeseries, coords)
+        df = self._timeseries_to_dataframe(timeseries)
+        daily_df = self._resample(df, "D")
 
         # Return only requested number of days
-        return daily_summaries[:days]
+        return daily_df.head(days)
 
-    def _aggregate_to_daily(self, timeseries: List[Dict[str, Any]], coordinates: Any) -> List[DailyWeatherSummary]:
+    def _timeseries_to_dataframe(self, timeseries: List[Dict[str, Any]]) -> pd.DataFrame:
         """
-        Aggregate hourly forecasts to daily summaries.
+        Convert raw GeoJSON timeseries to flat pandas DataFrame.
+
+        This replaces manual loops with a simple list comprehension and lets
+        pandas handle the data structure. Much faster and more maintainable.
 
         Args:
-            timeseries: List of forecast timestamps from met.no
-            coordinates: Coordinates for timezone determination
+            timeseries: List of forecast timestamps from met.no API
 
         Returns:
-            List of daily weather summaries
-
-        Logic:
-        - Group by date (using UTC for simplicity, could add timezone support)
-        - Min/max temperature from all timestamps
-        - Sum precipitation amounts (avoiding double-counting)
-        - Average wind speed, humidity, pressure
-        - Most common/severe weather symbol
+            DataFrame with time index and all weather variables as columns
         """
-
-        # Group data by date
-        def _default_daily_data():
-            return {
-                "temperatures": [],
-                "precipitation": 0.0,
-                "wind_speeds": [],
-                "humidities": [],
-                "pressures": [],
-                "cloud_fractions": [],
-                "weather_symbols": [],
-            }
-
-        daily_data: Dict[dt.date, Dict[str, Any]] = defaultdict(_default_daily_data)
-
-        # Track precipitation periods to avoid double-counting
-        precipitation_covered = set()
-
+        records = []
         for entry in timeseries:
-            try:
-                time_str = entry.get("time")
-                if not time_str:
-                    continue
-
-                timestamp = dt.datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-                date = timestamp.date()
-
-                # Extract instant data
-                instant_data = entry.get("data", {}).get("instant", {}).get("details", {})
-
-                # Temperature
-                if "air_temperature" in instant_data:
-                    daily_data[date]["temperatures"].append(instant_data["air_temperature"])
-
-                # Wind speed
-                if "wind_speed" in instant_data:
-                    daily_data[date]["wind_speeds"].append(instant_data["wind_speed"])
-
-                # Humidity
-                if "relative_humidity" in instant_data:
-                    daily_data[date]["humidities"].append(instant_data["relative_humidity"])
-
-                # Pressure
-                if "air_pressure_at_sea_level" in instant_data:
-                    daily_data[date]["pressures"].append(instant_data["air_pressure_at_sea_level"])
-
-                # Cloud fraction
-                if "cloud_area_fraction" in instant_data:
-                    daily_data[date]["cloud_fractions"].append(instant_data["cloud_area_fraction"])
-
-                # Extract precipitation from next_1_hours, next_6_hours, or next_12_hours
-                # Use the shortest available period to avoid double-counting
-                period_key = timestamp.isoformat()
-                if period_key not in precipitation_covered:
-                    for period_name in ["next_1_hours", "next_6_hours", "next_12_hours"]:
-                        period_data = entry.get("data", {}).get(period_name, {})
-                        if period_data:
-                            details = period_data.get("details", {})
-                            if "precipitation_amount" in details:
-                                precip = details["precipitation_amount"]
-                                daily_data[date]["precipitation"] += precip
-                                precipitation_covered.add(period_key)
-
-                                # Also get weather symbol
-                                summary = period_data.get("summary", {})
-                                if "symbol_code" in summary:
-                                    daily_data[date]["weather_symbols"].append(summary["symbol_code"])
-                                break  # Use first available period
-
-            except Exception as e:
-                logger.warning("Error processing timestamp: %s", e)
+            time_str = entry.get("time")
+            if not time_str:
                 continue
 
-        # Create daily summaries
-        summaries = []
-        for date in sorted(daily_data.keys()):
-            data = daily_data[date]
+            # Extract instant weather data (temperature, wind, pressure, etc.)
+            instant_data = entry.get("data", {}).get("instant", {}).get("details", {})
 
-            summary = DailyWeatherSummary(
-                date=date,
-                min_temperature=min(data["temperatures"]) if data["temperatures"] else None,
-                max_temperature=max(data["temperatures"]) if data["temperatures"] else None,
-                total_precipitation=data["precipitation"] if data["precipitation"] > 0 else None,
-                avg_wind_speed=sum(data["wind_speeds"]) / len(data["wind_speeds"]) if data["wind_speeds"] else None,
-                max_wind_speed=max(data["wind_speeds"]) if data["wind_speeds"] else None,
-                avg_relative_humidity=sum(data["humidities"]) / len(data["humidities"]) if data["humidities"] else None,
-                avg_pressure=sum(data["pressures"]) / len(data["pressures"]) if data["pressures"] else None,
-                avg_cloud_fraction=sum(data["cloud_fractions"]) / len(data["cloud_fractions"])
-                if data["cloud_fractions"]
-                else None,
-                dominant_weather_symbol=self._get_dominant_symbol(data["weather_symbols"]),
-            )
-            summaries.append(summary)
+            # Start with time and instant measurements
+            record = {"time": pd.to_datetime(time_str), **instant_data}
 
-        return summaries
+            # Add precipitation and symbol from period data (prefer shortest period)
+            for period_name in ["next_1_hours", "next_6_hours", "next_12_hours"]:
+                period_data = entry.get("data", {}).get(period_name, {})
+                if period_data:
+                    # Add precipitation details
+                    details = period_data.get("details", {})
+                    if "precipitation_amount" in details:
+                        record["precipitation_amount"] = details["precipitation_amount"]
+
+                    # Add weather symbol
+                    summary = period_data.get("summary", {})
+                    if "symbol_code" in summary:
+                        record["symbol_code"] = summary["symbol_code"]
+
+                    break  # Use first available period
+
+            records.append(record)
+
+        return pd.DataFrame(records)
+
+    def _resample(self, df: pd.DataFrame, freq: str) -> pd.DataFrame:
+        """
+        Aggregate DataFrame to specified frequency using pandas resample.
+
+        This replaces ~80 lines of manual aggregation with pandas built-in
+        time series operations. Much cleaner and more performant.
+
+        Args:
+            df: DataFrame with time index
+            freq: Pandas frequency string ('D' for daily, 'W' for weekly, 'M' for monthly)
+
+        Returns:
+            Aggregated DataFrame with renamed columns matching SILO conventions
+        """
+        # Set time as index for resampling
+        df = df.set_index("time")
+
+        # Define aggregations for each variable
+        aggregated = df.resample(freq).agg({
+            "air_temperature": ["min", "max"],
+            "precipitation_amount": "sum",
+            "wind_speed": ["mean", "max"],
+            "relative_humidity": "mean",
+            "air_pressure_at_sea_level": "mean",
+            "cloud_area_fraction": "mean",
+            "symbol_code": lambda x: self._get_dominant_symbol(x.dropna().tolist()),
+        })
+
+        # Flatten multi-level column names
+        aggregated.columns = ["_".join(col).strip("_") for col in aggregated.columns]
+
+        # Rename to match SILO/user-friendly conventions
+        aggregated = aggregated.rename(
+            columns={
+                "air_temperature_min": "min_temperature",
+                "air_temperature_max": "max_temperature",
+                "precipitation_amount_sum": "total_precipitation",
+                "wind_speed_mean": "avg_wind_speed",
+                "wind_speed_max": "max_wind_speed",
+                "relative_humidity_mean": "avg_relative_humidity",
+                "air_pressure_at_sea_level_mean": "avg_pressure",
+                "cloud_area_fraction_mean": "avg_cloud_fraction",
+                "symbol_code_<lambda>": "dominant_weather_symbol",
+            }
+        )
+
+        # Reset index to make 'time' a column again, rename to 'date'
+        result = aggregated.reset_index().rename(columns={"time": "date"})
+
+        # Convert to timezone-naive to match SILO data format (SILO uses naive timestamps)
+        # This prevents "Cannot compare tz-naive and tz-aware timestamps" errors during merge
+        result["date"] = result["date"].dt.tz_localize(None)
+
+        return result
 
     def _get_dominant_symbol(self, symbols: List[str]) -> Optional[str]:
         """
@@ -466,57 +447,64 @@ class MetNoAPI:
         return most_severe
 
     # TODO confirm if metno timezones are handled correctly, else add timezone support. output should match SILO timezone.
-    def to_dataframe(self, response: MetNoResponse, aggregate_to_daily: bool = True) -> pd.DataFrame:
+    def to_dataframe(
+        self, response: MetNoResponse, frequency: str = "daily", aggregate_to_daily: Optional[bool] = None
+    ) -> pd.DataFrame:
         """
-        Convert met.no response to pandas DataFrame.
+        Convert met.no response to pandas DataFrame with flexible aggregation.
 
         Args:
             response: MetNoResponse from API
-            aggregate_to_daily: Aggregate hourly data to daily summaries (default: True)
+            frequency: Aggregation frequency: 'hourly', 'daily' (default), 'weekly', 'monthly'
+                      Pandas frequency codes also accepted: 'D', 'W', 'M'
+            aggregate_to_daily: Deprecated. Use frequency='daily' or frequency='hourly' instead.
+                               For backwards compatibility, if set to False, uses frequency='hourly'
 
         Returns:
-            DataFrame with weather data
+            DataFrame with weather data at the specified frequency
 
         Example:
             >>> response = api.query_forecast(query)
-            >>> df = api.to_dataframe(response)
-            >>> print(df.head())
+            >>> # Daily aggregation (default)
+            >>> daily_df = api.to_dataframe(response)
+            >>> # Hourly data
+            >>> hourly_df = api.to_dataframe(response, frequency='hourly')
+            >>> # Weekly aggregation
+            >>> weekly_df = api.to_dataframe(response, frequency='weekly')
         """
-        if aggregate_to_daily:
-            timeseries = response.get_timeseries()
-            daily_summaries = self._aggregate_to_daily(timeseries, response.coordinates)
+        # Handle deprecated aggregate_to_daily parameter
+        if aggregate_to_daily is not None:
+            logger.warning(
+                "aggregate_to_daily parameter is deprecated. Use frequency='daily' or frequency='hourly' instead."
+            )
+            frequency = "daily" if aggregate_to_daily else "hourly"
 
-            # Convert to DataFrame
-            records = [summary.model_dump() for summary in daily_summaries]
-            df = pd.DataFrame(records)
-            return df
-        else:
-            # Return hourly data
-            timeseries = response.get_timeseries()
-            records = []
+        # Convert to DataFrame first (always)
+        timeseries = response.get_timeseries()
+        df = self._timeseries_to_dataframe(timeseries)
 
-            for entry in timeseries:
-                time_str = entry.get("time")
-                instant_data = entry.get("data", {}).get("instant", {}).get("details", {})
+        # Normalize frequency parameter
+        freq_map = {
+            "hourly": None,  # No aggregation
+            "daily": "D",
+            "weekly": "W",
+            "monthly": "M",
+            "D": "D",
+            "W": "W",
+            "M": "M",
+        }
 
-                record = {"time": time_str}
-                record.update(instant_data)
+        freq = freq_map.get(frequency.lower() if isinstance(frequency, str) else frequency)
 
-                # Add period data if available
-                for period_name in ["next_1_hours", "next_6_hours", "next_12_hours"]:
-                    period_data = entry.get("data", {}).get(period_name, {})
-                    if period_data:
-                        details = period_data.get("details", {})
-                        for key, value in details.items():
-                            record[f"{period_name}_{key}"] = value
-                        break
-
-                records.append(record)
-
-            df = pd.DataFrame(records)
+        if freq is None:
+            # Return hourly data (no aggregation)
+            # Convert to timezone-naive to match SILO format
             if "time" in df.columns:
-                df["time"] = pd.to_datetime(df["time"])
+                df["time"] = df["time"].dt.tz_localize(None)
             return df
+
+        # Aggregate using pandas resample
+        return self._resample(df, freq)
 
     def clear_cache(self) -> None:
         """
