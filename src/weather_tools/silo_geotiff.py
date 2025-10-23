@@ -12,24 +12,26 @@ GeoTIFF files from AWS S3, with support for:
 import datetime
 import logging
 from pathlib import Path
-from typing import Optional, Union, Tuple, List
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
 import rasterio
-from rasterio.features import geometry_window
-from shapely.geometry import Point, Polygon, box
 import requests
+from rasterio.features import geometry_window
 from rich.console import Console
 from rich.progress import (
+    BarColumn,
+    DownloadColumn,
     Progress,
     SpinnerColumn,
-    BarColumn,
     TextColumn,
-    DownloadColumn,
-    TransferSpeedColumn,
     TimeRemainingColumn,
+    TransferSpeedColumn,
 )
+from shapely.geometry import Point, Polygon, box
 
-from .silo_variables import get_variable_metadata, expand_variable_preset
+from .logging_utils import get_console
+from .silo_variables import VariableMetadata, expand_variable_preset, get_variable_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -283,16 +285,15 @@ def read_geotiff_timeseries(
         ...     save_to_disk=False
         ... )
     """
+    if console is not None:
+        logger.debug("Custom console provided to read_geotiff_timeseries; logging handles output automatically.")
+
     # Expand variable presets
     var_list = expand_variable_preset(variables)
 
     # Set default cache directory
     if cache_dir is None:
         cache_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
-
-    # Initialize console if not provided
-    if console is None:
-        console = Console()
 
     # Generate date sequence
     date_list = []
@@ -305,7 +306,7 @@ def read_geotiff_timeseries(
     results = {}
 
     for var_name in var_list:
-        console.print(f"[cyan]Reading {var_name}...[/cyan]")
+        logger.info(f"[cyan]Reading {var_name}...[/cyan]")
 
         arrays = []
 
@@ -345,9 +346,9 @@ def read_geotiff_timeseries(
         # Stack arrays into 3D array (time, height, width)
         if arrays:
             results[var_name] = np.stack(arrays, axis=0)
-            console.print(f"[green]Loaded {var_name}: {results[var_name].shape}[/green]")
+            logger.info(f"[green]Loaded {var_name}: {results[var_name].shape}[/green]")
         else:
-            console.print(f"[yellow]No data loaded for {var_name}[/yellow]")
+            logger.warning(f"[yellow]No data loaded for {var_name}[/yellow]")
 
     return results
 
@@ -407,15 +408,17 @@ def download_geotiff_range(
     # Expand variable presets
     var_list = expand_variable_preset(variables)
 
-    # Validate variables
+    # Validate variables and keep metadata handy for later use
+    metadata_map: dict[str, VariableMetadata] = {}
     for var_name in var_list:
         metadata = get_variable_metadata(var_name)
         if metadata is None:
             raise SiloGeoTiffError(f"Unknown variable: {var_name}")
+        metadata_map[var_name] = metadata
 
     # Initialize console if not provided
     if console is None:
-        console = Console()
+        console = get_console()
 
     # Generate date sequence
     date_list = []
@@ -427,7 +430,7 @@ def download_geotiff_range(
     # Build download task list
     tasks = []
     for var_name in var_list:
-        metadata = get_variable_metadata(var_name)
+        metadata = metadata_map[var_name]
 
         for date in date_list:
             # Skip dates before variable start_year
@@ -463,13 +466,13 @@ def download_geotiff_range(
                 if downloaded:
                     downloaded_files[var_name].append(dest_path)
             except SiloGeoTiffError as e:
-                console.print(f"[yellow]Warning: {e}[/yellow]")
+                logger.warning(f"[yellow]Warning: {e}[/yellow]")
 
             progress.advance(task_id)
 
-    # Print summary
-    console.print("\n[bold green]Download Summary:[/bold green]")
+    # Print summary via logger
+    logger.info("\n[bold green]Download Summary:[/bold green]")
     for var_name, files in downloaded_files.items():
-        console.print(f"  {var_name}: {len(files)} files")
+        logger.info(f"  {var_name}: {len(files)} files")
 
     return downloaded_files

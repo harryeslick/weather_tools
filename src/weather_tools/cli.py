@@ -1,15 +1,16 @@
 """Command-line interface for weather_tools."""
 
 import datetime
+import logging
 from pathlib import Path
 from typing import Annotated, Optional, Union
 
 import pandas as pd
 import typer
-from rich.console import Console
 from typing_extensions import List
 
 from weather_tools.download_silo import SiloDownloadError, download_silo_gridded
+from weather_tools.logging_utils import configure_logging, get_console
 from weather_tools.merge_weather_data import (
     MergeValidationError,
     get_merge_summary,
@@ -21,6 +22,8 @@ from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_api import SiloAPI, SiloAPIError
 from weather_tools.silo_geotiff import SiloGeoTiffError, download_geotiff_range
 from weather_tools.silo_models import AustralianCoordinates
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="weather-tools",
@@ -242,7 +245,7 @@ def download(
     if silo_dir is None:
         silo_dir = Path.home() / "Developer/DATA/silo_grids"
 
-    console = Console()
+    console = get_console()
 
     try:
         download_silo_gridded(
@@ -256,13 +259,13 @@ def download(
         )
 
     except ValueError as e:
-        console.print(f"[red]❌ Validation error: {e}[/red]")
+        logger.error(f"[red]❌ Validation error: {e}[/red]")
         raise typer.Exit(1)
     except SiloDownloadError as e:
-        console.print(f"[red]❌ Download error: {e}[/red]")
+        logger.error(f"[red]❌ Download error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[red]❌ Unexpected error: {e}[/red]")
+        logger.exception(f"[red]❌ Unexpected error: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -329,17 +332,17 @@ def geotiff_download(
     if output_dir is None:
         output_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
 
-    console = Console()
+    console = get_console()
 
     # Validate that bbox and geometry are mutually exclusive
     if bbox is not None and geometry is not None:
-        console.print("[red]Error: Cannot specify both --bbox and --geometry[/red]")
+        logger.error("[red]Error: Cannot specify both --bbox and --geometry[/red]")
         raise typer.Exit(1)
 
     # Validate bbox format
     if bbox is not None:
         if len(bbox) != 4:
-            console.print("[red]Error: --bbox requires exactly 4 values: min_lon min_lat max_lon max_lat[/red]")
+            logger.error("[red]Error: --bbox requires exactly 4 values: min_lon min_lat max_lon max_lat[/red]")
             raise typer.Exit(1)
 
     # Parse dates
@@ -347,8 +350,8 @@ def geotiff_download(
         start = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
         end = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
     except ValueError as e:
-        console.print(f"[red]Error parsing dates: {e}[/red]")
-        console.print("[yellow]Expected format: YYYY-MM-DD[/yellow]")
+        logger.error(f"[red]Error parsing dates: {e}[/red]")
+        logger.warning("[yellow]Expected format: YYYY-MM-DD[/yellow]")
         raise typer.Exit(1)
 
     # Load geometry from file if provided
@@ -359,24 +362,24 @@ def geotiff_download(
 
             gdf = gpd.read_file(geometry)
             if len(gdf) == 0:
-                console.print(f"[red]Error: No geometries found in {geometry}[/red]")
+                logger.error(f"[red]Error: No geometries found in {geometry}[/red]")
                 raise typer.Exit(1)
             # Use the first geometry
             geom_obj = gdf.geometry.iloc[0]
-            console.print(f"[cyan]Loaded geometry from {geometry}[/cyan]")
+            logger.info(f"[cyan]Loaded geometry from {geometry}[/cyan]")
         except ImportError:
-            console.print("[red]Error: geopandas is required for reading GeoJSON files[/red]")
-            console.print("[yellow]Install with: uv sync --extra geotiff[/yellow]")
+            logger.error("[red]Error: geopandas is required for reading GeoJSON files[/red]")
+            logger.warning("[yellow]Install with: uv sync --extra geotiff[/yellow]")
             raise typer.Exit(1)
         except Exception as e:
-            console.print(f"[red]Error loading geometry file: {e}[/red]")
+            logger.error(f"[red]Error loading geometry file: {e}[/red]")
             raise typer.Exit(1)
 
     # Convert bbox to bounding box tuple
     bbox_tuple = None
     if bbox is not None:
         bbox_tuple = tuple(bbox)
-        console.print(f"[cyan]Bounding box: {bbox_tuple}[/cyan]")
+        logger.info(f"[cyan]Bounding box: {bbox_tuple}[/cyan]")
 
     try:
         download_geotiff_range(
@@ -390,16 +393,16 @@ def geotiff_download(
             console=console,
         )
 
-        console.print("\n[bold green]Download complete![/bold green]")
+        logger.info("\n[bold green]Download complete![/bold green]")
 
     except ValueError as e:
-        console.print(f"[red]Validation error: {e}[/red]")
+        logger.error(f"[red]Validation error: {e}[/red]")
         raise typer.Exit(1)
     except SiloGeoTiffError as e:
-        console.print(f"[red]Download error: {e}[/red]")
+        logger.error(f"[red]Download error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[red]Unexpected error: {e}[/red]")
+        logger.exception(f"[red]Unexpected error: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -418,7 +421,9 @@ def silo_patched_point(
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
     enable_cache: Annotated[bool, typer.Option(help="Enable response caching")] = False,
-    debug: Annotated[bool, typer.Option(help="Print constructed URL for debugging")] = False,
+    log_level: Annotated[
+        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+    ] = "INFO",
 ) -> None:
     """
     Query SILO PatchedPoint dataset (station-based data).
@@ -518,9 +523,9 @@ def silo_patched_point(
 
         # Initialize API and execute query
         if api_key:
-            api = SiloAPI(api_key=api_key, enable_cache=enable_cache, debug=debug)
+            api = SiloAPI(api_key=api_key, enable_cache=enable_cache, log_level=log_level)
         else:
-            api = SiloAPI(enable_cache=enable_cache, debug=debug)
+            api = SiloAPI(enable_cache=enable_cache, log_level=log_level)
 
         typer.echo("🌐 Querying SILO PatchedPoint dataset...")
         typer.echo(f"   Station: {station}")
@@ -575,7 +580,9 @@ def silo_data_drill(
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
     enable_cache: Annotated[bool, typer.Option(help="Enable response caching")] = False,
-    debug: Annotated[bool, typer.Option(help="Print constructed URL for debugging")] = False,
+    log_level: Annotated[
+        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+    ] = "INFO",
 ) -> None:
     """
     Query SILO DataDrill dataset (gridded data).
@@ -622,9 +629,9 @@ def silo_data_drill(
 
         # Initialize API and execute query
         if api_key:
-            api = SiloAPI(api_key=api_key, enable_cache=enable_cache, debug=debug)
+            api = SiloAPI(api_key=api_key, enable_cache=enable_cache, log_level=log_level)
         else:
-            api = SiloAPI(enable_cache=enable_cache, debug=debug)
+            api = SiloAPI(enable_cache=enable_cache, log_level=log_level)
 
         typer.echo("🌐 Querying SILO DataDrill dataset...")
         typer.echo(f"   Location: {latitude}°S, {longitude}°E")
@@ -674,7 +681,9 @@ def silo_search(
     details: Annotated[bool, typer.Option(help="Get detailed info for a specific station")] = False,
     api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
-    debug: Annotated[bool, typer.Option(help="Print constructed URL for debugging")] = False,
+    log_level: Annotated[
+        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+    ] = "INFO",
 ) -> None:
     """
     Search for SILO stations by name or find nearby stations.
@@ -695,9 +704,9 @@ def silo_search(
 
     try:
         if api_key:
-            api = SiloAPI(api_key=api_key, debug=debug)
+            api = SiloAPI(api_key=api_key, log_level=log_level)
         else:
-            api = SiloAPI(debug=debug)
+            api = SiloAPI(log_level=log_level)
 
         # Determine search type
         if details and station:
@@ -762,18 +771,16 @@ def forecast(
     Example:
         weather-tools metno forecast --lat -27.5 --lon 153.0 --days 7 --output brisbane_forecast.csv
     """
-    console = Console()
-
     try:
         # Validate coordinates
         coords = AustralianCoordinates(latitude=lat, longitude=lon)
 
         # Validate days parameter
         if not 1 <= days <= 9:
-            console.print("[red]❌ Error: days must be between 1 and 9[/red]")
+            logger.error("[red]❌ Error: days must be between 1 and 9[/red]")
             raise typer.Exit(1)
 
-        console.print(f"[cyan]📡 Fetching met.no forecast for {coords.latitude}, {coords.longitude}...[/cyan]")
+        logger.info(f"[cyan]📡 Fetching met.no forecast for {coords.latitude}, {coords.longitude}...[/cyan]")
 
         # Create API client
         api = MetNoAPI(user_agent=user_agent)
@@ -781,7 +788,7 @@ def forecast(
         # Get daily forecast
         daily_forecasts = api.get_daily_forecast(latitude=coords.latitude, longitude=coords.longitude, days=days)
 
-        console.print(f"[green]✓ Retrieved {len(daily_forecasts)} days of forecast data[/green]")
+        logger.info(f"[green]✓ Retrieved {len(daily_forecasts)} days of forecast data[/green]")
 
         # Convert to DataFrame
         forecast_df = pd.DataFrame([f.model_dump() for f in daily_forecasts])
@@ -797,23 +804,23 @@ def forecast(
         # Save or display
         if output:
             forecast_df.to_csv(output, index=False)
-            console.print(f"[green]✓ Forecast saved to: {output}[/green]")
+            logger.info(f"[green]✓ Forecast saved to: {output}[/green]")
         else:
-            console.print("\n[bold]Met.no Forecast:[/bold]")
-            console.print(forecast_df.to_string(index=False))
+            logger.info("\n[bold]Met.no Forecast:[/bold]")
+            logger.info(forecast_df.to_string(index=False))
 
     except ValueError as e:
-        console.print(f"[red]❌ Validation Error: {e}[/red]")
+        logger.error(f"[red]❌ Validation Error: {e}[/red]")
         raise typer.Exit(1)
     except MetNoRateLimitError as e:
-        console.print(f"[red]❌ Rate Limit Exceeded: {e}[/red]")
-        console.print("[yellow]Please wait a few minutes before retrying[/yellow]")
+        logger.error(f"[red]❌ Rate Limit Exceeded: {e}[/red]")
+        logger.warning("[yellow]Please wait a few minutes before retrying[/yellow]")
         raise typer.Exit(1)
     except MetNoAPIError as e:
-        console.print(f"[red]❌ met.no API Error: {e}[/red]")
+        logger.error(f"[red]❌ met.no API Error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
+        logger.exception(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -844,22 +851,23 @@ def merge(
             --start-date 2023-01-01 --end-date 2023-12-31 \\
             --forecast-days 7 --output combined_weather.csv
     """
-    console = Console()
-
     try:
         # Validate coordinates
         coords = AustralianCoordinates(latitude=lat, longitude=lon)
 
         # Validate forecast days
         if not 1 <= forecast_days <= 9:
-            console.print("[red]❌ Error: forecast_days must be between 1 and 9[/red]")
+            logger.error("[red]❌ Error: forecast_days must be between 1 and 9[/red]")
             raise typer.Exit(1)
 
         # Step 1: Get SILO historical data
-        console.print(f"[cyan]📁 Loading SILO historical data from {start_date} to {end_date}...[/cyan]")
+        logger.info(f"[cyan]📁 Loading SILO historical data from {start_date} to {end_date}...[/cyan]")
 
         if variables is None:
             variables = ["daily"]
+
+        if silo_dir is None:
+            silo_dir = Path.home() / "Developer/DATA/silo_grids"
 
         ds = read_silo_xarray(
             variables=variables,
@@ -878,10 +886,10 @@ def merge(
         # Rename 'time' to 'date'
         silo_df = silo_df.rename(columns={"time": "date"})
 
-        console.print(f"[green]✓ Loaded {len(silo_df)} days of SILO historical data[/green]")
+        logger.info(f"[green]✓ Loaded {len(silo_df)} days of SILO historical data[/green]")
 
         # Step 2: Get met.no forecast
-        console.print(f"[cyan]📡 Fetching {forecast_days} days of met.no forecast...[/cyan]")
+        logger.info(f"[cyan]📡 Fetching {forecast_days} days of met.no forecast...[/cyan]")
 
         api = MetNoAPI(user_agent=user_agent)
         daily_forecasts = api.get_daily_forecast(
@@ -890,10 +898,10 @@ def merge(
 
         metno_df = pd.DataFrame([f.model_dump() for f in daily_forecasts])
 
-        console.print(f"[green]✓ Retrieved {len(metno_df)} days of forecast data[/green]")
+        logger.info(f"[green]✓ Retrieved {len(metno_df)} days of forecast data[/green]")
 
         # Step 3: Merge datasets
-        console.print("[cyan]🔗 Merging historical and forecast data...[/cyan]")
+        logger.info("[cyan]🔗 Merging historical and forecast data...[/cyan]")
 
         merged_df = merge_historical_and_forecast(
             silo_df, metno_df, validate=True, fill_missing=fill_missing, overlap_strategy="prefer_silo"
@@ -902,33 +910,28 @@ def merge(
         # Get merge summary
         summary = get_merge_summary(merged_df)
 
-        console.print(f"[green]✓ Merge complete![/green]")
-        console.print(f"  • Total records: {summary['total_records']}")
-        console.print(f"  • SILO records: {summary['silo_records']}")
-        console.print(f"  • met.no records: {summary['metno_records']}")
-        console.print(
-            f"  • Date range: {summary['date_range']['start'].date()} to {summary['date_range']['end'].date()}"
-        )
-        console.print(f"  • Transition date: {summary['transition_date'].date()}")
+        logger.info("[green]✓ Merge complete![/green]")
+        logger.info(f"  • Total records: {summary['total_records']}")
+        logger.info(f"  • SILO records: {summary['silo_records']}")
+        logger.info(f"  • met.no records: {summary['metno_records']}")
+        logger.info(f"  • Date range: {summary['date_range']['start'].date()} to {summary['date_range']['end'].date()}")
+        logger.info(f"  • Transition date: {summary['transition_date'].date()}")
 
         # Save to CSV
         merged_df.to_csv(output, index=False)
-        console.print(f"[green]✓ Merged data saved to: {output}[/green]")
+        logger.info(f"[green]✓ Merged data saved to: {output}[/green]")
 
     except ValueError as e:
-        console.print(f"[red]❌ Validation Error: {e}[/red]")
+        logger.error(f"[red]❌ Validation Error: {e}[/red]")
         raise typer.Exit(1)
     except MergeValidationError as e:
-        console.print(f"[red]❌ Merge Error: {e}[/red]")
+        logger.error(f"[red]❌ Merge Error: {e}[/red]")
         raise typer.Exit(1)
     except MetNoAPIError as e:
-        console.print(f"[red]❌ met.no API Error: {e}[/red]")
+        logger.error(f"[red]❌ met.no API Error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[red]❌ Error: {e}[/red]")
-        import traceback
-
-        traceback.print_exc()
+        logger.exception(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -939,52 +942,51 @@ def metno_info() -> None:
 
     Shows available variables, data coverage, and API details.
     """
-    console = Console()
+    logger.info("\n[bold cyan]met.no locationforecast API Information[/bold cyan]\n")
 
-    console.print("\n[bold cyan]met.no locationforecast API Information[/bold cyan]\n")
+    logger.info("[bold]API Details:[/bold]")
+    logger.info("  • Provider: Norwegian Meteorological Institute (met.no)")
+    logger.info("  • Endpoint: https://api.met.no/weatherapi/locationforecast/2.0/")
+    logger.info("  • Coverage: Global (optimized for Norwegian locations)")
+    logger.info("  • Forecast horizon: Up to 9 days")
+    logger.info("  • Update frequency: Hourly")
+    logger.info("  • Rate limit: Fair use policy (requires User-Agent)")
 
-    console.print("[bold]API Details:[/bold]")
-    console.print("  • Provider: Norwegian Meteorological Institute (met.no)")
-    console.print("  • Endpoint: https://api.met.no/weatherapi/locationforecast/2.0/")
-    console.print("  • Coverage: Global (optimized for Norwegian locations)")
-    console.print("  • Forecast horizon: Up to 9 days")
-    console.print("  • Update frequency: Hourly")
-    console.print("  • Rate limit: Fair use policy (requires User-Agent)")
+    logger.info("\n[bold]Available Variables (Daily Aggregates):[/bold]")
+    logger.info("  • min_temperature (°C) → min_temp")
+    logger.info("  • max_temperature (°C) → max_temp")
+    logger.info("  • total_precipitation (mm) → daily_rain")
+    logger.info("  • avg_pressure (hPa) → mslp")
+    logger.info("  • avg_relative_humidity (%) → vp (converted)")
+    logger.info("  • avg_wind_speed (m/s) → wind_speed")
+    logger.info("  • max_wind_speed (m/s) → wind_speed_max")
+    logger.info("  • avg_cloud_fraction (%) → cloud_fraction")
+    logger.info("  • dominant_weather_symbol → weather_symbol")
 
-    console.print("\n[bold]Available Variables (Daily Aggregates):[/bold]")
-    console.print("  • min_temperature (°C) → min_temp")
-    console.print("  • max_temperature (°C) → max_temp")
-    console.print("  • total_precipitation (mm) → daily_rain")
-    console.print("  • avg_pressure (hPa) → mslp")
-    console.print("  • avg_relative_humidity (%) → vp (converted)")
-    console.print("  • avg_wind_speed (m/s) → wind_speed")
-    console.print("  • max_wind_speed (m/s) → wind_speed_max")
-    console.print("  • avg_cloud_fraction (%) → cloud_fraction")
-    console.print("  • dominant_weather_symbol → weather_symbol")
+    logger.info("\n[bold]SILO-Only Variables (Not Available from met.no):[/bold]")
+    logger.info("  • evap_pan - Class A pan evaporation")
+    logger.info("  • evap_syn - Synthetic evaporation")
+    logger.info("  • radiation - Solar radiation (MJ/m²)")
+    logger.info("  • vp_deficit - Vapor pressure deficit")
+    logger.info("  • et_short_crop - FAO56 reference evapotranspiration")
 
-    console.print("\n[bold]SILO-Only Variables (Not Available from met.no):[/bold]")
-    console.print("  • evap_pan - Class A pan evaporation")
-    console.print("  • evap_syn - Synthetic evaporation")
-    console.print("  • radiation - Solar radiation (MJ/m²)")
-    console.print("  • vp_deficit - Vapor pressure deficit")
-    console.print("  • et_short_crop - FAO56 reference evapotranspiration")
+    logger.info("\n[bold]Usage Examples:[/bold]")
+    logger.info("  # Get 7-day forecast for Brisbane")
+    logger.info("  weather-tools metno forecast --lat -27.5 --lon 153.0 --days 7")
+    logger.info("")
+    logger.info("  # Merge historical SILO with 7-day forecast")
+    logger.info("  weather-tools metno merge --lat -27.5 --lon 153.0 \\")
+    logger.info("      --start-date 2023-01-01 --end-date 2023-12-31 \\")
+    logger.info("      --forecast-days 7 --output combined.csv")
 
-    console.print("\n[bold]Usage Examples:[/bold]")
-    console.print("  # Get 7-day forecast for Brisbane")
-    console.print("  weather-tools metno forecast --lat -27.5 --lon 153.0 --days 7")
-    console.print("")
-    console.print("  # Merge historical SILO with 7-day forecast")
-    console.print("  weather-tools metno merge --lat -27.5 --lon 153.0 \\")
-    console.print("      --start-date 2023-01-01 --end-date 2023-12-31 \\")
-    console.print("      --forecast-days 7 --output combined.csv")
-
-    console.print("\n[bold]Note:[/bold] The met.no API is best used for Australian locations")
-    console.print("near the coast. Inland locations may have less accurate forecasts.")
-    console.print("For optimal results, use with SILO historical data.\n")
+    logger.info("\n[bold]Note:[/bold] The met.no API is best used for Australian locations")
+    logger.info("near the coast. Inland locations may have less accurate forecasts.")
+    logger.info("For optimal results, use with SILO historical data.\n")
 
 
 def main():
     """Entry point for the CLI."""
+    configure_logging()
     app()
 
 

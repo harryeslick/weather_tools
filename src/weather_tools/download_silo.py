@@ -6,23 +6,25 @@ used with the local NetCDF processing functions.
 """
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 import requests
 from rich.console import Console
 from rich.progress import (
-    Progress,
-    SpinnerColumn,
     BarColumn,
     DownloadColumn,
-    TransferSpeedColumn,
-    TimeRemainingColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
     TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
 )
 
-from .silo_variables import expand_variable_preset, get_variable_metadata
+from .logging_utils import get_console
+from .silo_variables import VariableMetadata, expand_variable_preset, get_variable_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +84,7 @@ def download_file(
     force: bool = False,
     timeout: int = DEFAULT_TIMEOUT,
     progress: Optional[Progress] = None,
-    task_id: Optional[int] = None,
+    task_id: Optional[TaskID] = None,
 ) -> bool:
     """
     Download a file from a URL to a destination path.
@@ -191,15 +193,18 @@ def download_silo_gridded(
         {'daily_rain': [Path(...), ...], 'max_temp': [...], ...}
     """
     if console is None:
-        console = Console()
+        console = get_console()
 
     # Expand variable presets
     var_list = expand_variable_preset(variables)
 
     # Validate variables
+    metadata_map: dict[str, VariableMetadata] = {}
     for var in var_list:
-        if get_variable_metadata(var) is None:
+        metadata = get_variable_metadata(var)
+        if metadata is None:
             raise ValueError(f"Unknown variable: {var}")
+        metadata_map[var] = metadata
 
     # Validate year range
     if start_year > end_year:
@@ -212,13 +217,11 @@ def download_silo_gridded(
     # Build download list
     download_tasks = []
     for var in var_list:
-        metadata = get_variable_metadata(var)
+        metadata = metadata_map[var]
         for year in range(start_year, end_year + 1):
             # Skip years before variable starts
             if year < metadata.start_year:
-                console.print(
-                    f"[yellow]Skipping {var} for {year} (data starts in {metadata.start_year})[/yellow]"
-                )
+                logger.warning(f"[yellow]Skipping {var} for {year} (data starts in {metadata.start_year})[/yellow]")
                 continue
 
             url = construct_download_url(var, year)
@@ -226,15 +229,15 @@ def download_silo_gridded(
             download_tasks.append((var, year, url, dest))
 
     if not download_tasks:
-        console.print("[yellow]No files to download[/yellow]")
+        logger.info("[yellow]No files to download[/yellow]")
         return {}
 
     # Display summary
-    console.print(f"\n[bold]Downloading SILO gridded data...[/bold]")
-    console.print(f"  Variables: {', '.join(var_list)} ({len(var_list)} variable(s))")
-    console.print(f"  Years: {start_year}-{end_year} ({end_year - start_year + 1} year(s))")
-    console.print(f"  Total files: {len(download_tasks)}")
-    console.print(f"  Output directory: {output_dir}\n")
+    logger.info("\n[bold]Downloading SILO gridded data...[/bold]")
+    logger.info(f"  Variables: {', '.join(var_list)} ({len(var_list)} variable(s))")
+    logger.info(f"  Years: {start_year}-{end_year} ({end_year - start_year + 1} year(s))")
+    logger.info(f"  Total files: {len(download_tasks)}")
+    logger.info(f"  Output directory: {output_dir}\n")
 
     # Download with progress tracking
     downloaded_files = {var: [] for var in var_list}
@@ -271,13 +274,13 @@ def download_silo_gridded(
 
             except SiloDownloadError as e:
                 progress.update(task_id, description=f"[red]✗[/red] {task_desc}")
-                console.print(f"[red]Error: {e}[/red]")
+                logger.error(f"[red]Error: {e}[/red]")
                 # Continue with next file rather than failing completely
 
     # Summary
     total_downloaded = sum(len(files) for files in downloaded_files.values())
-    console.print(f"\n[bold green]✓[/bold green] Download complete!")
-    console.print(f"  Downloaded: {total_downloaded} file(s)")
-    console.print(f"  Skipped: {len(download_tasks) - total_downloaded} file(s)")
+    logger.info("\n[bold green]✓[/bold green] Download complete!")
+    logger.info(f"  Downloaded: {total_downloaded} file(s)")
+    logger.info(f"  Skipped: {len(download_tasks) - total_downloaded} file(s)")
 
     return downloaded_files

@@ -70,7 +70,7 @@ api = MetNoAPI(
     retry_delay=1.5,
     enable_cache=True,
     cache_expiry_hours=2,
-    debug=True,
+    log_level="DEBUG",
 )
 ```
 
@@ -82,7 +82,7 @@ api = MetNoAPI(
 | `retry_delay`        | float   | 1.0     | Base delay for exponential backoff |
 | `enable_cache`       | bool    | True    | In-memory response cache toggle |
 | `cache_expiry_hours` | int     | 1       | Lifetime for cached responses |
-| `debug`              | bool    | False   | Print constructed URLs and headers |
+| `log_level`          | str/int | INFO    | Logging level for diagnostics |
 
 Use `clear_cache()` and `get_cache_size()` to manage cached responses explicitly.
 

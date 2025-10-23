@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import requests
 
+from weather_tools.logging_utils import ensure_logging_configured, resolve_log_level
 from weather_tools.metno_models import (
     DailyWeatherSummary,
     MetNoAPIError,
@@ -77,7 +78,7 @@ class MetNoAPI:
         retry_delay: float = 1.0,
         enable_cache: bool = True,
         cache_expiry_hours: int = 1,
-        debug: bool = False,
+        log_level: int | str = logging.INFO,
     ):
         """
         Initialize the met.no API client.
@@ -89,7 +90,7 @@ class MetNoAPI:
             retry_delay: Base delay between retries in seconds (default: 1.0)
             enable_cache: Whether to cache API responses (default: True)
             cache_expiry_hours: Hours before cache expires (default: 1)
-            debug: Whether to print debug information including constructed URLs (default: False)
+            log_level: Logging level for API diagnostics (default: ``INFO``)
 
         Example:
             >>> # Using default User-Agent
@@ -99,7 +100,7 @@ class MetNoAPI:
             >>> api = MetNoAPI(user_agent="MyApp/1.0 (contact@example.com)")
             >>>
             >>> # With additional options
-            >>> api = MetNoAPI(enable_cache=True, timeout=60, debug=True)
+            >>> api = MetNoAPI(enable_cache=True, timeout=60, log_level="DEBUG")
         """
         # Set User-Agent (required by met.no API)
         if user_agent is None:
@@ -112,8 +113,12 @@ class MetNoAPI:
         self.retry_delay = retry_delay
         self.enable_cache = enable_cache
         self.cache_expiry_hours = cache_expiry_hours
-        self.debug = debug
+        self.log_level = resolve_log_level(log_level)
         self._cache: Optional[Dict[str, Tuple[Any, dt.datetime]]] = {} if enable_cache else None
+
+        ensure_logging_configured(level=self.log_level)
+        if logger.getEffectiveLevel() > self.log_level:
+            logger.setLevel(self.log_level)
 
     def _get_endpoint(self, format: MetNoFormat) -> str:
         """Get the API endpoint for a given format."""
@@ -136,12 +141,12 @@ class MetNoAPI:
 
     def _make_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Make the HTTP request with retry logic and caching."""
-        # Print constructed URL if debug mode is enabled
-        if self.debug:
+        # Emit constructed URL when debug logging is enabled
+        if logger.isEnabledFor(logging.DEBUG):
             param_str = "&".join([f"{k}={v}" for k, v in params.items()])
             full_url = f"{url}?{param_str}"
-            print(f"🌐 Constructed URL: {full_url}")
-            print(f"📋 User-Agent: {self.user_agent}")
+            logger.debug("🌐 Constructed URL: %s", full_url)
+            logger.debug("📋 User-Agent: %s", self.user_agent)
 
         # Check cache first
         if self.enable_cache and self._cache is not None:
@@ -174,7 +179,7 @@ class MetNoAPI:
                     )
                 elif response.status_code == 429:
                     raise MetNoRateLimitError(
-                        f"Met.no API rate limit exceeded. Please wait before making more requests."
+                        "Met.no API rate limit exceeded. Please wait before making more requests."
                     )
                 elif response.status_code >= 400:
                     raise MetNoAPIError(f"HTTP {response.status_code}: {response.reason}\n{response.text}")
@@ -244,7 +249,7 @@ class MetNoAPI:
         return MetNoResponse(raw_data=raw_data, format=query.format, coordinates=query.coordinates)
 
     def get_daily_forecast(
-        self, latitude: float, longitude: float, days: int = 7, altitude: Optional[int] = None
+        self, latitude: float, longitude: float, days: int = 9, altitude: Optional[int] = None
     ) -> List[DailyWeatherSummary]:
         """
         Convenience method: Get daily forecast summaries.
@@ -440,6 +445,7 @@ class MetNoAPI:
 
         return most_severe
 
+    # TODO confirm if metno timezones are handled correctly, else add timezone support. output should match SILO timezone.
     def to_dataframe(self, response: MetNoResponse, aggregate_to_daily: bool = True) -> pd.DataFrame:
         """
         Convert met.no response to pandas DataFrame.

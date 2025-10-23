@@ -111,7 +111,7 @@ weather-tools local download --var monthly \
 - `SiloAPI` class handles all API communication
 - Retry logic with exponential backoff for transient errors
 - Optional response caching (disabled by default)
-- Debug mode prints constructed URLs
+- `log_level` controls constructed URL emission (set to `DEBUG` for request details)
 - Two query methods: `query_patched_point()` and `query_data_drill()` accept Pydantic models
 - Convenience methods (`get_station_data()`, `get_gridded_data()`, `search_stations()`) accept simple string arguments
 - `_response_to_dataframe()` converts API responses to pandas DataFrames
@@ -147,6 +147,10 @@ weather-tools local download --var monthly \
 - Leverages COG features: partial spatial reads, overview pyramids, HTTP range requests
 - Supports both in-memory streaming (no disk usage) and disk caching workflows
 - Error handling via `SiloGeoTiffError` exception
+
+### Logging and Console Output
+
+Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK messaging. Call `configure_logging()` once (for example in `cli.main()`) to attach the Rich-backed handler that writes through the shared console. When you need a console object for progress bars, call `get_console()`, but send user-facing messages through the standard logging APIs rather than `console.print()`. The configured handler already understands Rich markup such as `[green]...[/green]`, so existing styling keeps working. Avoid configuring logging manually in new modules; reuse these helpers to maintain consistent output formatting.
 
 **`cli.py`** - Typer-based command-line interface
 - Main app with three subcommands: `silo` (API queries), `local` (NetCDF files), `geotiff` (COG files)

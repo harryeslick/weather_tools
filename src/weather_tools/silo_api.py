@@ -4,7 +4,6 @@ SILO API client for Australian climate data.
 This module provides a type-safe, validated interface to the SILO
 (Scientific Information for Land Owners) API using Pydantic models.
 """
-# TODO add debug term to print constructed URLs
 import hashlib
 import io
 import json
@@ -13,11 +12,12 @@ import os
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union
-from rapidfuzz import fuzz
 
 import pandas as pd
 import requests
+from rapidfuzz import fuzz
 
+from weather_tools.logging_utils import ensure_logging_configured, resolve_log_level
 from weather_tools.silo_models import (
     DataDrillQuery,
     PatchedPointQuery,
@@ -91,7 +91,7 @@ class SiloAPI:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         enable_cache: bool = False,
-        debug: bool = False,
+        log_level: int | str = logging.INFO,
     ):
         """
         Initialize the SILO API client.
@@ -102,7 +102,7 @@ class SiloAPI:
             max_retries: Maximum number of retry attempts for failed requests (default: 3)
             retry_delay: Base delay between retries in seconds (default: 1.0)
             enable_cache: Whether to cache API responses (default: False)
-            debug: Whether to print debug information including constructed URLs (default: False)
+            log_level: Logging level for API diagnostics (default: ``INFO``)
 
         Raises:
             ValueError: If no API key is provided and SILO_API_KEY environment variable is not set
@@ -115,7 +115,7 @@ class SiloAPI:
             >>> api = SiloAPI()
             >>>
             >>> # With additional options
-            >>> api = SiloAPI(enable_cache=True, timeout=60, debug=True)
+            >>> api = SiloAPI(enable_cache=True, timeout=60, log_level="DEBUG")
         """
         # Get API key from parameter or environment variable
         if api_key is None:
@@ -130,8 +130,12 @@ class SiloAPI:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self.enable_cache = enable_cache
-        self.debug = debug
+        self.log_level = resolve_log_level(log_level)
         self._cache: Optional[Dict[str, Any]] = {} if enable_cache else None
+
+        ensure_logging_configured(level=self.log_level)
+        if logger.getEffectiveLevel() > self.log_level:
+            logger.setLevel(self.log_level)
 
     def _get_endpoint(self, dataset: SiloDataset) -> str:
         """Get the API endpoint for a given dataset."""
@@ -149,12 +153,11 @@ class SiloAPI:
 
     def _make_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Make the HTTP request with retry logic and caching."""
-        # Print constructed URL if debug mode is enabled
-        if self.debug:
-            # Construct the full URL with parameters for display
+        # Emit constructed URL when debug logging is enabled
+        if logger.isEnabledFor(logging.DEBUG):
             param_str = "&".join([f"{k}={v}" for k, v in params.items()])
             full_url = f"{url}?{param_str}"
-            print(f"🌐 Constructed URL: {full_url}")
+            logger.debug("🌐 Constructed URL: %s", full_url)
 
         # Check cache first
         if self.enable_cache and self._cache is not None:
@@ -531,6 +534,7 @@ class SiloAPI:
         from weather_tools.silo_models import PatchedPointQuery, SiloFormat
 
         if name_fragment:
+            name_fragment = name_fragment.replace(" ", "_")
             query = PatchedPointQuery(format=SiloFormat.NAME, name_fragment=name_fragment)
         elif state:
             query = PatchedPointQuery(format=SiloFormat.NAME, state=state.upper())
