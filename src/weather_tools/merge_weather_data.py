@@ -7,14 +7,12 @@ weather forecasts for seamless downstream analysis.
 
 import datetime as dt
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 from weather_tools.silo_variables import (
-    SILO_ONLY_VARIABLES,
-    add_silo_date_columns,
     convert_metno_to_silo_columns,
     rh_to_vapor_pressure,
 )
@@ -38,10 +36,8 @@ class ColumnMismatchError(MergeValidationError):
 def merge_historical_and_forecast(
     silo_data: pd.DataFrame,
     metno_data: pd.DataFrame,
-    transition_date: Optional[str] = None,
-    validate: bool = True,
-    fill_missing: bool = False,
-    overlap_strategy: str = "prefer_silo",
+    overlap_strategy: Literal["prefer_silo", "prefer_metno"] = "prefer_silo",
+    return_cols: Literal["all", "silo_only", "metno_only"] = "all",
 ) -> pd.DataFrame:
     """
     Merge SILO historical data with met.no forecast data.
@@ -49,10 +45,7 @@ def merge_historical_and_forecast(
     Args:
         silo_data: Historical data from SILO (API or local files)
         metno_data: Forecast data from met.no (daily summaries)
-        transition_date: Date to switch from SILO to met.no
-                        (auto-detect if None: use last SILO date + 1 day)
         validate: Perform validation checks (default: True)
-        fill_missing: Fill missing SILO variables in met.no data (default: False)
         overlap_strategy: How to handle overlapping dates:
                          - "prefer_silo": Use SILO data for overlaps (default)
                          - "prefer_metno": Use met.no data for overlaps
@@ -76,8 +69,10 @@ def merge_historical_and_forecast(
     silo_df = silo_data.copy()
     metno_df = metno_data.copy()
 
-    if "metadata" in silo_df.columns:
-        silo_df = silo_df.drop(columns="metadata")
+    drop_cols = [c for c in silo_df.columns if "source" in c]
+    drop_cols += ["metadata"] if "metadata" in silo_df.columns else []
+
+    silo_df = silo_df.drop(columns=drop_cols, errors="ignore")
 
     # Ensure date columns are datetime
     silo_df["date"] = pd.to_datetime(silo_df["date"])
@@ -87,41 +82,25 @@ def merge_historical_and_forecast(
     silo_df = silo_df.sort_values("date").reset_index(drop=True)
     metno_df = metno_df.sort_values("date").reset_index(drop=True)
 
-    # Auto-detect transition date if not provided
-    if transition_date is None:
-        transition_date = silo_df["date"].max() + pd.Timedelta(days=1)
-        logger.info(f"Auto-detected transition date: {transition_date}")
-    else:
-        transition_date = pd.to_datetime(transition_date)
+    transition_date = silo_df["date"].max() + pd.Timedelta(days=1)
+    logger.info(f"Auto-detected transition date: {transition_date}")
 
     # Validation checks
-    if validate:
-        is_valid, issues = validate_merge_compatibility(silo_df, metno_df, transition_date, overlap_strategy)
-        if not is_valid:
-            raise MergeValidationError("Merge validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues))
+    is_valid, issues = validate_merge_compatibility(silo_df, metno_df, transition_date, overlap_strategy)
+    if not is_valid:
+        raise MergeValidationError("Merge validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues))
 
-    # Handle overlapping dates
-    if overlap_strategy == "error":
-        # Check for overlaps
-        overlap = set(silo_df["date"]) & set(metno_df["date"])
-        if overlap:
-            raise MergeValidationError(
-                f"Found {len(overlap)} overlapping dates. "
-                f"Use overlap_strategy='prefer_silo' or 'prefer_metno' to resolve."
-            )
-    elif overlap_strategy == "prefer_silo":
+    if overlap_strategy == "prefer_silo":
         # Remove overlapping dates from met.no data
         metno_df = metno_df[~metno_df["date"].isin(silo_df["date"])]
     elif overlap_strategy == "prefer_metno":
         # Remove overlapping dates from SILO data
         silo_df = silo_df[~silo_df["date"].isin(metno_df["date"])]
     else:
-        raise ValueError(
-            f"Invalid overlap_strategy: {overlap_strategy}. Must be 'prefer_silo', 'prefer_metno', or 'error'."
-        )
+        raise ValueError(f"Invalid overlap_strategy: {overlap_strategy}. Must be 'prefer_silo', 'prefer_metno', ")
 
     # Convert met.no columns to SILO format if needed
-    metno_df = prepare_metno_for_merge(metno_df, silo_df, fill_missing)
+    metno_df = prepare_metno_for_merge(metno_df, silo_df)
 
     # Add data source metadata
     silo_df["data_source"] = "silo"
@@ -131,19 +110,19 @@ def merge_historical_and_forecast(
     metno_df["is_forecast"] = True
     metno_df["forecast_generated_at"] = dt.datetime.now(dt.UTC)
 
-    # Align columns (ensure same columns in both DataFrames)
-    all_columns = list(set(silo_df.columns) | set(metno_df.columns))
+    # # Align columns (ensure same columns in both DataFrames)
+    # all_columns = list(set(silo_df.columns) | set(metno_df.columns))
 
-    # Add missing columns with NaN
-    for col in all_columns:
-        if col not in silo_df.columns:
-            silo_df[col] = np.nan
-        if col not in metno_df.columns:
-            metno_df[col] = np.nan
+    # # Add missing columns with NaN
+    # for col in all_columns:
+    #     if col not in silo_df.columns:
+    #         silo_df[col] = np.nan
+    #     if col not in metno_df.columns:
+    #         metno_df[col] = np.nan
 
-    # Reorder columns to match
-    silo_df = silo_df[all_columns]
-    metno_df = metno_df[all_columns]
+    # # Reorder columns to match
+    # silo_df = silo_df[all_columns]
+    # metno_df = metno_df[all_columns]
 
     # Concatenate
     merged_df = pd.concat([silo_df, metno_df], ignore_index=True)
@@ -155,6 +134,14 @@ def merge_historical_and_forecast(
         f"Merged {len(silo_df)} SILO records with {len(metno_df)} met.no records. Total: {len(merged_df)} records"
     )
 
+    if return_cols == "silo_only":
+        merged_df = merged_df[[col for col in silo_df.columns if col in merged_df.columns]]
+    elif return_cols == "metno_only":
+        merged_df = merged_df[[col for col in metno_df.columns if col in merged_df.columns]]
+    elif return_cols == "all":
+        pass
+    else:
+        raise ValueError(f"Invalid return_cols value: {return_cols}. Must be 'all', 'silo_only', or 'metno_only'.")
     return merged_df
 
 
@@ -184,21 +171,23 @@ def validate_merge_compatibility(
     if issues:
         return False, issues
 
-    # Check date continuity (only if not overlapping)
-    if overlap_strategy == "error":
-        silo_max_date = silo_data["date"].max()
-        metno_min_date = metno_data["date"].min()
+    # Check date continuity - always check for gaps and overlaps
+    silo_max_date = silo_data["date"].max()
+    metno_min_date = metno_data["date"].min()
 
-        gap_days = (metno_min_date - silo_max_date).days - 1
+    gap_days = (metno_min_date - silo_max_date).days - 1
 
-        if gap_days > 1:
-            issues.append(
-                f"Date gap detected: SILO ends {silo_max_date.date()}, "
-                f"met.no starts {metno_min_date.date()}. Gap: {gap_days} days"
-            )
-        elif gap_days < 0:
-            # Overlap
-            overlap_days = abs(gap_days) + 1
+    if gap_days > 1:
+        # There's a gap between datasets
+        issues.append(
+            f"Date gap detected: SILO ends {silo_max_date.date()}, "
+            f"met.no starts {metno_min_date.date()}. Gap: {gap_days} days"
+        )
+    elif gap_days < 0:
+        # There's an overlap between datasets
+        overlap_days = abs(gap_days) + 1
+        # Only report as issue if overlap_strategy is not set to handle it
+        if overlap_strategy not in ["prefer_silo", "prefer_metno"]:
             issues.append(
                 f"Date overlap detected: {overlap_days} days overlap. "
                 f"Set overlap_strategy to 'prefer_silo' or 'prefer_metno'"
@@ -225,7 +214,7 @@ def validate_merge_compatibility(
     return len(issues) == 0, issues
 
 
-def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame, fill_missing: bool = False) -> pd.DataFrame:
+def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame) -> pd.DataFrame:
     """
     Prepare met.no data for merging with SILO data.
 
@@ -235,7 +224,6 @@ def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame, fill_
     Args:
         metno_df: met.no forecast DataFrame
         silo_df: SILO DataFrame (for column reference)
-        fill_missing: Fill missing SILO variables with defaults
 
     Returns:
         Prepared DataFrame with SILO-compatible columns

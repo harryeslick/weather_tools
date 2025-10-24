@@ -3,10 +3,10 @@ from __future__ import annotations
 
 __version__ = "0.0.2"
 
-from .cli import main as cli_main
-from .read_silo_xarray import read_silo_xarray
-from .silo_api import SiloAPI, SiloAPIError
-from .silo_models import (
+from weather_tools.cli import main as cli_main
+from weather_tools.read_silo_xarray import read_silo_xarray
+from weather_tools.silo_api import SiloAPI, SiloAPIError
+from weather_tools.silo_models import (
     AustralianCoordinates,
     ClimateVariable,
     DataDrillQuery,
@@ -16,7 +16,7 @@ from .silo_models import (
     SiloFormat,
     SiloResponse,
 )
-from .silo_variables import (
+from weather_tools.silo_variables import (
     SILO_VARIABLES,
     NETCDF_TO_API,
     API_TO_NETCDF,
@@ -24,7 +24,7 @@ from .silo_variables import (
     get_variable_metadata,
     expand_variable_preset,
 )
-from .download_silo import download_silo_gridded, SiloDownloadError
+from weather_tools.download_silo import download_silo_gridded, SiloDownloadError
 
 __all__ = [
     "read_silo_xarray",

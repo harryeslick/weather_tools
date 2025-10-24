@@ -471,7 +471,13 @@ class SiloAPI:
             >>> df = api.get_gridded_data(-27.5, 151.0, "20230101", "20230131", ["rainfall"])
             >>> print(df.head())
         """
-        from .silo_models import AustralianCoordinates, ClimateVariable, DataDrillQuery, SiloDateRange, SiloFormat
+        from weather_tools.silo_models import (
+            AustralianCoordinates,
+            ClimateVariable,
+            DataDrillQuery,
+            SiloDateRange,
+            SiloFormat,
+        )
 
         # Convert string variables to ClimateVariable enum (same as above)
         if variables is None:
@@ -520,14 +526,20 @@ class SiloAPI:
         # Parse to DataFrame
         df = self._response_to_dataframe(response)
 
-        if return_metadata:
-            metadata = {
+        metadata = json.loads(df.loc[0, "metadata"])
+        metadata.update(
+            {
                 "coordinates": {"latitude": latitude, "longitude": longitude},
                 "date_range": {"start": start_date, "end": end_date},
                 "variables": variables or [var.value for var in climate_vars],
                 "format": format,
                 "dataset": "DataDrill",
             }
+        )
+        # df.drop(columns=["metadata"], inplace=True, errors="ignore")
+        df.loc[0, "metadata"] = json.dumps(metadata)
+
+        if return_metadata:
             return df, metadata
 
         return df
@@ -647,18 +659,13 @@ class SiloAPI:
             if isinstance(csv_data, str):
                 # Use StringIO to read CSV string
                 df = pd.read_csv(io.StringIO(csv_data))
+                metadata = df.metadata.to_list()
+                metadata = {k.strip(): v.strip() for k, v in (item.split("=") for item in metadata if "=" in item)}
 
-                # Try to parse date column if it exists
-                date_columns = [col for col in df.columns if "date" in col.lower() or "year" in col.lower()]
-                for date_col in date_columns:
-                    try:
-                        # Handle SILO date format (YYYYMMDD or similar)
-                        if df[date_col].dtype == "object":
-                            df[date_col] = pd.to_datetime(df[date_col], format="%Y%m%d", errors="coerce")
-                        else:
-                            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-                    except (ValueError, TypeError):
-                        continue  # Skip if date parsing fails
+                df["date"] = pd.to_datetime(df["YYYY-MM-DD"], errors="coerce")
+                df = df.drop(columns=["metadata", "YYYY-MM-DD"], errors="ignore")
+                df.loc[0, "metadata"] = json.dumps(metadata)
+                df.dropna(subset=["date"], inplace=True)
 
                 return df
             else:

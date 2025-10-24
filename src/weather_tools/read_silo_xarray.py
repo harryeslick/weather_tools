@@ -3,7 +3,7 @@ from pathlib import Path
 
 import xarray as xr
 
-from .silo_variables import expand_variable_preset
+from weather_tools.silo_variables import expand_variable_preset
 
 
 def read_silo_xarray(

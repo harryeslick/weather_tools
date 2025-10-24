@@ -66,8 +66,7 @@ class TestMergeBasicFunctionality:
         """Test merging with continuous dates."""
         merged = merge_historical_and_forecast(
             sample_silo_data,
-            sample_metno_data_silo_format,
-            validate=True
+            sample_metno_data_silo_format
         )
 
         assert len(merged) == len(sample_silo_data) + len(sample_metno_data_silo_format)
@@ -131,31 +130,10 @@ class TestMergeValidation:
         with pytest.raises(MergeValidationError) as exc_info:
             merge_historical_and_forecast(
                 sample_silo_data,
-                metno_with_gap,
-                validate=True,
-                overlap_strategy="error"
+                metno_with_gap
             )
 
         assert "gap" in str(exc_info.value).lower()
-
-    def test_validation_can_be_skipped(self, sample_silo_data):
-        """Test that validation can be skipped."""
-        # Create met.no data with a gap
-        metno_with_gap = pd.DataFrame({
-            'date': pd.date_range('2023-01-15', '2023-01-20'),
-            'min_temp': [20.0] * 6,
-            'max_temp': [30.0] * 6,
-            'daily_rain': [5.0] * 6,
-        })
-
-        # Should not raise error when validation is disabled
-        merged = merge_historical_and_forecast(
-            sample_silo_data,
-            metno_with_gap,
-            validate=False
-        )
-
-        assert len(merged) > 0
 
     def test_validate_merge_compatibility_success(self, sample_silo_data, sample_metno_data_silo_format):
         """Test successful validation."""
@@ -202,8 +180,7 @@ class TestOverlapHandling:
         merged = merge_historical_and_forecast(
             sample_silo_data,
             metno_overlap,
-            overlap_strategy="prefer_silo",
-            validate=False
+            overlap_strategy="prefer_silo"
         )
 
         # Overlapping dates should have SILO data
@@ -225,8 +202,7 @@ class TestOverlapHandling:
         merged = merge_historical_and_forecast(
             sample_silo_data,
             metno_overlap,
-            overlap_strategy="prefer_metno",
-            validate=False
+            overlap_strategy="prefer_metno"
         )
 
         # Overlapping dates should have met.no data
@@ -236,8 +212,8 @@ class TestOverlapHandling:
             assert len(records) == 1
             assert records['data_source'].iloc[0] == 'metno'
 
-    def test_overlap_error_strategy(self, sample_silo_data):
-        """Test error overlap strategy."""
+    def test_invalid_overlap_strategy_with_overlap(self, sample_silo_data):
+        """Test that invalid overlap strategy causes validation to fail on overlap."""
         metno_overlap = pd.DataFrame({
             'date': pd.date_range('2023-01-08', '2023-01-15'),
             'min_temp': [20.0] * 8,
@@ -245,15 +221,27 @@ class TestOverlapHandling:
             'daily_rain': [5.0] * 8,
         })
 
+        # Invalid overlap_strategy with overlapping data raises MergeValidationError
         with pytest.raises(MergeValidationError) as exc_info:
             merge_historical_and_forecast(
                 sample_silo_data,
                 metno_overlap,
-                overlap_strategy="error",
-                validate=False
+                overlap_strategy="invalid_strategy"
             )
 
         assert "overlap" in str(exc_info.value).lower()
+
+    def test_invalid_overlap_strategy_without_overlap(self, sample_silo_data, sample_metno_data_silo_format):
+        """Test that invalid overlap strategy raises ValueError when no overlap exists."""
+        # Use continuous data without overlap to reach the ValueError check
+        with pytest.raises(ValueError) as exc_info:
+            merge_historical_and_forecast(
+                sample_silo_data,
+                sample_metno_data_silo_format,
+                overlap_strategy="invalid_strategy"
+            )
+
+        assert "overlap_strategy" in str(exc_info.value).lower()
 
 
 class TestMetNoPreparation:
@@ -422,11 +410,10 @@ class TestAutoTransitionDate:
     """Test automatic transition date detection."""
 
     def test_auto_transition_date(self, sample_silo_data, sample_metno_data_silo_format):
-        """Test that transition date is auto-detected."""
+        """Test that transition date is auto-detected from last SILO date."""
         merged = merge_historical_and_forecast(
             sample_silo_data,
-            sample_metno_data_silo_format,
-            transition_date=None  # Auto-detect
+            sample_metno_data_silo_format
         )
 
         # Should transition right after last SILO date
@@ -434,17 +421,3 @@ class TestAutoTransitionDate:
         first_metno_record = merged[merged['data_source'] == 'metno'].iloc[0]
 
         assert first_metno_record['date'] > last_silo_date
-
-    def test_explicit_transition_date(self, sample_silo_data, sample_metno_data_silo_format):
-        """Test explicit transition date."""
-        transition = '2023-01-11'
-
-        merged = merge_historical_and_forecast(
-            sample_silo_data,
-            sample_metno_data_silo_format,
-            transition_date=transition
-        )
-
-        # All met.no records should be on or after transition date
-        metno_records = merged[merged['data_source'] == 'metno']
-        assert all(metno_records['date'] >= pd.to_datetime(transition))

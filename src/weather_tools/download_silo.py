@@ -23,8 +23,8 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from .logging_utils import get_console
-from .silo_variables import VariableMetadata, expand_variable_preset, get_variable_metadata
+from weather_tools.logging_utils import get_console
+from weather_tools.silo_variables import VariableMetadata, expand_variable_preset, get_variable_metadata
 
 logger = logging.getLogger(__name__)
 
