@@ -385,7 +385,7 @@ class SiloAPI:
             >>> df, metadata = api.get_station_data("30043", "20230101", "20230131",
             ...                                    return_metadata=True)
         """
-        from .silo_models import (
+        from weather_tools.silo_models import (
             ClimateVariable,
             PatchedPointQuery,
             SiloDateRange,
@@ -674,8 +674,8 @@ class SiloAPI:
             if isinstance(csv_data, str):
                 # Use StringIO to read CSV string
                 df = pd.read_csv(io.StringIO(csv_data))
-                metadata = df.metadata.to_list()
-                metadata = {k.strip(): v.strip() for k, v in (item.split("=") for item in metadata if "=" in item)}
+                metadata = df.metadata.dropna().to_list()
+                metadata = {k.strip(): v.strip() for k, v in (item.split("=") for item in metadata if item and "=" in item)}
 
                 df["date"] = pd.to_datetime(df["YYYY-MM-DD"], errors="coerce")
                 df = df.drop(columns=["metadata", "YYYY-MM-DD"], errors="ignore")
