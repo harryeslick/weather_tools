@@ -9,6 +9,7 @@ import io
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
@@ -17,7 +18,11 @@ import pandas as pd
 import requests
 from rapidfuzz import fuzz
 
-from weather_tools.logging_utils import configure_logging, get_package_logger, resolve_log_level
+from weather_tools.logging_utils import (
+    configure_logging,
+    get_package_logger,
+    resolve_log_level,
+)
 from weather_tools.silo_models import (
     DataDrillQuery,
     PatchedPointQuery,
@@ -90,7 +95,7 @@ class SiloAPI:
         timeout: int = 30,
         max_retries: int = 3,
         retry_delay: float = 1.0,
-        enable_cache: bool = False,
+        enable_cache: bool = True,
         log_level: int | str = logging.INFO,
     ):
         """
@@ -380,7 +385,12 @@ class SiloAPI:
             >>> df, metadata = api.get_station_data("30043", "20230101", "20230131",
             ...                                    return_metadata=True)
         """
-        from .silo_models import ClimateVariable, PatchedPointQuery, SiloDateRange, SiloFormat
+        from .silo_models import (
+            ClimateVariable,
+            PatchedPointQuery,
+            SiloDateRange,
+            SiloFormat,
+        )
 
         # Convert string variables to ClimateVariable enum
         if variables is None:
@@ -567,10 +577,10 @@ class SiloAPI:
             >>> stations = api.search_stations("Brisbane")
             >>> print(stations[['name', 'station_code', 'latitude', 'longitude']])
         """
-        from weather_tools.silo_models import PatchedPointQuery, SiloFormat
+        
 
         if name_fragment:
-            name_fragment = name_fragment.replace(" ", "%20")
+            name_fragment = name_fragment.replace(" ", "_")
             query = PatchedPointQuery(format=SiloFormat.NAME, name_fragment=name_fragment)
             if radius_km:
                 logger.warning("radius_km is ignored when searching by name_fragment")
@@ -594,7 +604,12 @@ class SiloAPI:
         if df.shape[0] > 1 and name_fragment:
             df = df.sort_values(
                 by="name",
-                key=lambda x: x.map(lambda name: (fuzz.ratio(name_fragment.lower(), name.lower()))),
+                key=lambda col: col.map(
+                    lambda name: fuzz.ratio(
+                        name_fragment.lower(),
+                        re.sub(r'\([^)]*\)', '', name).strip().lower()
+                    ) if isinstance(name, str) and name_fragment else 0
+                ),
                 ascending=False,
             )
         return df
