@@ -208,7 +208,7 @@ class MetNoAPI:
                     self._cache[cache_key] = (response, dt.datetime.now(dt.UTC))
                     logger.debug("Cached response for: %s", cache_key)
 
-                logger.info("Request successful on attempt %d", attempt + 1)
+                logger.debug("Request successful on attempt %d", attempt + 1)
                 return response
 
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:

@@ -206,7 +206,7 @@ class SiloAPI:
                     self._cache[cache_key] = response
                     logger.debug("Cached response for: %s", cache_key)
 
-                logger.info("Request successful on attempt %d", attempt + 1)
+                logger.debug("Request successful on attempt %d", attempt + 1)
                 return response
 
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
@@ -545,13 +545,17 @@ class SiloAPI:
         return df
 
     def search_stations(
-        self, name_fragment: Optional[str] = None, state: Optional[str] = None, return_metadata: bool = False
+        self,
+        name_fragment: Optional[str] = None,
+        state: Optional[str] = None,
+        radius_km: Optional[int] = None,
+        station_code: Optional[str] = None,
     ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, dict]]:
         """
         Search for weather stations by name or state.
 
         Args:
-            name_fragment: Partial station name to search for (e.g., "Brisbane")
+            name_fragment: Partial station name to search for (e.g., "Brisbane"). Underscores can be used for wildcard searching (e.g., "Bri_ne")
             state: State abbreviation (e.g., "QLD", "NSW", "VIC")
             return_metadata: If True, returns tuple of (DataFrame, metadata dict)
 
@@ -566,19 +570,25 @@ class SiloAPI:
         from weather_tools.silo_models import PatchedPointQuery, SiloFormat
 
         if name_fragment:
-            name_fragment = name_fragment.replace(" ", "_")
+            name_fragment = name_fragment.replace(" ", "%20")
             query = PatchedPointQuery(format=SiloFormat.NAME, name_fragment=name_fragment)
-        elif state:
-            query = PatchedPointQuery(format=SiloFormat.NAME, state=state.upper())
+            if radius_km:
+                logger.warning("radius_km is ignored when searching by name_fragment")
+
+        elif radius_km is not None:
+            query = PatchedPointQuery(format=SiloFormat.NEAR, radius=radius_km, station_code=station_code)
         else:
-            # Get all stations
-            query = PatchedPointQuery(format=SiloFormat.ALLDATA)
+            raise ValueError("Either name_fragment or station_code+radius_km must be provided for station search")
 
         # Execute query
         response = self.query_patched_point(query)
 
         # Parse to DataFrame
         df = self._response_to_dataframe(response)
+
+        # Filter by state if provided
+        if state:
+            df = df[df["state"].str.upper() == state.upper()]
 
         # Sort the DataFrame based on fuzzy matching
         if df.shape[0] > 1 and name_fragment:
@@ -587,16 +597,6 @@ class SiloAPI:
                 key=lambda x: x.map(lambda name: (fuzz.ratio(name_fragment.lower(), name.lower()))),
                 ascending=False,
             )
-
-        if return_metadata:
-            metadata = {
-                "search_type": "station_search",
-                "name_fragment": name_fragment,
-                "state": state,
-                "dataset": "PatchedPoint",
-            }
-            return df, metadata
-
         return df
 
     def get_recent_data(
@@ -672,6 +672,8 @@ class SiloAPI:
                 # Handle non-string data
                 return pd.DataFrame([csv_data])
         elif response.format == SiloFormat.NAME:
+            return self.parse_station_data(response)
+        elif response.format == SiloFormat.NEAR:
             return self.parse_station_data(response)
 
         else:
