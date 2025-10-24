@@ -53,6 +53,9 @@ class MetNoQuery(BaseModel):
         """
         Convert query to met.no API parameters.
 
+        Note: Latitude and longitude are truncated to 4 decimal places as per
+        met.no Terms of Service to reduce unnecessary precision and server load.
+
         Returns:
             Dictionary of query parameters for the API request
 
@@ -62,9 +65,11 @@ class MetNoQuery(BaseModel):
             >>> params
             {'lat': -27.5, 'lon': 153.0}
         """
+        # Truncate coordinates to 4 decimals as per met.no Terms of Service
+        # https://developer.yr.no/doc/TermsOfService/
         params: Dict[str, Any] = {
-            "lat": self.coordinates.latitude,
-            "lon": self.coordinates.longitude,
+            "lat": round(self.coordinates.latitude, 4),
+            "lon": round(self.coordinates.longitude, 4),
         }
 
         # Include altitude if available (altitude is not in AustralianCoordinates)

@@ -11,7 +11,7 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import pandas as pd
 import requests
@@ -547,10 +547,10 @@ class SiloAPI:
     def search_stations(
         self,
         name_fragment: Optional[str] = None,
-        state: Optional[str] = None,
-        radius_km: Optional[int] = None,
+        state: Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"] = None,
         station_code: Optional[str] = None,
-    ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, dict]]:
+        radius_km: Optional[int] = None,
+    ) -> pd.DataFrame:
         """
         Search for weather stations by name or state.
 

@@ -3,7 +3,7 @@
 import datetime
 import logging
 from pathlib import Path
-from typing import Annotated, Optional, Union
+from typing import Annotated, Literal, Optional, Union
 
 import pandas as pd
 import typer
@@ -677,7 +677,11 @@ def silo_data_drill(
 def silo_search(
     name: Annotated[Optional[str], typer.Option(help="Search for stations by name fragment (e.g., 'Brisbane')")] = None,
     station: Annotated[Optional[str], typer.Option(help="Station code for nearby search or details lookup")] = None,
-    radius: Annotated[float, typer.Option(help="Search radius in km (for nearby search)")] = 50.0,
+    radius: Annotated[Optional[int], typer.Option(help="Search radius in km (for nearby search)")] = None,
+    state: Annotated[
+        Optional[Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"]],
+        typer.Option(help="Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT)"),
+    ] = None,
     details: Annotated[bool, typer.Option(help="Get detailed info for a specific station")] = False,
     api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
@@ -691,6 +695,9 @@ def silo_search(
     Examples:
         # Search by name
         weather-tools silo search --name Brisbane
+
+        # Search by name and filter by state
+        weather-tools silo search --name Brisbane --state QLD
 
         # Find nearby stations
         weather-tools silo search --station 30043 --radius 50
@@ -710,35 +717,61 @@ def silo_search(
 
         # Determine search type
         if details and station:
-            # Get station details
-            typer.echo(f"� Getting details for station {station}...")
+            # Get station details - use direct API call since search_stations doesn't support this
+            typer.echo(f"ℹ️ Getting details for station {station}...")
             query = PatchedPointQuery(format=SiloFormat.ID, station_code=station)
+            response = api.query_patched_point(query)
+
+            typer.echo("✅ Search successful!")
+
+            if output:
+                output_path = Path(output)
+                output_path.write_text(response.to_csv())
+                typer.echo(f"💾 Saved to: {output_path.absolute()}")
+            else:
+                typer.echo("\n📍 Results:")
+                typer.echo(response.to_csv())
+
         elif name:
-            # Search by name
+            # Search by name using the search_stations method
             typer.echo(f"🔍 Searching for stations matching '{name}'...")
-            query = PatchedPointQuery(format=SiloFormat.NAME, name_fragment=name)
-        elif station:
-            # Nearby search
+            if state:
+                typer.echo(f"   Filtering by state: {state}")
+
+            df = api.search_stations(name_fragment=name, state=state)
+
+            typer.echo(f"✅ Found {len(df)} station(s)!")
+
+            if output:
+                output_path = Path(output)
+                df.to_csv(output_path, index=False)
+                typer.echo(f"💾 Saved to: {output_path.absolute()}")
+            else:
+                typer.echo("\n📍 Results:")
+                typer.echo(df.to_string(index=False))
+
+        elif station and radius is not None:
+            # Nearby search using the search_stations method
             typer.echo(f"🔍 Searching for stations near {station} within {radius}km...")
-            query = PatchedPointQuery(format=SiloFormat.NEAR, station_code=station, radius=radius)
+
+            df = api.search_stations(station_code=station, radius_km=radius)
+
+            typer.echo(f"✅ Found {len(df)} station(s)!")
+
+            if output:
+                output_path = Path(output)
+                df.to_csv(output_path, index=False)
+                typer.echo(f"💾 Saved to: {output_path.absolute()}")
+            else:
+                typer.echo("\n📍 Results:")
+                typer.echo(df.to_string(index=False))
+
         else:
             typer.echo(
-                "❌ Error: Provide --name for name search, --station for nearby search, or --station --details for info",
+                "❌ Error: Provide --name for name search, --station --radius for nearby search, or --station --details for info",
                 err=True,
             )
             raise typer.Exit(1)
-
-        response = api.query_patched_point(query)
-
-        typer.echo("✅ Search successful!")
-
-        if output:
-            output_path = Path(output)
-            output_path.write_text(response.to_csv())
-            typer.echo(f"💾 Saved to: {output_path.absolute()}")
-        else:
-            typer.echo("\n📍 Results:")
-            typer.echo(response.to_csv())
 
     except ValidationError as e:
         typer.echo("❌ Validation error:", err=True)

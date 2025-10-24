@@ -3,6 +3,23 @@ met.no API client for weather forecast data.
 
 This module provides a type-safe, validated interface to the met.no
 (Norwegian Meteorological Institute) location forecast API using Pydantic models.
+
+**Data Attribution:**
+Weather forecast data retrieved using this client is provided by The Norwegian
+Meteorological Institute (MET Norway) under Creative Commons 4.0 BY International
+(CC BY 4.0) and Norwegian Licence for Open Government Data (NLOD) 2.0.
+
+When using this data, you must provide attribution: "Weather forecast data is based
+on data from MET Norway" with a link to https://www.met.no/en where feasible.
+
+**Terms of Service Compliance:**
+This client complies with met.no Terms of Service by:
+- Including a User-Agent header identifying the application
+- Truncating coordinates to 4 decimal places
+- Enabling response caching by default to reduce API load
+- Using HTTPS exclusively
+
+For full terms: https://developer.yr.no/doc/TermsOfService/
 """
 
 import datetime as dt
