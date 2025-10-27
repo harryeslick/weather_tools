@@ -64,6 +64,7 @@ nav:
         - Merge Weather Data: merge_weather_data.md
         - Local NetCDF: api_docs/read_silo.md
   - Examples:
+      - Map of SILO stations: notebooks/map_patchedPoint_sites.ipynb
       - Local NetCDF: notebooks/example.ipynb
       - Plotting: notebooks/example_plots.ipynb
       - SILO API: notebooks/silo_api_examples.ipynb
