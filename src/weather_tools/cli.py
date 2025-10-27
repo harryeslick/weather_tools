@@ -823,8 +823,8 @@ def forecast(
 
         logger.info(f"[green]✓ Retrieved {len(daily_forecasts)} days of forecast data[/green]")
 
-        # Convert to DataFrame
-        forecast_df = pd.DataFrame([f.model_dump() for f in daily_forecasts])
+        # daily_forecasts is already a DataFrame
+        forecast_df = daily_forecasts
 
         if format_silo:
             # Rename columns to SILO format
@@ -865,18 +865,18 @@ def merge(
     end_date: Annotated[str, typer.Option(help="Historical data end date (YYYY-MM-DD)")],
     output: Annotated[str, typer.Option(help="Output CSV filename")],
     forecast_days: Annotated[int, typer.Option(help="Number of forecast days to append (1-9)")] = 7,
-    silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
-    variables: Annotated[
-        Optional[List[str]],
-        typer.Option(help="Weather variables for historical data (use 'daily' preset)"),
-    ] = None,
+    api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
     fill_missing: Annotated[bool, typer.Option(help="Fill missing SILO variables with estimates")] = False,
+    enable_cache: Annotated[bool, typer.Option(help="Enable response caching for SILO API")] = False,
     user_agent: Annotated[Optional[str], typer.Option(help="Custom User-Agent for met.no API")] = None,
+    log_level: Annotated[
+        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+    ] = "INFO",
 ) -> None:
     """
     Merge SILO historical data with met.no forecast data.
 
-    Combines historical observations from local SILO files with met.no forecast data
+    Combines historical observations from SILO DataDrill API with met.no forecast data
     for seamless downstream analysis.
 
     Example:
@@ -893,33 +893,30 @@ def merge(
             logger.error("[red]❌ Error: forecast_days must be between 1 and 9[/red]")
             raise typer.Exit(1)
 
-        # Step 1: Get SILO historical data
-        logger.info(f"[cyan]📁 Loading SILO historical data from {start_date} to {end_date}...[/cyan]")
+        # Step 1: Get SILO historical data via DataDrill API
+        logger.info(f"[cyan]📡 Querying SILO DataDrill API from {start_date} to {end_date}...[/cyan]")
 
-        if variables is None:
-            variables = ["daily"]
+        # Convert dates from YYYY-MM-DD to YYYYMMDD format for SILO API
+        silo_start = pd.to_datetime(start_date).strftime("%Y%m%d")
+        silo_end = pd.to_datetime(end_date).strftime("%Y%m%d")
 
-        if silo_dir is None:
-            silo_dir = Path.home() / "Developer/DATA/silo_grids"
+        # Initialize SILO API client
+        if api_key:
+            silo_api = SiloAPI(api_key=api_key, enable_cache=enable_cache, log_level=log_level)
+        else:
+            silo_api = SiloAPI(enable_cache=enable_cache, log_level=log_level)
 
-        ds = read_silo_xarray(
-            variables=variables,
-            silo_dir=silo_dir,
+        # Query DataDrill API for common variables (rainfall, max_temp, min_temp, etc.)
+        silo_df = silo_api.get_gridded_data(
+            latitude=coords.latitude,
+            longitude=coords.longitude,
+            start_date=silo_start,
+            end_date=silo_end,
+            variables=None,  # None = get default set of common variables
+            format="csv",
         )
 
-        # Extract data for location
-        point_ds = ds.sel(lat=coords.latitude, lon=coords.longitude, method="nearest")
-        silo_df = point_ds.to_dataframe().reset_index()
-
-        # Filter by date range
-        silo_df = silo_df[
-            (silo_df["time"] >= pd.to_datetime(start_date)) & (silo_df["time"] <= pd.to_datetime(end_date))
-        ]
-
-        # Rename 'time' to 'date'
-        silo_df = silo_df.rename(columns={"time": "date"})
-
-        logger.info(f"[green]✓ Loaded {len(silo_df)} days of SILO historical data[/green]")
+        logger.info(f"[green]✓ Retrieved {len(silo_df)} days of SILO historical data[/green]")
 
         # Step 2: Get met.no forecast
         logger.info(f"[cyan]📡 Fetching {forecast_days} days of met.no forecast...[/cyan]")
@@ -929,16 +926,15 @@ def merge(
             latitude=coords.latitude, longitude=coords.longitude, days=forecast_days
         )
 
-        metno_df = pd.DataFrame([f.model_dump() for f in daily_forecasts])
+        # daily_forecasts is already a DataFrame
+        metno_df = daily_forecasts
 
         logger.info(f"[green]✓ Retrieved {len(metno_df)} days of forecast data[/green]")
 
         # Step 3: Merge datasets
         logger.info("[cyan]🔗 Merging historical and forecast data...[/cyan]")
 
-        merged_df = merge_historical_and_forecast(
-            silo_df, metno_df, validate=True, fill_missing=fill_missing, overlap_strategy="prefer_silo"
-        )
+        merged_df = merge_historical_and_forecast(silo_df, metno_df, overlap_strategy="prefer_silo")
 
         # Get merge summary
         summary = get_merge_summary(merged_df)
@@ -956,6 +952,9 @@ def merge(
 
     except ValueError as e:
         logger.error(f"[red]❌ Validation Error: {e}[/red]")
+        raise typer.Exit(1)
+    except SiloAPIError as e:
+        logger.error(f"[red]❌ SILO API Error: {e}[/red]")
         raise typer.Exit(1)
     except MergeValidationError as e:
         logger.error(f"[red]❌ Merge Error: {e}[/red]")
