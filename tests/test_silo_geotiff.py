@@ -8,6 +8,7 @@ import datetime
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 import pytest
+import requests
 from shapely.geometry import Point, box
 
 from weather_tools.silo_geotiff import (
@@ -206,6 +207,26 @@ class TestReadCOG:
         # Verify read was called with out_shape parameter
         assert mock_src.read.called
 
+    def test_read_cog_without_geometry(self):
+        """Test reading entire COG without geometry parameter."""
+        mock_src = MagicMock()
+        mock_src.crs.to_string.return_value = "EPSG:4326"
+        mock_src.nodata = -999
+        mock_src.profile = {"driver": "GTiff", "height": 100, "width": 100, "transform": "mock_transform"}
+        mock_src.__enter__ = Mock(return_value=mock_src)
+        mock_src.__exit__ = Mock(return_value=False)
+
+        test_data = np.ones((100, 100))
+        mock_src.read.return_value = test_data
+
+        with patch("rasterio.open", return_value=mock_src):
+            data, profile = read_cog("https://example.com/test.tif", geometry=None, use_mask=False)
+
+        # Verify entire raster was read with no window or out_shape
+        mock_src.read.assert_called_once_with(1, window=None, out_shape=None)
+        assert isinstance(data, np.ndarray)
+        assert data.shape == (100, 100)
+
 
 class TestDownloadGeoTiffWithSubset:
     """Test GeoTIFF download functionality."""
@@ -257,7 +278,11 @@ class TestDownloadGeoTiffWithSubset:
 
         mock_response = Mock()
         mock_response.status_code = 404
-        mock_response.raise_for_status = Mock(side_effect=Exception("404 Not Found"))
+
+        # Create proper HTTPError with response attribute
+        http_error = requests.exceptions.HTTPError("404 Not Found")
+        http_error.response = mock_response
+        mock_response.raise_for_status = Mock(side_effect=http_error)
 
         with patch("requests.get", return_value=mock_response):
             result = download_geotiff_with_subset(url="https://example.com/missing.tif", destination=dest)
@@ -270,26 +295,17 @@ class TestDownloadGeoTiffWithSubset:
         dest = tmp_path / "test.tif"
         point = Point(153.0, -27.5)
 
-        # Mock rasterio operations
-        mock_src = MagicMock()
-        mock_src.profile = {"driver": "GTiff", "height": 10, "width": 10}
-        mock_src.__enter__ = Mock(return_value=mock_src)
-        mock_src.__exit__ = Mock(return_value=False)
-
-        from rasterio.windows import Window
-
-        mock_window = Window(0, 0, 5, 5)
-
+        # Mock read_cog to return test data
         test_data = np.ones((5, 5))
-        mock_src.read.return_value = test_data
-        mock_src.window_transform.return_value = "mock_transform"
+        test_profile = {"driver": "GTiff", "height": 5, "width": 5, "count": 1, "dtype": "float64"}
 
+        # Mock rasterio.open for writing
         mock_dst = MagicMock()
         mock_dst.__enter__ = Mock(return_value=mock_dst)
         mock_dst.__exit__ = Mock(return_value=False)
 
-        with patch("rasterio.open", side_effect=[mock_src, mock_dst]):
-            with patch("weather_tools.silo_geotiff.geometry_window", return_value=mock_window):
+        with patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
+            with patch("rasterio.open", return_value=mock_dst):
                 result = download_geotiff_with_subset(
                     url="https://example.com/test.tif", destination=dest, geometry=point
                 )

@@ -16,6 +16,7 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import rasterio
+import rasterio.errors
 import requests
 from rasterio.features import geometry_window
 from rich.console import Console
@@ -43,6 +44,31 @@ class SiloGeoTiffError(Exception):
     """Base exception for GeoTIFF operations."""
 
     pass
+
+
+def _generate_date_range(start_date: datetime.date, end_date: datetime.date) -> List[datetime.date]:
+    """
+    Generate list of dates between start and end (inclusive).
+
+    Args:
+        start_date: First date (inclusive)
+        end_date: Last date (inclusive)
+
+    Returns:
+        List of dates from start_date to end_date
+
+    Example:
+        >>> import datetime
+        >>> dates = _generate_date_range(datetime.date(2023, 1, 1), datetime.date(2023, 1, 3))
+        >>> len(dates)
+        3
+    """
+    date_list = []
+    current_date = start_date
+    while current_date <= end_date:
+        date_list.append(current_date)
+        current_date += datetime.timedelta(days=1)
+    return date_list
 
 
 def construct_daily_url(variable: str, date: datetime.date) -> str:
@@ -100,17 +126,25 @@ def construct_monthly_url(variable: str, year: int, month: int) -> str:
 
 
 def read_cog(
-    cog_url: str, geometry: Union[Point, Polygon], overview_level: Optional[int] = None, use_mask: bool = True
+    file_path: str,
+    geometry: Optional[Union[Point, Polygon]] = None,
+    overview_level: Optional[int] = None,
+    use_mask: bool = True,
 ) -> Tuple[np.ndarray, dict]:
     """
-    Read COG data for given geometry using HTTP range requests.
+    Read COG data, optionally for a specific geometry, using HTTP range requests or local file access.
 
     This function leverages Cloud-Optimized GeoTIFF features to efficiently
-    read only the required spatial subset via HTTP range requests.
+    read only the required spatial subset (if geometry provided). Works with both
+    remote URLs (via HTTP range requests) and local file paths.
 
     Args:
-        cog_url: URL to COG file
-        geometry: Shapely Point or Polygon defining area of interest
+        file_path: Path to GeoTIFF file. Accepts:
+                   - Remote URLs: 'https://...' or 'http://...'
+                   - File URIs: 'file:///absolute/path/to/file.tif'
+                   - Direct paths: '/absolute/path/to/file.tif'
+        geometry: Optional Shapely Point or Polygon defining area of interest.
+                  If None, reads entire raster.
         overview_level: Pyramid level (None=full resolution, 0=first overview, etc)
         use_mask: Return masked array (np.ma.MaskedArray) with nodata handling
 
@@ -123,31 +157,37 @@ def read_cog(
     Example:
         >>> from shapely.geometry import Point
         >>> point = Point(153.0, -27.5)
-        >>> data, profile = read_cog(url, geometry=point)
+        >>> # Remote URL with geometry
+        >>> data, profile = read_cog("https://s3.../file.tif", geometry=point)
+        >>> # Local file, entire raster
+        >>> data, profile = read_cog("/path/to/local/file.tif")
     """
     try:
-        with rasterio.open(cog_url) as src:
+        with rasterio.open(file_path) as src:
             # Validate CRS is EPSG:4326
             if src.crs.to_string() != "EPSG:4326":
                 raise SiloGeoTiffError(f"Expected EPSG:4326, got {src.crs}")
 
-            # Calculate window from geometry
-            try:
-                window = geometry_window(src, [geometry])
-            except Exception as e:
-                raise SiloGeoTiffError(f"Failed to calculate window from geometry: {e}")
+            # Calculate window from geometry if provided
+            window = None
+            if geometry is not None:
+                try:
+                    window = geometry_window(src, [geometry])
+                except Exception as e:
+                    raise SiloGeoTiffError(f"Failed to calculate window from geometry: {e}")
 
-            # Read data with window parameter for partial read
-            if overview_level is not None:
-                # Read from overview
-                data = src.read(
-                    1,
-                    window=window,
-                    out_shape=(int(window.height // (2**overview_level)), int(window.width // (2**overview_level))),
-                )
-            else:
-                # Read at full resolution
-                data = src.read(1, window=window)
+            # Read data - build parameters based on overview_level and window
+            scale_factor = 2**overview_level if overview_level is not None else None
+
+            # Calculate output shape if using overview
+            out_shape = None
+            if scale_factor:
+                height = window.height // scale_factor if window else src.height // scale_factor
+                width = window.width // scale_factor if window else src.width // scale_factor
+                out_shape = (int(height), int(width))
+
+            # Read data (band 1)
+            data = src.read(1, window=window, out_shape=out_shape)
 
             # Apply masking if requested
             if use_mask and src.nodata is not None:
@@ -155,12 +195,31 @@ def read_cog(
 
             # Build profile with updated transform and dimensions
             profile = src.profile.copy()
-            profile.update({"height": data.shape[0], "width": data.shape[1], "transform": src.window_transform(window)})
+            transform = src.window_transform(window) if window else profile.get("transform")
+            profile.update({"height": data.shape[0], "width": data.shape[1], "transform": transform})
 
             return data, profile
 
     except rasterio.errors.RasterioIOError as e:
-        raise SiloGeoTiffError(f"Failed to read COG from {cog_url}: {e}")
+        raise SiloGeoTiffError(f"Failed to read COG from {file_path}: {e}")
+
+
+def _download_full_geotiff(url: str, destination: Path, timeout: int) -> None:
+    """Download entire GeoTIFF file via streaming."""
+    response = requests.get(url, stream=True, timeout=timeout)
+    response.raise_for_status()
+
+    with open(destination, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+
+def _download_geotiff_subset(url: str, destination: Path, geometry: Union[Point, Polygon]) -> None:
+    """Download and clip GeoTIFF to geometry subset."""
+    data, profile = read_cog(url, geometry, overview_level=None, use_mask=False)
+
+    with rasterio.open(destination, "w", **profile) as dst:
+        dst.write(data, 1)
 
 
 def download_geotiff_with_subset(
@@ -203,37 +262,11 @@ def download_geotiff_with_subset(
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        if geometry is None:
-            # Stream download entire file
-            response = requests.get(url, stream=True, timeout=timeout)
-
-            if response.status_code == 404:
-                logger.warning(f"File not found (404): {url}")
-                return False
-
-            response.raise_for_status()
-
-            with open(destination, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+        # Download using appropriate strategy
+        if geometry:
+            _download_geotiff_subset(url, destination, geometry)
         else:
-            # Download and clip to geometry
-            with rasterio.open(url) as src:
-                # Calculate window from geometry
-                window = geometry_window(src, [geometry])
-
-                # Read windowed data
-                data = src.read(1, window=window)
-
-                # Build profile with updated transform and dimensions
-                profile = src.profile.copy()
-                profile.update(
-                    {"height": data.shape[0], "width": data.shape[1], "transform": src.window_transform(window)}
-                )
-
-                # Write clipped GeoTIFF
-                with rasterio.open(destination, "w", **profile) as dst:
-                    dst.write(data, 1)
+            _download_full_geotiff(url, destination, timeout)
 
         logger.info(f"Downloaded: {destination}")
         return True
@@ -243,8 +276,51 @@ def download_geotiff_with_subset(
             logger.warning(f"File not found (404): {url}")
             return False
         raise SiloGeoTiffError(f"HTTP error downloading {url}: {e}")
+    except rasterio.errors.RasterioIOError as e:
+        # Handle 404s from read_cog (when geometry is provided)
+        if "404" in str(e) or "Not Found" in str(e):
+            logger.warning(f"File not found (404): {url}")
+            return False
+        raise SiloGeoTiffError(f"Error reading GeoTIFF from {url}: {e}")
     except Exception as e:
         raise SiloGeoTiffError(f"Error downloading {url}: {e}")
+
+
+def _read_cog_from_cache(
+    url: str,
+    file_path: Path,
+    geometry: Union[Point, Polygon],
+    overview_level: Optional[int],
+    date: datetime.date,
+) -> Optional[np.ndarray]:
+    """Read COG from local cache, downloading if missing."""
+    # Download if file doesn't exist
+    if not file_path.exists():
+        try:
+            download_geotiff_with_subset(url, file_path)
+        except SiloGeoTiffError as e:
+            logger.warning(f"Skipping {date}: {e}")
+            return None
+
+    # Read from local file
+    try:
+        data, _ = read_cog(f"file://{file_path.absolute()}", geometry, overview_level)
+        return data
+    except SiloGeoTiffError as e:
+        logger.warning(f"Failed to read {file_path}: {e}")
+        return None
+
+
+def _read_cog_from_url(
+    url: str, geometry: Union[Point, Polygon], overview_level: Optional[int], date: datetime.date
+) -> Optional[np.ndarray]:
+    """Stream COG directly from URL without caching."""
+    try:
+        data, _ = read_cog(url, geometry, overview_level)
+        return data
+    except SiloGeoTiffError as e:
+        logger.warning(f"Skipping {date}: {e}")
+        return None
 
 
 def read_geotiff_timeseries(
@@ -296,11 +372,7 @@ def read_geotiff_timeseries(
         cache_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
 
     # Generate date sequence
-    date_list = []
-    current_date = start_date
-    while current_date <= end_date:
-        date_list.append(current_date)
-        current_date += datetime.timedelta(days=1)
+    date_list = _generate_date_range(start_date, end_date)
 
     # Collect data for each variable
     results = {}
@@ -311,37 +383,18 @@ def read_geotiff_timeseries(
         arrays = []
 
         for date in date_list:
-            # Construct URL
             url = construct_daily_url(var_name, date)
 
-            # Determine file path if saving to disk
+            # Read using cache or direct URL strategy
             if save_to_disk:
                 file_path = cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
-
-                # Check if file exists locally
-                if not file_path.exists():
-                    # Download if missing
-                    try:
-                        download_geotiff_with_subset(url, file_path)
-                    except SiloGeoTiffError as e:
-                        logger.warning(f"Skipping {date}: {e}")
-                        continue
-
-                # Read from local file
-                try:
-                    data, _ = read_cog(f"file://{file_path.absolute()}", geometry, overview_level)
-                    arrays.append(data)
-                except SiloGeoTiffError as e:
-                    logger.warning(f"Failed to read {file_path}: {e}")
-                    continue
+                data = _read_cog_from_cache(url, file_path, geometry, overview_level, date)
             else:
-                # Stream from URL (no caching)
-                try:
-                    data, _ = read_cog(url, geometry, overview_level)
-                    arrays.append(data)
-                except SiloGeoTiffError as e:
-                    logger.warning(f"Skipping {date}: {e}")
-                    continue
+                data = _read_cog_from_url(url, geometry, overview_level, date)
+
+            # Append if successful
+            if data is not None:
+                arrays.append(data)
 
         # Stack arrays into 3D array (time, height, width)
         if arrays:
@@ -421,11 +474,7 @@ def download_geotiff_range(
         console = get_console()
 
     # Generate date sequence
-    date_list = []
-    current_date = start_date
-    while current_date <= end_date:
-        date_list.append(current_date)
-        current_date += datetime.timedelta(days=1)
+    date_list = _generate_date_range(start_date, end_date)
 
     # Build download task list
     tasks = []
