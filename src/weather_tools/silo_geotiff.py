@@ -195,6 +195,13 @@ def read_cog(
             # Build profile with updated transform and dimensions
             profile = src.profile.copy()
             transform = src.window_transform(window) if window else profile.get("transform")
+            if scale_factor:
+                original_height = window.height if window else src.height
+                original_width = window.width if window else src.width
+                transform = transform * transform.scale(
+                    (original_width / data.shape[-1]), (original_height / data.shape[-2])
+                )
+
             profile.update({"height": data.shape[0], "width": data.shape[1], "transform": transform})
 
             return data, profile
@@ -451,13 +458,16 @@ def download_geotiff(
 
         for file_path in file_paths:
             try:
-                data, profile = read_cog(f"file://{file_path.absolute()}", geometry, overview_level)
+                data, profile = read_cog(
+                    f"file://{file_path.absolute()}",
+                )  # geometry, overview_level already applied when downloading
                 arrays.append(data)
             except SiloGeoTiffError as e:
                 logger.warning(f"[yellow]Failed to read {file_path}: {e}[/yellow]")
 
         # Stack arrays into 3D array (time, height, width)
         if arrays:
+            # only need 1 profile, they should all be the same. Use the last one read.
             profile.update({"count": len(arrays)})
             results[var_name] = np.stack(arrays, axis=0), profile
             logger.info(f"[green]Loaded {var_name}: {results[var_name][0].shape}[/green]")
