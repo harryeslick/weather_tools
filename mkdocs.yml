@@ -69,6 +69,7 @@ nav:
       - Plotting: notebooks/example_plots.ipynb
       - SILO API: notebooks/silo_api_examples.ipynb
       - Forecast data: notebooks/metno_forecast_example.ipynb
+      - Download COG Geotiff from S3: notebooks/geotiff_download_demo.ipynb
 
 extra_javascript:
   - https://cdn.plot.ly/plotly-2.32.0.min.js

@@ -288,7 +288,7 @@ def _read_cog_from_cache(
     geometry: Union[Point, Polygon],
     overview_level: Optional[int],
     date: datetime.date,
-) -> Optional[np.ndarray]:
+) -> Tuple[Optional[np.ndarray], Optional[dict]]:
     """Read COG from local cache, downloading if missing."""
     # Download if file doesn't exist
     if not file_path.exists():
@@ -296,27 +296,27 @@ def _read_cog_from_cache(
             download_geotiff_with_subset(url, file_path)
         except SiloGeoTiffError as e:
             logger.warning(f"Skipping {date}: {e}")
-            return None
+            return None, None
 
     # Read from local file
     try:
-        data, _ = read_cog(f"file://{file_path.absolute()}", geometry, overview_level)
-        return data
+        data, profile = read_cog(f"file://{file_path.absolute()}", geometry, overview_level)
+        return data, profile
     except SiloGeoTiffError as e:
         logger.warning(f"Failed to read {file_path}: {e}")
-        return None
+        return None, None
 
 
 def _read_cog_from_url(
     url: str, geometry: Union[Point, Polygon], overview_level: Optional[int], date: datetime.date
-) -> Optional[np.ndarray]:
+) -> Tuple[Optional[np.ndarray], Optional[dict]]:
     """Stream COG directly from URL without caching."""
     try:
-        data, _ = read_cog(url, geometry, overview_level)
-        return data
+        data, profile = read_cog(url, geometry, overview_level)
+        return data, profile
     except SiloGeoTiffError as e:
         logger.warning(f"Skipping {date}: {e}")
-        return None
+        return None, None
 
 
 def read_geotiff_timeseries(
@@ -386,9 +386,9 @@ def read_geotiff_timeseries(
             # Read using cache or direct URL strategy
             if save_to_disk:
                 file_path = cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
-                data = _read_cog_from_cache(url, file_path, geometry, overview_level, date)
+                data, profile = _read_cog_from_cache(url, file_path, geometry, overview_level, date)
             else:
-                data = _read_cog_from_url(url, geometry, overview_level, date)
+                data, profile = _read_cog_from_url(url, geometry, overview_level, date)
 
             # Append if successful
             if data is not None:
