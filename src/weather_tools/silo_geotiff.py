@@ -11,6 +11,7 @@ GeoTIFF files from AWS S3, with support for:
 
 import datetime
 import logging
+import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
@@ -20,7 +21,7 @@ import rasterio.errors
 import requests
 from rasterio.features import geometry_window
 from rich.console import Console
-from shapely.geometry import Point, Polygon, box
+from shapely.geometry import Point, Polygon
 
 from weather_tools.logging_utils import create_download_progress, get_console
 from weather_tools.silo_variables import (
@@ -28,7 +29,6 @@ from weather_tools.silo_variables import (
     SILO_GEOTIFF_BASE_URL,
     SiloGeoTiffError,
     VariableInput,
-    expand_variable_preset,
     get_variable_metadata,
     validate_silo_s3_variables,
 )
@@ -58,6 +58,9 @@ def _generate_date_range(start_date: datetime.date, end_date: datetime.date) -> 
     while current_date <= end_date:
         date_list.append(current_date)
         current_date += datetime.timedelta(days=1)
+    # remove future dates
+    today = datetime.date.today()
+    date_list = [d for d in date_list if d < today]
     return date_list
 
 
@@ -210,9 +213,11 @@ def _download_full_geotiff(url: str, destination: Path, timeout: int) -> None:
             f.write(chunk)
 
 
-def _download_geotiff_subset(url: str, destination: Path, geometry: Union[Point, Polygon]) -> None:
+def _download_geotiff_subset(
+    url: str, destination: Path, geometry: Union[Point, Polygon, None], overview_level=None, use_mask=False
+) -> None:
     """Download and clip GeoTIFF to geometry subset."""
-    data, profile = read_cog(url, geometry, overview_level=None, use_mask=False)
+    data, profile = read_cog(url, geometry, overview_level=overview_level, use_mask=use_mask)
 
     with rasterio.open(destination, "w", **profile) as dst:
         dst.write(data, 1)
@@ -222,6 +227,7 @@ def download_geotiff_with_subset(
     url: str,
     destination: Path,
     geometry: Optional[Union[Point, Polygon]] = None,
+    overview_level=None,
     force: bool = False,
     timeout: int = 300,
 ) -> bool:
@@ -234,6 +240,8 @@ def download_geotiff_with_subset(
         geometry: Optional shapely geometry to clip/subset the downloaded file.
                   If None, downloads entire file. If provided, downloads full file
                   but saves only the clipped portion.
+        overview_level: Optional pyramid level for reduced resolution
+                        (None=full resolution, 0=first overview, etc.)
         force: Overwrite if exists
         timeout: Request timeout in seconds
 
@@ -247,7 +255,7 @@ def download_geotiff_with_subset(
         >>> from pathlib import Path
         >>> from shapely.geometry import Point
         >>> point = Point(153.0, -27.5)
-        >>> download_geotiff_with_subset(url, Path("data.tif"), geometry=point)
+        >>> download_geotiff_with_subset(url, Path("data.tif"), geometry=point, overview_level=1)
     """
     # Check if destination exists
     if destination.exists() and not force:
@@ -259,8 +267,8 @@ def download_geotiff_with_subset(
 
     try:
         # Download using appropriate strategy
-        if geometry:
-            _download_geotiff_subset(url, destination, geometry)
+        if geometry is not None or overview_level is not None:
+            _download_geotiff_subset(url, destination, geometry, overview_level=overview_level)
         else:
             _download_full_geotiff(url, destination, timeout)
 
@@ -282,143 +290,25 @@ def download_geotiff_with_subset(
         raise SiloGeoTiffError(f"Error downloading {url}: {e}")
 
 
-def _read_cog_from_cache(
-    url: str,
-    file_path: Path,
-    geometry: Union[Point, Polygon],
-    overview_level: Optional[int],
-    date: datetime.date,
-) -> Tuple[Optional[np.ndarray], Optional[dict]]:
-    """Read COG from local cache, downloading if missing."""
-    # Download if file doesn't exist
-    if not file_path.exists():
-        try:
-            download_geotiff_with_subset(url, file_path)
-        except SiloGeoTiffError as e:
-            logger.warning(f"Skipping {date}: {e}")
-            return None, None
-
-    # Read from local file
-    try:
-        data, profile = read_cog(f"file://{file_path.absolute()}", geometry, overview_level)
-        return data, profile
-    except SiloGeoTiffError as e:
-        logger.warning(f"Failed to read {file_path}: {e}")
-        return None, None
-
-
-def _read_cog_from_url(
-    url: str, geometry: Union[Point, Polygon], overview_level: Optional[int], date: datetime.date
-) -> Tuple[Optional[np.ndarray], Optional[dict]]:
-    """Stream COG directly from URL without caching."""
-    try:
-        data, profile = read_cog(url, geometry, overview_level)
-        return data, profile
-    except SiloGeoTiffError as e:
-        logger.warning(f"Skipping {date}: {e}")
-        return None, None
-
-
-def read_geotiff_timeseries(
-    variables: VariableInput,
-    start_date: datetime.date,
-    end_date: datetime.date,
-    geometry: Union[Point, Polygon],
-    save_to_disk: bool = False,
-    cache_dir: Optional[Path] = None,
-    overview_level: Optional[int] = None,
-    console: Optional[Console] = None,
-) -> dict[str, np.ndarray]:
-    """
-    Read time series of GeoTIFF data for date range and geometry.
-
-    Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
-        start_date: First date (inclusive)
-        end_date: Last date (inclusive)
-        geometry: Shapely geometry for spatial query
-        save_to_disk: If True, download to cache_dir; if False, stream from URL
-        cache_dir: Where to save files (default: ./DATA/silo_grids/geotiff)
-        overview_level: Pyramid level for reduced resolution
-        console: Rich console for progress output
-
-    Returns:
-        Dict mapping variable names to 3D numpy arrays (time, height, width)
-
-    Example:
-        >>> from shapely.geometry import Point
-        >>> from datetime import date
-        >>> point = Point(153.0, -27.5)
-        >>> data = read_geotiff_timeseries(
-        ...     variables=["daily_rain", "max_temp"],
-        ...     start_date=date(2023, 1, 1),
-        ...     end_date=date(2023, 1, 7),
-        ...     geometry=point,
-        ...     save_to_disk=False
-        ... )
-    """
-    if console is not None:
-        logger.debug("Custom console provided to read_geotiff_timeseries; logging handles output automatically.")
-
-    # Expand variable presets
-    var_list = expand_variable_preset(variables)
-
-    # Set default cache directory
-    if cache_dir is None:
-        cache_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
-
-    # Generate date sequence
-    date_list = _generate_date_range(start_date, end_date)
-
-    # Collect data for each variable
-    results = {}
-
-    for var_name in var_list:
-        logger.info(f"[cyan]Reading {var_name}...[/cyan]")
-
-        arrays = []
-
-        for date in date_list:
-            url = construct_geotiff_daily_url(var_name, date)
-
-            # Read using cache or direct URL strategy
-            if save_to_disk:
-                file_path = cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
-                data, profile = _read_cog_from_cache(url, file_path, geometry, overview_level, date)
-            else:
-                data, profile = _read_cog_from_url(url, geometry, overview_level, date)
-
-            # Append if successful
-            if data is not None:
-                arrays.append(data)
-
-        # Stack arrays into 3D array (time, height, width)
-        if arrays:
-            results[var_name] = np.stack(arrays, axis=0)
-            logger.info(f"[green]Loaded {var_name}: {results[var_name].shape}[/green]")
-        else:
-            logger.warning(f"[yellow]No data loaded for {var_name}[/yellow]")
-
-    return results
-
-
 def download_geotiff(
     variables: VariableInput,
     start_date: datetime.date,
     end_date: datetime.date,
-    output_dir: Path,
-    geometry: Optional[Union[Point, Polygon]] = None,
-    bounding_box: Optional[Tuple[float, float, float, float]] = None,
+    geometry: Union[Point, Polygon],
+    output_dir: Optional[Path] = None,
+    save_to_disk: bool = False,
+    read_files: bool = True,
+    overview_level: Optional[int] = None,
     force: bool = False,
     timeout: int = DEFAULT_GEOTIFF_TIMEOUT,
     console: Optional[Console] = None,
-) -> dict[str, List[Path]]:
+) -> Union[dict[str, np.ndarray], dict[str, List[Path]]]:
     """
-    Download SILO GeoTIFF files for date range, optionally clipped to geometry/bbox.
+    Download and optionally read SILO GeoTIFF files for date range and geometry.
 
-    Similar to download_netcdf() but for daily/monthly GeoTIFFs with date-based access.
+    This unified function downloads GeoTIFF files to disk (permanently or temporarily)
+    and optionally reads them into memory as numpy arrays. Files are always cached to
+    enable efficient reuse, with temporary storage available for one-off queries.
 
     Args:
         variables: Variable preset ("daily", "monthly", "temperature", etc.),
@@ -426,32 +316,60 @@ def download_geotiff(
                   or list of presets/variable names
         start_date: First date (inclusive)
         end_date: Last date (inclusive)
-        output_dir: Directory to save files
-        geometry: Optional shapely geometry to clip downloads
-        bounding_box: Optional (min_lon, min_lat, max_lon, max_lat) tuple.
-                      Converted to Polygon for clipping. Mutually exclusive with geometry.
+        geometry: Shapely geometry (Point or Polygon) for spatial subsetting.
+                  To use a bounding box, create a Polygon: box(min_lon, min_lat, max_lon, max_lat)
+        output_dir: Directory to save files. If None and save_to_disk=True,
+                   uses default: ./DATA/silo_grids/geotiff
+        save_to_disk: If False, uses session-persistent temp cache (survives across function calls
+                     until system reboot). If True, files persist permanently in output_dir.
+        read_files: If True, return numpy arrays (3D: time, height, width).
+                   If False, return file paths only.
+        overview_level: Optional pyramid level for reduced resolution
+                       (None=full resolution, 0=first overview, 1=second overview, etc.)
         force: Overwrite existing files
         timeout: Request timeout in seconds (default: 300)
         console: Rich console for output
 
     Returns:
-        Dict mapping variable names to lists of downloaded file paths
+        If read_files=True: Dict mapping variable names to 3D numpy arrays (time, height, width)
+        If read_files=False: Dict mapping variable names to lists of downloaded file paths
 
     Raises:
         ValueError: For invalid parameter combinations or date ranges
         SiloGeoTiffError: For download failures
 
-    Example:
+    Examples:
         >>> from pathlib import Path
         >>> from datetime import date
-        >>> download_geotiff(
+        >>> from shapely.geometry import Point, box
+        >>>
+        >>> # Stream data into memory with temp caching (persists across calls)
+        >>> data = download_geotiff(
         ...     variables=["daily_rain"],
         ...     start_date=date(2023, 1, 1),
         ...     end_date=date(2023, 1, 31),
+        ...     geometry=Point(153.0, -27.5),
+        ...     save_to_disk=False,  # Uses temp cache, reuses cached files
+        ...     read_files=True,
+        ...     overview_level=1  # 4x reduced resolution
+        ... )
+        >>>
+        >>> # Download and cache files with bounding box
+        >>> bbox = box(150.5, -28.5, 154.0, -26.0)
+        >>> files = download_geotiff(
+        ...     variables=["daily_rain", "max_temp"],
+        ...     start_date=date(2023, 1, 1),
+        ...     end_date=date(2023, 1, 31),
+        ...     geometry=bbox,
         ...     output_dir=Path("./data"),
-        ...     bounding_box=(150.5, -28.5, 154.0, -26.0)
+        ...     save_to_disk=True,
+        ...     read_files=False
         ... )
     """
+    # Initialize console if not provided
+    if console is None:
+        console = get_console()
+
     # Validate date range
     if start_date > end_date:
         raise ValueError(f"start_date ({start_date}) must be <= end_date ({end_date})")
@@ -463,50 +381,48 @@ def download_geotiff(
     elif end_date > today:
         logger.warning(f"[yellow]end_date ({end_date}) is in the future - some dates may not have data available[/yellow]")
 
-    # Validate that geometry and bounding_box are mutually exclusive
-    if geometry is not None and bounding_box is not None:
-        raise ValueError("Cannot specify both geometry and bounding_box")
-
-    # Convert bounding_box to Polygon if provided
-    if bounding_box is not None:
-        min_lon, min_lat, max_lon, max_lat = bounding_box
-        geometry = box(min_lon, min_lat, max_lon, max_lat)
+    # Generate date sequence
+    date_list = _generate_date_range(start_date, end_date)
 
     # Validate variables and get metadata
     metadata_map = validate_silo_s3_variables(variables, ValueError)
 
-    # Initialize console if not provided
-    if console is None:
-        console = get_console()
-
-    # Generate date sequence
-    date_list = _generate_date_range(start_date, end_date)
+    # Determine cache directory
+    if save_to_disk:
+        # Use permanent storage
+        if output_dir is None:
+            cache_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
+        else:
+            cache_dir = output_dir
+    else:
+        # Use session-persistent temp cache (not cleaned up automatically)
+        # Files persist across function calls and even across sessions until system reboot
+        cache_dir = Path(tempfile.gettempdir()) / "weather_tools_cache" / "geotiff"
 
     # Build download task list
-    tasks = []
-    for var_name, metadata in metadata_map.items():
+    download_tasks = []
+    read_tasks = {var: [] for var in metadata_map.keys()}
+    for var_name, _ in metadata_map.items():
         for date in date_list:
-            # Skip dates before variable start_year
-            if date.year < metadata.start_year:
-                continue
-
             # Construct URL and destination path
             url = construct_geotiff_daily_url(var_name, date)
-            dest_path = output_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
+            dest_path = cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
 
-            tasks.append((var_name, date, url, dest_path))
+            read_tasks[var_name].append(dest_path)
+            if not dest_path.exists() or force:
+                download_tasks.append((var_name, date, url, dest_path))
 
     # Download files with progress bar
     downloaded_files = {var: [] for var in metadata_map.keys()}
 
     with create_download_progress(console=console, show_percentage=True) as progress:
-        task_id = progress.add_task("[cyan]Downloading GeoTIFFs...", total=len(tasks))
+        task_id = progress.add_task("[cyan]Downloading GeoTIFFs...", total=len(download_tasks))
 
-        for var_name, date, url, dest_path in tasks:
+        for var_name, date, url, dest_path in download_tasks:
             progress.update(task_id, description=f"[cyan]Downloading {var_name} {date}...")
 
             try:
-                downloaded = download_geotiff_with_subset(url, dest_path, geometry, force, timeout)
+                downloaded = download_geotiff_with_subset(url, dest_path, geometry, overview_level, force, timeout)
                 if downloaded:
                     downloaded_files[var_name].append(dest_path)
             except SiloGeoTiffError as e:
@@ -514,9 +430,38 @@ def download_geotiff(
 
             progress.advance(task_id)
 
-    # Print summary via logger
+    # Print download summary
     logger.info("\n[bold green]Download Summary:[/bold green]")
     for var_name, files in downloaded_files.items():
         logger.info(f"  {var_name}: {len(files)} files")
 
-    return downloaded_files
+    # If read_files=False, return file paths
+    if not read_files:
+        return read_tasks
+
+    # Read files into memory as numpy arrays
+    results = {}
+    for var_name, file_paths in read_tasks.items():
+        if not file_paths:
+            logger.warning(f"[yellow]No files downloaded for {var_name}[/yellow]")
+            continue
+
+        logger.info(f"[cyan]Reading {var_name} into memory...[/cyan]")
+        arrays = []
+
+        for file_path in file_paths:
+            try:
+                data, profile = read_cog(f"file://{file_path.absolute()}", geometry, overview_level)
+                arrays.append(data)
+            except SiloGeoTiffError as e:
+                logger.warning(f"[yellow]Failed to read {file_path}: {e}[/yellow]")
+
+        # Stack arrays into 3D array (time, height, width)
+        if arrays:
+            profile.update({"count": len(arrays)})
+            results[var_name] = np.stack(arrays, axis=0), profile
+            logger.info(f"[green]Loaded {var_name}: {results[var_name][0].shape}[/green]")
+        else:
+            logger.warning(f"[yellow]No data loaded for {var_name}[/yellow]")
+
+    return results

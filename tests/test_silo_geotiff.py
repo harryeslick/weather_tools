@@ -322,11 +322,12 @@ class TestReadGeoTiffTimeseries:
         """Test reading timeseries for a single variable."""
         point = Point(153.0, -27.5)
 
-        # Mock read_cog to return test data
+        # Mock download and read operations
         test_data = np.ones((10, 10))
         test_profile = {"driver": "GTiff"}
 
-        with patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
+        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True), \
+             patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
             result = read_geotiff_timeseries(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
@@ -346,7 +347,8 @@ class TestReadGeoTiffTimeseries:
         test_data = np.ones((5, 5))
         test_profile = {"driver": "GTiff"}
 
-        with patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
+        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True), \
+             patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
             result = read_geotiff_timeseries(
                 variables=["daily_rain", "max_temp"],
                 start_date=datetime.date(2023, 1, 1),
@@ -367,7 +369,8 @@ class TestReadGeoTiffTimeseries:
         test_data = np.ones((5, 5))
         test_profile = {"driver": "GTiff"}
 
-        with patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
+        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True), \
+             patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
             result = read_geotiff_timeseries(
                 variables="daily",  # Preset
                 start_date=datetime.date(2023, 1, 1),
@@ -386,12 +389,17 @@ class TestDownloadGeoTiffRange:
 
     def test_download_range_basic(self, tmp_path):
         """Test downloading a range of files."""
+        point = Point(153.0, -27.5)
+
         with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
             result = download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 3),
+                geometry=point,
                 output_dir=tmp_path,
+                save_to_disk=True,
+                read_files=False,
             )
 
         assert "daily_rain" in result
@@ -399,54 +407,66 @@ class TestDownloadGeoTiffRange:
         assert len(result["daily_rain"]) == 3
 
     def test_download_range_with_bbox(self, tmp_path):
-        """Test downloading with bounding box."""
-        bbox = (150.0, -28.0, 154.0, -26.0)
+        """Test downloading with bounding box as Polygon geometry."""
+        # Create a Polygon from bounding box coordinates
+        bbox_geom = box(150.0, -28.0, 154.0, -26.0)
 
         with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
             result = download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
+                geometry=bbox_geom,
                 output_dir=tmp_path,
-                bounding_box=bbox,
+                save_to_disk=True,
+                read_files=False,
             )
 
         assert "daily_rain" in result
+        assert len(result["daily_rain"]) == 2
 
-    def test_download_range_bbox_and_geometry_raises_error(self, tmp_path):
-        """Test that specifying both bbox and geometry raises error."""
-        bbox = (150.0, -28.0, 154.0, -26.0)
-        geom = Point(153.0, -27.5)
-
-        with pytest.raises(ValueError, match="Cannot specify both"):
+    def test_download_range_geometry_required(self, tmp_path):
+        """Test that geometry parameter is required."""
+        # This test verifies that the geometry parameter cannot be omitted
+        # The function signature requires it, so this would be a TypeError
+        with pytest.raises(TypeError):
             download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
                 output_dir=tmp_path,
-                geometry=geom,
-                bounding_box=bbox,
+                # Missing required geometry parameter
             )
 
     def test_download_range_invalid_variable(self, tmp_path):
         """Test that invalid variables raise ValueError."""
+        point = Point(153.0, -27.5)
+
         with pytest.raises(ValueError, match="Unknown variable"):
             download_geotiff(
                 variables=["invalid_var"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
+                geometry=point,
                 output_dir=tmp_path,
+                save_to_disk=True,
+                read_files=False,
             )
 
     def test_download_range_skips_old_years(self, tmp_path):
         """Test that years before variable start are skipped."""
         # MSLP starts in 1957
+        point = Point(153.0, -27.5)
+
         with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
             result = download_geotiff(
                 variables=["mslp"],
                 start_date=datetime.date(1950, 1, 1),
                 end_date=datetime.date(1950, 1, 3),
+                geometry=point,
                 output_dir=tmp_path,
+                save_to_disk=True,
+                read_files=False,
             )
 
         # Should not download anything (1950 is before MSLP start year)
@@ -454,6 +474,7 @@ class TestDownloadGeoTiffRange:
 
     def test_download_range_continues_on_failure(self, tmp_path):
         """Test that download continues if individual files fail."""
+        point = Point(153.0, -27.5)
         call_count = 0
 
         def mock_download(*args, **kwargs):
@@ -468,7 +489,10 @@ class TestDownloadGeoTiffRange:
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
+                geometry=point,
                 output_dir=tmp_path,
+                save_to_disk=True,
+                read_files=False,
             )
 
         # Should have attempted both downloads

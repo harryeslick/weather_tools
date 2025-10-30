@@ -19,6 +19,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+This package is in active development, when making breaking changes, DO NOT include deprecation warnings or wrappers to maintain earlier functionality. assume no external users currently exist for this code. 
+
 ### Environment Setup
 ```bash
 # Install dependencies (using uv package manager)
@@ -261,9 +263,7 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 - PatchedPoint queries require `station_code`, DataDrill queries require `coordinates`
 - Date ranges must include both start_date and end_date for data queries
 - Local file paths assume specific directory structure - missing files cause FileNotFoundError
-- xarray datasets consume significant memory - close when done or work with subsets
 - NetCDF download command uses year range (--start-year/--end-year), GeoTIFF uses dates (--start-date/--end-date)
 - GeoTIFF geometries use (lon, lat) order, not (lat, lon) - `Point(153.0, -27.5)` is Brisbane
 - GeoTIFF CRS must be EPSG:4326 - other projections will raise `SiloGeoTiffError`
-- Cannot specify both --bbox and --geometry in GeoTIFF download - they are mutually exclusive
 - Some GeoTIFF files may return 404 if data is unavailable for that date (handled gracefully, logs warning)

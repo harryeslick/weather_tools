@@ -91,4 +91,5 @@ dev = [
     "folium>=0.20.0",
     "matplotlib>=3.10.7",
     "mapclassify>=2.10.0",
+    "ipywidgets>=8.1.7",
 ]
