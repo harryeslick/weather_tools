@@ -351,7 +351,7 @@ class SiloAPI:
             return len(self._cache)
         return 0
 
-    def get_station_data(
+    def get_patched_point(
         self,
         station_code: str,
         start_date: str,
@@ -361,7 +361,10 @@ class SiloAPI:
         return_metadata: bool = False,
     ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, dict]]:
         """
-        Get weather station data using simple string arguments.
+        Get PatchedPoint data (weather station data with infilled gaps) using simple string arguments.
+
+        PatchedPoint dataset contains observational data from Bureau of Meteorology weather stations
+        with missing values interpolated from nearby stations.
 
         Args:
             station_code: Bureau of Meteorology station code (e.g., "30043")
@@ -378,12 +381,12 @@ class SiloAPI:
 
         Example:
             >>> api = SiloAPI()
-            >>> df = api.get_station_data("30043", "20230101", "20230131", ["rainfall", "max_temp"])
+            >>> df = api.get_patched_point("30043", "20230101", "20230131", ["rainfall", "max_temp"])
             >>> print(df.head())
             >>>
             >>> # With metadata
-            >>> df, metadata = api.get_station_data("30043", "20230101", "20230131",
-            ...                                    return_metadata=True)
+            >>> df, metadata = api.get_patched_point("30043", "20230101", "20230131",
+            ...                                       return_metadata=True)
         """
         from weather_tools.silo_models import (
             ClimateVariable,
@@ -451,7 +454,7 @@ class SiloAPI:
 
         return df
 
-    def get_gridded_data(
+    def get_data_drill(
         self,
         latitude: float,
         longitude: float,
@@ -462,7 +465,11 @@ class SiloAPI:
         return_metadata: bool = False,
     ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, dict]]:
         """
-        Get gridded climate data for any coordinates using simple arguments.
+        Get DataDrill data (interpolated gridded data) for any coordinates using simple arguments.
+
+        DataDrill dataset provides gridded data at 0.05° × 0.05° resolution (~5km) interpolated
+        across Australia. Use this for any latitude/longitude coordinate, including locations
+        without weather stations.
 
         Args:
             latitude: Latitude in decimal degrees (e.g., -27.5)
@@ -478,7 +485,7 @@ class SiloAPI:
 
         Example:
             >>> api = SiloAPI()
-            >>> df = api.get_gridded_data(-27.5, 151.0, "20230101", "20230131", ["rainfall"])
+            >>> df = api.get_data_drill(-27.5, 151.0, "20230101", "20230131", ["rainfall"])
             >>> print(df.head())
         """
         from weather_tools.silo_models import (
@@ -625,10 +632,13 @@ class SiloAPI:
         """
         Get recent climate data (last N days) for a station or coordinates.
 
+        Uses PatchedPoint dataset when station_code is provided, or DataDrill dataset
+        when latitude/longitude coordinates are provided.
+
         Args:
-            station_code: Station code (for station data)
-            latitude: Latitude (for gridded data, requires longitude)
-            longitude: Longitude (for gridded data, requires latitude)
+            station_code: Station code (for PatchedPoint data)
+            latitude: Latitude (for DataDrill data, requires longitude)
+            longitude: Longitude (for DataDrill data, requires latitude)
             days: Number of recent days to retrieve (default: 7)
             variables: List of climate variables to retrieve
 
@@ -637,10 +647,10 @@ class SiloAPI:
 
         Example:
             >>> api = SiloAPI()
-            >>> # Recent station data
+            >>> # Recent PatchedPoint data
             >>> df = api.get_recent_data(station_code="30043", days=7)
             >>>
-            >>> # Recent gridded data
+            >>> # Recent DataDrill data
             >>> df = api.get_recent_data(latitude=-27.5, longitude=151.0, days=7)
         """
 
@@ -652,9 +662,9 @@ class SiloAPI:
         end_str = end_date.strftime("%Y%m%d")
 
         if station_code:
-            return self.get_station_data(station_code, start_str, end_str, variables)
+            return self.get_patched_point(station_code, start_str, end_str, variables)
         elif latitude is not None and longitude is not None:
-            return self.get_gridded_data(latitude, longitude, start_str, end_str, variables)
+            return self.get_data_drill(latitude, longitude, start_str, end_str, variables)
         else:
             raise ValueError("Either station_code or both latitude/longitude must be provided")
 

@@ -66,8 +66,8 @@ Get weather data from Bureau of Meteorology stations.
 Simple interface that returns pandas DataFrames:
 
 ```python
-# Get station data as DataFrame
-df = api.get_station_data(
+# Get PatchedPoint station data as DataFrame
+df = api.get_patched_point(
     station_code="30043",  # Brisbane Aero
     start_date="20230101",
     end_date="20230131",
@@ -81,7 +81,7 @@ print(df.head())
 # ...
 
 # Get all available variables
-df_all = api.get_station_data(
+df_all = api.get_patched_point(
     station_code="30043",
     start_date="20230101",
     end_date="20230131"
@@ -89,7 +89,7 @@ df_all = api.get_station_data(
 )
 
 # Return with metadata
-df, metadata = api.get_station_data(
+df, metadata = api.get_patched_point(
     station_code="30043",
     start_date="20230101",
     end_date="20230131",
@@ -160,8 +160,8 @@ Get interpolated data for any location in Australia (0.05° grid).
 #### High-Level API
 
 ```python
-# Get gridded data for any coordinates
-df = api.get_gridded_data(
+# Get DataDrill data for any coordinates
+df = api.get_data_drill(
     latitude=-27.5,
     longitude=151.0,
     start_date="20230101",
@@ -776,7 +776,7 @@ locations = [
 
 all_data = []
 for loc in locations:
-    df = api.get_station_data(
+    df = api.get_patched_point(
         station_code=loc["station"],
         start_date="20230101",
         end_date="20231231",
@@ -825,7 +825,7 @@ monthly_df = monthly_rain.sel(
 ```python
 # API approach (quick, no downloads)
 api = SiloAPI()
-df_api = api.get_gridded_data(
+df_api = api.get_data_drill(
     latitude=-27.5,
     longitude=153.0,
     start_date="20230101",
@@ -858,7 +858,7 @@ from weather_tools.metno_models import MetNoAPIError, MetNoRateLimitError
 # SILO API errors
 api = SiloAPI()
 try:
-    df = api.get_station_data(
+    df = api.get_patched_point(
         station_code="99999",  # Invalid station
         start_date="20230101",
         end_date="20230131"
@@ -901,10 +901,10 @@ except MetNoAPIError as e:
 api = SiloAPI(enable_cache=True)
 
 # First call: queries API
-df1 = api.get_station_data("30043", "20230101", "20230131")
+df1 = api.get_patched_point("30043", "20230101", "20230131")
 
 # Second call: uses cache (instant)
-df2 = api.get_station_data("30043", "20230101", "20230131")
+df2 = api.get_patched_point("30043", "20230101", "20230131")
 
 print(f"Cached responses: {api.get_cache_size()}")
 api.clear_cache()  # Clear when done

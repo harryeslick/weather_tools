@@ -57,8 +57,8 @@ from weather_tools.silo_api import SiloAPI
 # Initialize API client
 api = SiloAPI()  # Uses SILO_API_KEY environment variable
 
-# Get station data as DataFrame
-df = api.get_station_data(
+# Get PatchedPoint data (weather station data) as DataFrame
+df = api.get_patched_point(
     station_code="30043",
     start_date="20230101",
     end_date="20230131",

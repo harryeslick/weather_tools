@@ -113,7 +113,7 @@ weather-tools local download --var monthly \
 - Optional response caching (disabled by default)
 - `log_level` controls constructed URL emission (set to `DEBUG` for request details)
 - Two query methods: `query_patched_point()` and `query_data_drill()` accept Pydantic models
-- Convenience methods (`get_station_data()`, `get_gridded_data()`, `search_stations()`) accept simple string arguments
+- Convenience methods (`get_patched_point()`, `get_data_drill()`, `search_stations()`) accept simple string arguments
 - `_response_to_dataframe()` converts API responses to pandas DataFrames
 - Error handling via `SiloAPIError` exception
 
