@@ -8,9 +8,46 @@ Maps between:
 - SILO dataframe column names
 """
 
-from typing import Optional
+from typing import List, Literal, Optional, Union
 from pydantic import BaseModel
 
+
+# ===========================
+# Exception Hierarchy
+# ===========================
+
+class SiloDataError(Exception):
+    """Base exception for SILO data operations."""
+    pass
+
+
+class SiloNetCDFError(SiloDataError):
+    """NetCDF-specific errors."""
+    pass
+
+
+class SiloGeoTiffError(SiloDataError):
+    """GeoTIFF-specific errors."""
+    pass
+
+
+# ===========================
+# Constants
+# ===========================
+
+# AWS S3 base URL for SILO data
+SILO_S3_BASE_URL = "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official"
+SILO_NETCDF_BASE_URL = f"{SILO_S3_BASE_URL}/annual"
+SILO_GEOTIFF_BASE_URL = SILO_S3_BASE_URL  # daily/monthly added in construct functions
+
+# Default timeouts for downloads
+DEFAULT_NETCDF_TIMEOUT = 600  # Large files (400MB+)
+DEFAULT_GEOTIFF_TIMEOUT = 300  # Smaller files or COG streaming
+
+
+# ===========================
+# Variable Metadata
+# ===========================
 
 class VariableMetadata(BaseModel):
     """Metadata for a SILO climate variable."""
@@ -167,6 +204,34 @@ VARIABLE_PRESETS = {
     "humidity": ["vp", "vp_deficit", "rh_tmax", "rh_tmin"],
 }
 
+# Type hints for valid variable inputs
+VariablePreset = Literal["daily", "monthly", "temperature", "evaporation", "radiation", "humidity"]
+
+VariableName = Literal[
+    "daily_rain",
+    "monthly_rain",
+    "max_temp",
+    "min_temp",
+    "vp",
+    "vp_deficit",
+    "rh_tmax",
+    "rh_tmin",
+    "mslp",
+    "evap_pan",
+    "evap_syn",
+    "evap_comb",
+    "evap_morton_lake",
+    "radiation",
+    "et_short_crop",
+    "et_tall_crop",
+    "et_morton_actual",
+    "et_morton_potential",
+    "et_morton_wet",
+]
+
+# Union type for function parameters accepting variables
+VariableInput = Union[VariablePreset, VariableName, List[Union[VariablePreset, VariableName]]]
+
 
 def get_variable_metadata(identifier: str) -> Optional[VariableMetadata]:
     """
@@ -190,15 +255,23 @@ def get_variable_metadata(identifier: str) -> Optional[VariableMetadata]:
     return None
 
 
-def expand_variable_preset(preset_or_vars: str | list[str]) -> list[str]:
+def expand_variable_preset(preset_or_vars: VariableInput) -> list[str]:
     """
     Expand preset names to NetCDF variable names.
 
     Args:
-        preset_or_vars: Either a preset name ("daily", "monthly") or list of variable names
+        preset_or_vars: Variable preset name ("daily", "monthly", etc.),
+                       variable name ("daily_rain", "max_temp", etc.),
+                       or list of presets/variable names
 
     Returns:
         List of NetCDF variable names
+
+    Example:
+        >>> expand_variable_preset("daily")
+        ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
+        >>> expand_variable_preset(["daily_rain", "max_temp"])
+        ['daily_rain', 'max_temp']
     """
     if isinstance(preset_or_vars, str):
         if preset_or_vars in VARIABLE_PRESETS:
@@ -214,6 +287,49 @@ def expand_variable_preset(preset_or_vars: str | list[str]) -> list[str]:
             else:
                 expanded.append(item)
         return expanded
+
+
+def validate_silo_s3_variables(
+    variables: VariableInput,
+    error_class: type[Exception] = ValueError
+) -> dict[str, VariableMetadata]:
+    """
+    Validate and expand variables, returning metadata map.
+
+    This function combines variable expansion and validation, ensuring all
+    requested variables exist and returning their metadata for further processing.
+
+    Args:
+        variables: Variable preset name ("daily", "monthly", etc.),
+                  variable name ("daily_rain", "max_temp", etc.),
+                  or list of presets/variable names
+        error_class: Exception class to raise for unknown variables (default: ValueError)
+
+    Returns:
+        Dict mapping variable names to their VariableMetadata
+
+    Raises:
+        error_class: If any variable is unknown
+
+    Example:
+        >>> from weather_tools.silo_variables import validate_silo_s3_variables, SiloGeoTiffError
+        >>> # Validate with default ValueError
+        >>> metadata_map = validate_silo_s3_variables("daily")
+        >>> print(list(metadata_map.keys()))
+        ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
+        >>> # Validate with custom exception
+        >>> metadata_map = validate_silo_s3_variables(["daily_rain", "max_temp"], SiloGeoTiffError)
+    """
+    var_list = expand_variable_preset(variables)
+
+    metadata_map: dict[str, VariableMetadata] = {}
+    for var_name in var_list:
+        metadata = get_variable_metadata(var_name)
+        if metadata is None:
+            raise error_class(f"Unknown variable: {var_name}")
+        metadata_map[var_name] = metadata
+
+    return metadata_map
 
 
 # ===========================

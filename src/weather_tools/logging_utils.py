@@ -14,8 +14,17 @@ from functools import lru_cache
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
-__all__ = ["get_console", "configure_logging", "get_package_logger", "resolve_log_level"]
+__all__ = ["get_console", "configure_logging", "get_package_logger", "resolve_log_level", "create_download_progress"]
 
 _LEVEL_MAP = {
     "CRITICAL": logging.CRITICAL,
@@ -119,3 +128,43 @@ def get_package_logger() -> logging.Logger:
         >>> pkg_logger.setLevel(logging.DEBUG)
     """
     return logging.getLogger("weather_tools")
+
+
+def create_download_progress(
+    console: Console | None = None,
+    show_percentage: bool = False
+) -> Progress:
+    """Create standardized progress bar for downloads.
+
+    This factory function creates a Rich Progress instance configured with
+    the standard columns for download operations across weather_tools.
+
+    Args:
+        console: Optional Console instance. If None, uses the shared console from get_console().
+        show_percentage: If True, adds a percentage column to the progress bar.
+
+    Returns:
+        Configured Progress instance ready for use with download operations.
+
+    Example:
+        >>> with create_download_progress(show_percentage=True) as progress:
+        ...     task_id = progress.add_task("Downloading...", total=100)
+        ...     for i in range(100):
+        ...         progress.update(task_id, advance=1)
+    """
+    columns = [
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+    ]
+
+    if show_percentage:
+        columns.append(TextColumn("[progress.percentage]{task.percentage:>3.0f}%"))
+
+    columns.extend([
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+    ])
+
+    return Progress(*columns, console=console or get_console())

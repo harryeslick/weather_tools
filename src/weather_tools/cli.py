@@ -9,7 +9,9 @@ import pandas as pd
 import typer
 from typing_extensions import List
 
-from weather_tools.download_silo import SiloDownloadError, download_silo_gridded
+from weather_tools.silo_netcdf import download_netcdf
+from weather_tools.silo_geotiff import download_geotiff
+from weather_tools.silo_variables import SiloNetCDFError, SiloGeoTiffError
 from weather_tools.logging_utils import configure_logging, get_console
 from weather_tools.merge_weather_data import (
     MergeValidationError,
@@ -20,7 +22,6 @@ from weather_tools.metno_api import MetNoAPI
 from weather_tools.metno_models import MetNoAPIError, MetNoRateLimitError
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_api import SiloAPI, SiloAPIError
-from weather_tools.silo_geotiff import SiloGeoTiffError, download_geotiff_range
 from weather_tools.silo_models import AustralianCoordinates
 
 logger = logging.getLogger(__name__)
@@ -248,7 +249,7 @@ def download(
     console = get_console()
 
     try:
-        download_silo_gridded(
+        download_netcdf(
             variables=variables,
             start_year=start_year,
             end_year=end_year,
@@ -261,7 +262,7 @@ def download(
     except ValueError as e:
         logger.error(f"[red]❌ Validation error: {e}[/red]")
         raise typer.Exit(1)
-    except SiloDownloadError as e:
+    except SiloNetCDFError as e:
         logger.error(f"[red]❌ Download error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
@@ -382,7 +383,7 @@ def geotiff_download(
         logger.info(f"[cyan]Bounding box: {bbox_tuple}[/cyan]")
 
     try:
-        download_geotiff_range(
+        download_geotiff(
             variables=variables,
             start_date=start,
             end_date=end,

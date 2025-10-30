@@ -3,19 +3,20 @@ from pathlib import Path
 
 import xarray as xr
 
-from weather_tools.silo_variables import expand_variable_preset
+from weather_tools.silo_variables import VariableInput, expand_variable_preset
 
 
 def read_silo_xarray(
-    variables: list | str = "daily",
+    variables: VariableInput = "daily",
     silo_dir: Path = Path.home() / "Developer/DATA/silo_grids",
 ) -> xr.Dataset:
     """
     Read SILO data from a directory containing the SILO netCDF files and return a merged xarray dataset.
 
     Args:
-        variables: list of silo variable names matching the directory names, or a literal "daily"/"monthly".
-            Defaults to "daily".
+        variables: Variable preset ("daily", "monthly", "temperature", etc.),
+                  variable name ("daily_rain", "max_temp", etc.),
+                  or list of presets/variable names. Defaults to "daily".
         silo_dir: Path to the directory containing variable subdirectories (each containing .nc files).
             Defaults to Path.home()/"Developer/DATA/silo_grids".
             Expects the following structure:

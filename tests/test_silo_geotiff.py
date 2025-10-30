@@ -12,12 +12,12 @@ import requests
 from shapely.geometry import Point, box
 
 from weather_tools.silo_geotiff import (
-    construct_daily_url,
-    construct_monthly_url,
+    construct_geotiff_daily_url,
+    construct_geotiff_monthly_url,
     read_cog,
     download_geotiff_with_subset,
     read_geotiff_timeseries,
-    download_geotiff_range,
+    download_geotiff,
     SiloGeoTiffError,
 )
 
@@ -25,58 +25,58 @@ from weather_tools.silo_geotiff import (
 class TestURLConstruction:
     """Test URL construction for SILO GeoTIFF files."""
 
-    def test_construct_daily_url_for_daily_rain(self):
+    def test_construct_geotiff_daily_url_for_daily_rain(self):
         """Test constructing daily URL for rainfall."""
-        url = construct_daily_url("daily_rain", datetime.date(2023, 1, 15))
+        url = construct_geotiff_daily_url("daily_rain", datetime.date(2023, 1, 15))
 
         assert url == (
             "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/"
             "Official/daily/daily_rain/2023/20230115.daily_rain.tif"
         )
 
-    def test_construct_daily_url_for_max_temp(self):
+    def test_construct_geotiff_daily_url_for_max_temp(self):
         """Test constructing daily URL for maximum temperature."""
-        url = construct_daily_url("max_temp", datetime.date(2023, 12, 31))
+        url = construct_geotiff_daily_url("max_temp", datetime.date(2023, 12, 31))
 
         assert url == (
             "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/max_temp/2023/20231231.max_temp.tif"
         )
 
-    def test_construct_daily_url_different_year(self):
+    def test_construct_geotiff_daily_url_different_year(self):
         """Test daily URL construction handles different years correctly."""
-        url = construct_daily_url("daily_rain", datetime.date(2020, 6, 1))
+        url = construct_geotiff_daily_url("daily_rain", datetime.date(2020, 6, 1))
 
         assert "2020/20200601.daily_rain.tif" in url
 
-    def test_construct_monthly_url_for_monthly_rain(self):
+    def test_construct_geotiff_monthly_url_for_monthly_rain(self):
         """Test constructing monthly URL for rainfall."""
-        url = construct_monthly_url("monthly_rain", 2023, 3)
+        url = construct_geotiff_monthly_url("monthly_rain", 2023, 3)
 
         assert url == (
             "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/"
             "Official/monthly/monthly_rain/2023/202303.monthly_rain.tif"
         )
 
-    def test_construct_monthly_url_december(self):
+    def test_construct_geotiff_monthly_url_december(self):
         """Test monthly URL construction for December (month 12)."""
-        url = construct_monthly_url("monthly_rain", 2023, 12)
+        url = construct_geotiff_monthly_url("monthly_rain", 2023, 12)
 
         assert "202312.monthly_rain.tif" in url
 
-    def test_construct_monthly_url_january(self):
+    def test_construct_geotiff_monthly_url_january(self):
         """Test monthly URL construction for January (month 1)."""
-        url = construct_monthly_url("monthly_rain", 2023, 1)
+        url = construct_geotiff_monthly_url("monthly_rain", 2023, 1)
 
         assert "202301.monthly_rain.tif" in url
 
     def test_invalid_variable_raises_error(self):
-        """Test that invalid variable names raise SiloGeoTiffError."""
-        with pytest.raises(SiloGeoTiffError, match="Unknown variable"):
-            construct_daily_url("invalid_var", datetime.date(2023, 1, 1))
+        """Test that invalid variable names raise ValueError."""
+        with pytest.raises(ValueError, match="Unknown variable"):
+            construct_geotiff_daily_url("invalid_var", datetime.date(2023, 1, 1))
 
     def test_url_format_consistency(self):
         """Test that URLs follow consistent format."""
-        url = construct_daily_url("evap_syn", datetime.date(2023, 7, 15))
+        url = construct_geotiff_daily_url("evap_syn", datetime.date(2023, 7, 15))
 
         # Check URL structure
         assert url.startswith("https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/")
@@ -387,7 +387,7 @@ class TestDownloadGeoTiffRange:
     def test_download_range_basic(self, tmp_path):
         """Test downloading a range of files."""
         with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
-            result = download_geotiff_range(
+            result = download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 3),
@@ -403,7 +403,7 @@ class TestDownloadGeoTiffRange:
         bbox = (150.0, -28.0, 154.0, -26.0)
 
         with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
-            result = download_geotiff_range(
+            result = download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
@@ -418,8 +418,8 @@ class TestDownloadGeoTiffRange:
         bbox = (150.0, -28.0, 154.0, -26.0)
         geom = Point(153.0, -27.5)
 
-        with pytest.raises(SiloGeoTiffError, match="Cannot specify both"):
-            download_geotiff_range(
+        with pytest.raises(ValueError, match="Cannot specify both"):
+            download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
@@ -429,9 +429,9 @@ class TestDownloadGeoTiffRange:
             )
 
     def test_download_range_invalid_variable(self, tmp_path):
-        """Test that invalid variables raise error."""
-        with pytest.raises(SiloGeoTiffError, match="Unknown variable"):
-            download_geotiff_range(
+        """Test that invalid variables raise ValueError."""
+        with pytest.raises(ValueError, match="Unknown variable"):
+            download_geotiff(
                 variables=["invalid_var"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
@@ -442,7 +442,7 @@ class TestDownloadGeoTiffRange:
         """Test that years before variable start are skipped."""
         # MSLP starts in 1957
         with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
-            result = download_geotiff_range(
+            result = download_geotiff(
                 variables=["mslp"],
                 start_date=datetime.date(1950, 1, 1),
                 end_date=datetime.date(1950, 1, 3),
@@ -464,7 +464,7 @@ class TestDownloadGeoTiffRange:
             return True
 
         with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", side_effect=mock_download):
-            result = download_geotiff_range(
+            result = download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),
                 end_date=datetime.date(2023, 1, 2),
@@ -485,7 +485,7 @@ class TestGeoTiffIntegration:
     def test_read_actual_cog_point(self):
         """Test reading actual COG file from SILO for a point."""
         # Use recent date that should exist
-        url = construct_daily_url("daily_rain", datetime.date(2023, 1, 15))
+        url = construct_geotiff_daily_url("daily_rain", datetime.date(2023, 1, 15))
         point = Point(153.0, -27.5)  # Brisbane area
 
         data, profile = read_cog(url, geometry=point)
@@ -497,7 +497,7 @@ class TestGeoTiffIntegration:
 
     def test_read_actual_cog_polygon(self):
         """Test reading actual COG file for a polygon."""
-        url = construct_daily_url("daily_rain", datetime.date(2023, 1, 15))
+        url = construct_geotiff_daily_url("daily_rain", datetime.date(2023, 1, 15))
         # Small polygon around Brisbane
         polygon = box(152.9, -27.6, 153.1, -27.4)
 
@@ -509,7 +509,7 @@ class TestGeoTiffIntegration:
 
     def test_download_single_geotiff(self, tmp_path):
         """Test downloading a single GeoTIFF file."""
-        url = construct_daily_url("daily_rain", datetime.date(2023, 1, 15))
+        url = construct_geotiff_daily_url("daily_rain", datetime.date(2023, 1, 15))
         dest = tmp_path / "test.tif"
 
         result = download_geotiff_with_subset(url, dest)
@@ -521,7 +521,7 @@ class TestGeoTiffIntegration:
 
     def test_download_with_clipping(self, tmp_path):
         """Test downloading with spatial clipping."""
-        url = construct_daily_url("daily_rain", datetime.date(2023, 1, 15))
+        url = construct_geotiff_daily_url("daily_rain", datetime.date(2023, 1, 15))
         dest = tmp_path / "clipped.tif"
         # Small area
         point = Point(153.0, -27.5)

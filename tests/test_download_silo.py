@@ -1,4 +1,4 @@
-"""Tests for download_silo module.
+"""Tests for silo_netcdf module.
 
 These tests document how to construct URLs and validate downloads.
 Most tests use mocks to avoid actual network requests.
@@ -11,13 +11,13 @@ from unittest.mock import Mock, patch, mock_open
 import pytest
 import requests
 
-from weather_tools.download_silo import (
-    construct_download_url,
+from weather_tools.silo_netcdf import (
+    construct_netcdf_url,
     validate_year_for_variable,
     download_file,
-    download_silo_gridded,
-    SiloDownloadError,
+    download_netcdf,
 )
+from weather_tools.silo_variables import SiloNetCDFError
 
 
 class TestURLConstruction:
@@ -25,7 +25,7 @@ class TestURLConstruction:
 
     def test_construct_url_for_daily_rain(self):
         """Test constructing download URL for daily rainfall."""
-        url = construct_download_url("daily_rain", 2023)
+        url = construct_netcdf_url("daily_rain", 2023)
 
         assert url == (
             "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/"
@@ -34,7 +34,7 @@ class TestURLConstruction:
 
     def test_construct_url_for_max_temp(self):
         """Test constructing download URL for maximum temperature."""
-        url = construct_download_url("max_temp", 2020)
+        url = construct_netcdf_url("max_temp", 2020)
 
         assert url == (
             "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/"
@@ -43,7 +43,7 @@ class TestURLConstruction:
 
     def test_construct_url_for_monthly_rain(self):
         """Test constructing download URL for monthly rainfall."""
-        url = construct_download_url("monthly_rain", 2022)
+        url = construct_netcdf_url("monthly_rain", 2022)
 
         assert url == (
             "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/"
@@ -52,7 +52,7 @@ class TestURLConstruction:
 
     def test_url_format_consistency(self):
         """Test that URLs follow consistent format: {base}/{variable}/{year}.{variable}.nc"""
-        url = construct_download_url("evap_syn", 2021)
+        url = construct_netcdf_url("evap_syn", 2021)
 
         # Check URL structure
         assert url.startswith("https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/")
@@ -161,7 +161,7 @@ class TestDownloadFile:
         assert dest.exists()
 
     def test_http_404_error(self, tmp_path):
-        """Test that 404 errors raise SiloDownloadError with helpful message."""
+        """Test that 404 errors raise SiloNetCDFError with helpful message."""
         dest = tmp_path / "test.nc"
 
         # Mock a 404 response
@@ -172,19 +172,19 @@ class TestDownloadFile:
         )
 
         with patch("requests.get", return_value=mock_response):
-            with pytest.raises(SiloDownloadError, match="File not found"):
+            with pytest.raises(SiloNetCDFError, match="File not found"):
                 download_file(
                     url="https://example.com/missing.nc",
                     destination=dest,
                 )
 
     def test_network_error(self, tmp_path):
-        """Test that network errors raise SiloDownloadError."""
+        """Test that network errors raise SiloNetCDFError."""
         dest = tmp_path / "test.nc"
 
         # Mock a network error
         with patch("requests.get", side_effect=requests.exceptions.ConnectionError("Network error")):
-            with pytest.raises(SiloDownloadError, match="Failed to download"):
+            with pytest.raises(SiloNetCDFError, match="Failed to download"):
                 download_file(
                     url="https://example.com/test.nc",
                     destination=dest,
@@ -197,8 +197,8 @@ class TestDownloadSiloGridded:
     def test_expand_daily_preset(self, tmp_path):
         """Test that 'daily' preset expands to multiple variables."""
         # Mock successful downloads
-        with patch("weather_tools.download_silo.download_file", return_value=True):
-            result = download_silo_gridded(
+        with patch("weather_tools.silo_netcdf.download_file", return_value=True):
+            result = download_netcdf(
                 variables="daily",
                 start_year=2023,
                 end_year=2023,
@@ -214,8 +214,8 @@ class TestDownloadSiloGridded:
     def test_specific_variables_list(self, tmp_path):
         """Test downloading specific variables as a list."""
         # Mock successful downloads
-        with patch("weather_tools.download_silo.download_file", return_value=True):
-            result = download_silo_gridded(
+        with patch("weather_tools.silo_netcdf.download_file", return_value=True):
+            result = download_netcdf(
                 variables=["daily_rain", "max_temp"],
                 start_year=2022,
                 end_year=2023,
@@ -232,7 +232,7 @@ class TestDownloadSiloGridded:
     def test_invalid_variable_raises_error(self, tmp_path):
         """Test that invalid variable names raise ValueError."""
         with pytest.raises(ValueError, match="Unknown variable"):
-            download_silo_gridded(
+            download_netcdf(
                 variables=["invalid_var"],
                 start_year=2023,
                 end_year=2023,
@@ -243,7 +243,7 @@ class TestDownloadSiloGridded:
         """Test that invalid year ranges raise ValueError."""
         # start_year > end_year
         with pytest.raises(ValueError, match="must be <="):
-            download_silo_gridded(
+            download_netcdf(
                 variables="daily",
                 start_year=2023,
                 end_year=2020,
@@ -255,7 +255,7 @@ class TestDownloadSiloGridded:
         future_year = datetime.now().year + 10
 
         with pytest.raises(ValueError, match="cannot be in the future"):
-            download_silo_gridded(
+            download_netcdf(
                 variables="daily",
                 start_year=future_year,
                 end_year=future_year,
@@ -265,8 +265,8 @@ class TestDownloadSiloGridded:
     def test_skip_years_before_variable_start(self, tmp_path):
         """Test that years before variable start are skipped with warning."""
         # MSLP only starts in 1957
-        with patch("weather_tools.download_silo.download_file", return_value=True):
-            result = download_silo_gridded(
+        with patch("weather_tools.silo_netcdf.download_file", return_value=True):
+            result = download_netcdf(
                 variables=["mslp"],
                 start_year=1950,  # Before MSLP starts
                 end_year=1958,
@@ -285,8 +285,8 @@ class TestDownloadSiloGridded:
             downloaded_paths.append(destination)
             return True
 
-        with patch("weather_tools.download_silo.download_file", side_effect=mock_download):
-            download_silo_gridded(
+        with patch("weather_tools.silo_netcdf.download_file", side_effect=mock_download):
+            download_netcdf(
                 variables=["daily_rain"],
                 start_year=2023,
                 end_year=2023,
@@ -306,11 +306,11 @@ class TestDownloadSiloGridded:
             call_count += 1
             # Fail on first file, succeed on others
             if call_count == 1:
-                raise SiloDownloadError("Simulated failure")
+                raise SiloNetCDFError("Simulated failure")
             return True
 
-        with patch("weather_tools.download_silo.download_file", side_effect=mock_download):
-            result = download_silo_gridded(
+        with patch("weather_tools.silo_netcdf.download_file", side_effect=mock_download):
+            result = download_netcdf(
                 variables=["daily_rain", "max_temp"],
                 start_year=2023,
                 end_year=2023,

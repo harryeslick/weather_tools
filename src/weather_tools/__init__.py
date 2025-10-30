@@ -21,10 +21,15 @@ from weather_tools.silo_variables import (
     NETCDF_TO_API,
     API_TO_NETCDF,
     VARIABLE_PRESETS,
+    SiloDataError,
+    SiloNetCDFError,
+    SiloGeoTiffError,
     get_variable_metadata,
     expand_variable_preset,
+    validate_silo_s3_variables,
 )
-from weather_tools.download_silo import download_silo_gridded, SiloDownloadError
+from weather_tools.silo_netcdf import download_netcdf
+from weather_tools.silo_geotiff import download_geotiff, construct_geotiff_daily_url, construct_geotiff_monthly_url
 
 __all__ = [
     "read_silo_xarray",
@@ -39,12 +44,18 @@ __all__ = [
     "SiloDateRange",
     "SiloFormat",
     "SiloResponse",
-    "download_silo_gridded",
-    "SiloDownloadError",
+    "download_netcdf",
+    "download_geotiff",
+    "construct_geotiff_daily_url",
+    "construct_geotiff_monthly_url",
+    "SiloDataError",
+    "SiloNetCDFError",
+    "SiloGeoTiffError",
     "SILO_VARIABLES",
     "NETCDF_TO_API",
     "API_TO_NETCDF",
     "VARIABLE_PRESETS",
     "get_variable_metadata",
     "expand_variable_preset",
+    "validate_silo_s3_variables",
 ]

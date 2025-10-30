@@ -12,35 +12,22 @@ from typing import Optional
 
 import requests
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    SpinnerColumn,
-    TaskID,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
-)
+from rich.progress import Progress, TaskID
 
-from weather_tools.logging_utils import get_console
-from weather_tools.silo_variables import VariableMetadata, expand_variable_preset, get_variable_metadata
+from weather_tools.logging_utils import create_download_progress, get_console
+from weather_tools.silo_variables import (
+    DEFAULT_NETCDF_TIMEOUT,
+    SILO_NETCDF_BASE_URL,
+    SiloNetCDFError,
+    VariableInput,
+    get_variable_metadata,
+    validate_silo_s3_variables,
+)
 
 logger = logging.getLogger(__name__)
 
-# AWS S3 base URL for SILO data
-SILO_S3_BASE_URL = "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual"
 
-# Default timeout for downloads (10 minutes for large files)
-DEFAULT_TIMEOUT = 600
-
-
-class SiloDownloadError(Exception):
-    """Exception raised for SILO download errors."""
-    pass
-
-
-def construct_download_url(variable: str, year: int) -> str:
+def construct_netcdf_url(variable: str, year: int) -> str:
     """
     Construct the S3 download URL for a SILO NetCDF file.
 
@@ -52,11 +39,11 @@ def construct_download_url(variable: str, year: int) -> str:
         Full S3 URL
 
     Example:
-        >>> construct_download_url("daily_rain", 2023)
+        >>> construct_netcdf_url("daily_rain", 2023)
         'https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/daily_rain/2023.daily_rain.nc'
     """
     filename = f"{year}.{variable}.nc"
-    return f"{SILO_S3_BASE_URL}/{variable}/{filename}"
+    return f"{SILO_NETCDF_BASE_URL}/{variable}/{filename}"
 
 
 def validate_year_for_variable(variable: str, year: int) -> bool:
@@ -82,7 +69,7 @@ def download_file(
     url: str,
     destination: Path,
     force: bool = False,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: int = DEFAULT_NETCDF_TIMEOUT,
     progress: Optional[Progress] = None,
     task_id: Optional[TaskID] = None,
 ) -> bool:
@@ -101,7 +88,7 @@ def download_file(
         True if downloaded, False if skipped (file exists and not force)
 
     Raises:
-        SiloDownloadError: If download fails
+        SiloNetCDFError: If download fails
     """
     # Check if file exists
     if destination.exists() and not force:
@@ -144,46 +131,48 @@ def download_file(
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
-            raise SiloDownloadError(f"File not found: {url}") from e
+            raise SiloNetCDFError(f"File not found: {url}") from e
         else:
-            raise SiloDownloadError(f"HTTP error downloading {url}: {e}") from e
+            raise SiloNetCDFError(f"HTTP error downloading {url}: {e}") from e
     except requests.exceptions.RequestException as e:
-        raise SiloDownloadError(f"Failed to download {url}: {e}") from e
+        raise SiloNetCDFError(f"Failed to download {url}: {e}") from e
     except IOError as e:
-        raise SiloDownloadError(f"Failed to write file {destination}: {e}") from e
+        raise SiloNetCDFError(f"Failed to write file {destination}: {e}") from e
 
 
-def download_silo_gridded(
-    variables: str | list[str],
+def download_netcdf(
+    variables: VariableInput,
     start_year: int,
     end_year: int,
     output_dir: Path,
     force: bool = False,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: int = DEFAULT_NETCDF_TIMEOUT,
     console: Optional[Console] = None,
 ) -> dict[str, list[Path]]:
     """
-    Download SILO gridded NetCDF files from AWS S3.
+    Download SILO NetCDF files from AWS S3.
 
     Args:
-        variables: Variable name(s) or preset ("daily", "monthly")
+        variables: Variable preset ("daily", "monthly", "temperature", etc.),
+                  variable name ("daily_rain", "max_temp", etc.),
+                  or list of presets/variable names
         start_year: First year to download (inclusive)
         end_year: Last year to download (inclusive)
         output_dir: Directory to save files (will create subdirs per variable)
         force: If True, overwrite existing files
-        timeout: Request timeout in seconds
+        timeout: Request timeout in seconds (default: 600)
         console: Optional rich Console for output
 
     Returns:
         Dictionary mapping variable names to lists of downloaded file paths
 
     Raises:
-        SiloDownloadError: If download fails
         ValueError: If invalid variables or year range
+        SiloNetCDFError: If download fails
 
     Example:
         >>> from pathlib import Path
-        >>> downloaded = download_silo_gridded(
+        >>> downloaded = download_netcdf(
         ...     variables="daily",
         ...     start_year=2020,
         ...     end_year=2023,
@@ -195,16 +184,8 @@ def download_silo_gridded(
     if console is None:
         console = get_console()
 
-    # Expand variable presets
-    var_list = expand_variable_preset(variables)
-
-    # Validate variables
-    metadata_map: dict[str, VariableMetadata] = {}
-    for var in var_list:
-        metadata = get_variable_metadata(var)
-        if metadata is None:
-            raise ValueError(f"Unknown variable: {var}")
-        metadata_map[var] = metadata
+    # Validate variables and get metadata
+    metadata_map = validate_silo_s3_variables(variables, ValueError)
 
     # Validate year range
     if start_year > end_year:
@@ -216,15 +197,14 @@ def download_silo_gridded(
 
     # Build download list
     download_tasks = []
-    for var in var_list:
-        metadata = metadata_map[var]
+    for var, metadata in metadata_map.items():
         for year in range(start_year, end_year + 1):
             # Skip years before variable starts
             if year < metadata.start_year:
                 logger.warning(f"[yellow]Skipping {var} for {year} (data starts in {metadata.start_year})[/yellow]")
                 continue
 
-            url = construct_download_url(var, year)
+            url = construct_netcdf_url(var, year)
             dest = output_dir / var / f"{year}.{var}.nc"
             download_tasks.append((var, year, url, dest))
 
@@ -233,7 +213,8 @@ def download_silo_gridded(
         return {}
 
     # Display summary
-    logger.info("\n[bold]Downloading SILO gridded data...[/bold]")
+    var_list = list(metadata_map.keys())
+    logger.info("\n[bold]Downloading SILO NetCDF data...[/bold]")
     logger.info(f"  Variables: {', '.join(var_list)} ({len(var_list)} variable(s))")
     logger.info(f"  Years: {start_year}-{end_year} ({end_year - start_year + 1} year(s))")
     logger.info(f"  Total files: {len(download_tasks)}")
@@ -242,15 +223,7 @@ def download_silo_gridded(
     # Download with progress tracking
     downloaded_files = {var: [] for var in var_list}
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-        console=console,
-    ) as progress:
+    with create_download_progress(console=console, show_percentage=False) as progress:
 
         for idx, (var, year, url, dest) in enumerate(download_tasks, 1):
             task_desc = f"[{idx}/{len(download_tasks)}] {var}/{year}.{var}.nc"
@@ -272,7 +245,7 @@ def download_silo_gridded(
                 else:
                     progress.update(task_id, description=f"[yellow]↷[/yellow] {task_desc} (skipped)")
 
-            except SiloDownloadError as e:
+            except SiloNetCDFError as e:
                 progress.update(task_id, description=f"[red]✗[/red] {task_desc}")
                 logger.error(f"[red]Error: {e}[/red]")
                 # Continue with next file rather than failing completely

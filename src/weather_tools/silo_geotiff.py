@@ -20,30 +20,20 @@ import rasterio.errors
 import requests
 from rasterio.features import geometry_window
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
-)
 from shapely.geometry import Point, Polygon, box
 
-from weather_tools.logging_utils import get_console
-from weather_tools.silo_variables import VariableMetadata, expand_variable_preset, get_variable_metadata
+from weather_tools.logging_utils import create_download_progress, get_console
+from weather_tools.silo_variables import (
+    DEFAULT_GEOTIFF_TIMEOUT,
+    SILO_GEOTIFF_BASE_URL,
+    SiloGeoTiffError,
+    VariableInput,
+    expand_variable_preset,
+    get_variable_metadata,
+    validate_silo_s3_variables,
+)
 
 logger = logging.getLogger(__name__)
-
-# Base URL for SILO GeoTIFF files on AWS S3
-SILO_GEOTIFF_BASE_URL = "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official"
-
-
-class SiloGeoTiffError(Exception):
-    """Base exception for GeoTIFF operations."""
-
-    pass
 
 
 def _generate_date_range(start_date: datetime.date, end_date: datetime.date) -> List[datetime.date]:
@@ -71,7 +61,7 @@ def _generate_date_range(start_date: datetime.date, end_date: datetime.date) -> 
     return date_list
 
 
-def construct_daily_url(variable: str, date: datetime.date) -> str:
+def construct_geotiff_daily_url(variable: str, date: datetime.date) -> str:
     """
     Construct URL for daily GeoTIFF file.
 
@@ -82,14 +72,17 @@ def construct_daily_url(variable: str, date: datetime.date) -> str:
     Returns:
         Full URL to the GeoTIFF file
 
+    Raises:
+        ValueError: If variable is unknown
+
     Example:
-        >>> construct_daily_url("daily_rain", datetime.date(2023, 1, 15))
+        >>> construct_geotiff_daily_url("daily_rain", datetime.date(2023, 1, 15))
         'https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/daily_rain/2023/20230115.daily_rain.tif'
     """
     # Validate variable
     metadata = get_variable_metadata(variable)
     if metadata is None:
-        raise SiloGeoTiffError(f"Unknown variable: {variable}")
+        raise ValueError(f"Unknown variable: {variable}")
 
     var_name = metadata.netcdf_name
     year = date.year
@@ -98,7 +91,7 @@ def construct_daily_url(variable: str, date: datetime.date) -> str:
     return f"{SILO_GEOTIFF_BASE_URL}/daily/{var_name}/{year}/{date_str}.{var_name}.tif"
 
 
-def construct_monthly_url(variable: str, year: int, month: int) -> str:
+def construct_geotiff_monthly_url(variable: str, year: int, month: int) -> str:
     """
     Construct URL for monthly GeoTIFF file.
 
@@ -110,14 +103,17 @@ def construct_monthly_url(variable: str, year: int, month: int) -> str:
     Returns:
         Full URL to the GeoTIFF file
 
+    Raises:
+        ValueError: If variable is unknown
+
     Example:
-        >>> construct_monthly_url("monthly_rain", 2023, 3)
+        >>> construct_geotiff_monthly_url("monthly_rain", 2023, 3)
         'https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/monthly/monthly_rain/2023/202303.monthly_rain.tif'
     """
     # Validate variable
     metadata = get_variable_metadata(variable)
     if metadata is None:
-        raise SiloGeoTiffError(f"Unknown variable: {variable}")
+        raise ValueError(f"Unknown variable: {variable}")
 
     var_name = metadata.netcdf_name
     date_str = f"{year:04d}{month:02d}"
@@ -324,7 +320,7 @@ def _read_cog_from_url(
 
 
 def read_geotiff_timeseries(
-    variables: Union[str, List[str]],
+    variables: VariableInput,
     start_date: datetime.date,
     end_date: datetime.date,
     geometry: Union[Point, Polygon],
@@ -337,7 +333,9 @@ def read_geotiff_timeseries(
     Read time series of GeoTIFF data for date range and geometry.
 
     Args:
-        variables: Variable names or preset ("daily", "monthly")
+        variables: Variable preset ("daily", "monthly", "temperature", etc.),
+                  variable name ("daily_rain", "max_temp", etc.),
+                  or list of presets/variable names
         start_date: First date (inclusive)
         end_date: Last date (inclusive)
         geometry: Shapely geometry for spatial query
@@ -383,7 +381,7 @@ def read_geotiff_timeseries(
         arrays = []
 
         for date in date_list:
-            url = construct_daily_url(var_name, date)
+            url = construct_geotiff_daily_url(var_name, date)
 
             # Read using cache or direct URL strategy
             if save_to_disk:
@@ -406,42 +404,47 @@ def read_geotiff_timeseries(
     return results
 
 
-def download_geotiff_range(
-    variables: Union[str, List[str]],
+def download_geotiff(
+    variables: VariableInput,
     start_date: datetime.date,
     end_date: datetime.date,
     output_dir: Path,
     geometry: Optional[Union[Point, Polygon]] = None,
     bounding_box: Optional[Tuple[float, float, float, float]] = None,
     force: bool = False,
+    timeout: int = DEFAULT_GEOTIFF_TIMEOUT,
     console: Optional[Console] = None,
 ) -> dict[str, List[Path]]:
     """
-    Download GeoTIFF files for date range, optionally clipped to geometry/bbox.
+    Download SILO GeoTIFF files for date range, optionally clipped to geometry/bbox.
 
-    Similar to download_silo_gridded() but for daily/monthly GeoTIFFs.
+    Similar to download_netcdf() but for daily/monthly GeoTIFFs with date-based access.
 
     Args:
-        variables: Variable names or preset
-        start_date: First date
-        end_date: Last date
+        variables: Variable preset ("daily", "monthly", "temperature", etc.),
+                  variable name ("daily_rain", "max_temp", etc.),
+                  or list of presets/variable names
+        start_date: First date (inclusive)
+        end_date: Last date (inclusive)
         output_dir: Directory to save files
         geometry: Optional shapely geometry to clip downloads
         bounding_box: Optional (min_lon, min_lat, max_lon, max_lat) tuple.
                       Converted to Polygon for clipping. Mutually exclusive with geometry.
         force: Overwrite existing files
+        timeout: Request timeout in seconds (default: 300)
         console: Rich console for output
 
     Returns:
         Dict mapping variable names to lists of downloaded file paths
 
     Raises:
-        SiloGeoTiffError: For invalid parameters or download failures
+        ValueError: For invalid parameter combinations or date ranges
+        SiloGeoTiffError: For download failures
 
     Example:
         >>> from pathlib import Path
         >>> from datetime import date
-        >>> download_geotiff_range(
+        >>> download_geotiff(
         ...     variables=["daily_rain"],
         ...     start_date=date(2023, 1, 1),
         ...     end_date=date(2023, 1, 31),
@@ -449,25 +452,28 @@ def download_geotiff_range(
         ...     bounding_box=(150.5, -28.5, 154.0, -26.0)
         ... )
     """
+    # Validate date range
+    if start_date > end_date:
+        raise ValueError(f"start_date ({start_date}) must be <= end_date ({end_date})")
+
+    # Warn about future dates
+    today = datetime.date.today()
+    if start_date > today:
+        logger.warning(f"[yellow]start_date ({start_date}) is in the future - no data will be available[/yellow]")
+    elif end_date > today:
+        logger.warning(f"[yellow]end_date ({end_date}) is in the future - some dates may not have data available[/yellow]")
+
     # Validate that geometry and bounding_box are mutually exclusive
     if geometry is not None and bounding_box is not None:
-        raise SiloGeoTiffError("Cannot specify both geometry and bounding_box")
+        raise ValueError("Cannot specify both geometry and bounding_box")
 
     # Convert bounding_box to Polygon if provided
     if bounding_box is not None:
         min_lon, min_lat, max_lon, max_lat = bounding_box
         geometry = box(min_lon, min_lat, max_lon, max_lat)
 
-    # Expand variable presets
-    var_list = expand_variable_preset(variables)
-
-    # Validate variables and keep metadata handy for later use
-    metadata_map: dict[str, VariableMetadata] = {}
-    for var_name in var_list:
-        metadata = get_variable_metadata(var_name)
-        if metadata is None:
-            raise SiloGeoTiffError(f"Unknown variable: {var_name}")
-        metadata_map[var_name] = metadata
+    # Validate variables and get metadata
+    metadata_map = validate_silo_s3_variables(variables, ValueError)
 
     # Initialize console if not provided
     if console is None:
@@ -478,40 +484,29 @@ def download_geotiff_range(
 
     # Build download task list
     tasks = []
-    for var_name in var_list:
-        metadata = metadata_map[var_name]
-
+    for var_name, metadata in metadata_map.items():
         for date in date_list:
             # Skip dates before variable start_year
             if date.year < metadata.start_year:
                 continue
 
             # Construct URL and destination path
-            url = construct_daily_url(var_name, date)
+            url = construct_geotiff_daily_url(var_name, date)
             dest_path = output_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
 
             tasks.append((var_name, date, url, dest_path))
 
     # Download files with progress bar
-    downloaded_files = {var: [] for var in var_list}
+    downloaded_files = {var: [] for var in metadata_map.keys()}
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-        console=console,
-    ) as progress:
+    with create_download_progress(console=console, show_percentage=True) as progress:
         task_id = progress.add_task("[cyan]Downloading GeoTIFFs...", total=len(tasks))
 
         for var_name, date, url, dest_path in tasks:
             progress.update(task_id, description=f"[cyan]Downloading {var_name} {date}...")
 
             try:
-                downloaded = download_geotiff_with_subset(url, dest_path, geometry, force)
+                downloaded = download_geotiff_with_subset(url, dest_path, geometry, force, timeout)
                 if downloaded:
                     downloaded_files[var_name].append(dest_path)
             except SiloGeoTiffError as e:
