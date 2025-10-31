@@ -420,7 +420,7 @@ def download_geotiff(
                 download_tasks.append((var_name, date, url, dest_path))
 
     # Download files with progress bar
-    downloaded_files = {var: [] for var in metadata_map.keys()}
+    downloaded_files = {var: set() for var in metadata_map.keys()}
 
     with create_download_progress(console=console, show_percentage=True) as progress:
         task_id = progress.add_task("[cyan]Downloading GeoTIFFs...", total=len(download_tasks))
@@ -431,7 +431,7 @@ def download_geotiff(
             try:
                 downloaded = download_geotiff_with_subset(url, dest_path, geometry, overview_level, force, timeout)
                 if downloaded:
-                    downloaded_files[var_name].append(dest_path)
+                    downloaded_files[var_name].add(dest_path)
             except SiloGeoTiffError as e:
                 logger.warning(f"[yellow]Warning: {e}[/yellow]")
 
@@ -442,9 +442,14 @@ def download_geotiff(
     for var_name, files in downloaded_files.items():
         logger.info(f"  {var_name}: {len(files)} files")
 
-    # If read_files=False, return file paths
+    # Filter read tasks based on successful downloads or existing files
     if not read_files:
-        return read_tasks
+        return {
+            var: [p for p in paths if p.exists() or p in downloaded_files[var]] for var, paths in read_tasks.items()
+        }
+
+    # For read_files=True we still require actual files on disk
+    read_tasks = {var: [p for p in paths if p.exists()] for var, paths in read_tasks.items()}
 
     # Read files into memory as numpy arrays
     results = {}

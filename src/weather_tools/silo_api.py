@@ -607,16 +607,27 @@ class SiloAPI:
         if state:
             df = df[df["state"].str.upper() == state.upper()]
 
-        # Sort the DataFrame based on fuzzy matching
+        # Sort the DataFrame with stronger preference rules for name matches
         if df.shape[0] > 1 and name_fragment:
+            search_fragment = name_fragment.replace("_", " ").strip().lower()
+
+            def station_match_score(raw_name: Any) -> tuple[int, int, int, float]:
+                if not isinstance(raw_name, str) or not search_fragment:
+                    return (0, 0, -(10**6), 0)
+
+                normalized_name = re.sub(r"\([^)]*\)", "", raw_name).replace("_", " ").strip().lower()
+
+                whole_word_match = 1 if re.search(rf"\b{re.escape(search_fragment)}\b", normalized_name) else 0
+                start_index = normalized_name.find(search_fragment)
+                starts_with_fragment = 1 if start_index == 0 else 0
+                position_score = -start_index if start_index >= 0 else -(10**6)
+                fuzzy_score = fuzz.ratio(search_fragment, normalized_name)
+
+                return (whole_word_match, starts_with_fragment, position_score, fuzzy_score)
+
             df = df.sort_values(
                 by="name",
-                key=lambda col: col.map(
-                    lambda name: fuzz.ratio(
-                        name_fragment.lower(),
-                        re.sub(r'\([^)]*\)', '', name).strip().lower()
-                    ) if isinstance(name, str) and name_fragment else 0
-                ),
+                key=lambda col: col.map(station_match_score),
                 ascending=False,
             )
         return df

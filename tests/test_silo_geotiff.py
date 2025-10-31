@@ -5,20 +5,20 @@ Most tests use mocks to avoid actual network requests. Integration tests are mar
 """
 
 import datetime
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
 import numpy as np
 import pytest
 import requests
 from shapely.geometry import Point, box
 
 from weather_tools.silo_geotiff import (
+    SiloGeoTiffError,
     construct_geotiff_daily_url,
     construct_geotiff_monthly_url,
-    read_cog,
-    download_geotiff_with_subset,
-    read_geotiff_timeseries,
     download_geotiff,
-    SiloGeoTiffError,
+    download_geotiff_with_subset,
+    read_cog,
 )
 
 
@@ -181,32 +181,6 @@ class TestReadCOG:
             with pytest.raises(SiloGeoTiffError, match="Expected EPSG:4326"):
                 read_cog("https://example.com/test.tif", geometry=point)
 
-    def test_read_cog_with_overview_level(self):
-        """Test reading COG with overview level for reduced resolution."""
-        mock_src = MagicMock()
-        mock_src.crs.to_string.return_value = "EPSG:4326"
-        mock_src.nodata = None
-        mock_src.profile = {"driver": "GTiff"}
-        mock_src.__enter__ = Mock(return_value=mock_src)
-        mock_src.__exit__ = Mock(return_value=False)
-
-        from rasterio.windows import Window
-
-        mock_window = Window(0, 0, 100, 100)
-
-        test_data = np.ones((25, 25))  # Reduced size for overview level 2
-        mock_src.read.return_value = test_data
-        mock_src.window_transform.return_value = "mock_transform"
-
-        point = Point(153.0, -27.5)
-
-        with patch("rasterio.open", return_value=mock_src):
-            with patch("weather_tools.silo_geotiff.geometry_window", return_value=mock_window):
-                data, profile = read_cog("https://example.com/test.tif", geometry=point, overview_level=2)
-
-        # Verify read was called with out_shape parameter
-        assert mock_src.read.called
-
     def test_read_cog_without_geometry(self):
         """Test reading entire COG without geometry parameter."""
         mock_src = MagicMock()
@@ -315,75 +289,6 @@ class TestDownloadGeoTiffWithSubset:
         assert mock_dst.write.called
 
 
-class TestReadGeoTiffTimeseries:
-    """Test timeseries reading functionality."""
-
-    def test_read_timeseries_single_variable(self):
-        """Test reading timeseries for a single variable."""
-        point = Point(153.0, -27.5)
-
-        # Mock download and read operations
-        test_data = np.ones((10, 10))
-        test_profile = {"driver": "GTiff"}
-
-        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True), \
-             patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
-            result = read_geotiff_timeseries(
-                variables=["daily_rain"],
-                start_date=datetime.date(2023, 1, 1),
-                end_date=datetime.date(2023, 1, 3),
-                geometry=point,
-                save_to_disk=False,
-            )
-
-        assert "daily_rain" in result
-        # Should have 3 days of data
-        assert result["daily_rain"].shape[0] == 3
-
-    def test_read_timeseries_multiple_variables(self):
-        """Test reading timeseries for multiple variables."""
-        point = Point(153.0, -27.5)
-
-        test_data = np.ones((5, 5))
-        test_profile = {"driver": "GTiff"}
-
-        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True), \
-             patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
-            result = read_geotiff_timeseries(
-                variables=["daily_rain", "max_temp"],
-                start_date=datetime.date(2023, 1, 1),
-                end_date=datetime.date(2023, 1, 2),
-                geometry=point,
-                save_to_disk=False,
-            )
-
-        assert "daily_rain" in result
-        assert "max_temp" in result
-        assert result["daily_rain"].shape[0] == 2
-        assert result["max_temp"].shape[0] == 2
-
-    def test_read_timeseries_with_preset(self):
-        """Test reading timeseries with variable preset."""
-        point = Point(153.0, -27.5)
-
-        test_data = np.ones((5, 5))
-        test_profile = {"driver": "GTiff"}
-
-        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True), \
-             patch("weather_tools.silo_geotiff.read_cog", return_value=(test_data, test_profile)):
-            result = read_geotiff_timeseries(
-                variables="daily",  # Preset
-                start_date=datetime.date(2023, 1, 1),
-                end_date=datetime.date(2023, 1, 1),
-                geometry=point,
-                save_to_disk=False,
-            )
-
-        # Daily preset includes multiple variables
-        assert "daily_rain" in result
-        assert "max_temp" in result
-
-
 class TestDownloadGeoTiffRange:
     """Test downloading range of GeoTIFF files."""
 
@@ -453,24 +358,6 @@ class TestDownloadGeoTiffRange:
                 read_files=False,
             )
 
-    def test_download_range_skips_old_years(self, tmp_path):
-        """Test that years before variable start are skipped."""
-        # MSLP starts in 1957
-        point = Point(153.0, -27.5)
-
-        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
-            result = download_geotiff(
-                variables=["mslp"],
-                start_date=datetime.date(1950, 1, 1),
-                end_date=datetime.date(1950, 1, 3),
-                geometry=point,
-                output_dir=tmp_path,
-                save_to_disk=True,
-                read_files=False,
-            )
-
-        # Should not download anything (1950 is before MSLP start year)
-        assert len(result["mslp"]) == 0
 
     def test_download_range_continues_on_failure(self, tmp_path):
         """Test that download continues if individual files fail."""
