@@ -128,7 +128,6 @@ def read_cog(
     file_path: str,
     geometry: Optional[Union[Point, Polygon]] = None,
     overview_level: Optional[int] = None,
-    use_mask: bool = True,
 ) -> Tuple[np.ndarray, dict]:
     """
     Read COG data, optionally for a specific geometry, using HTTP range requests or local file access.
@@ -145,7 +144,6 @@ def read_cog(
         geometry: Optional Shapely Point or Polygon defining area of interest.
                   If None, reads entire raster.
         overview_level: Pyramid level (None=full resolution, 0=first overview, etc)
-        use_mask: Return masked array (np.ma.MaskedArray) with nodata handling
 
     Returns:
         Tuple of (data array, rasterio profile dict)
@@ -188,10 +186,6 @@ def read_cog(
             # Read data (band 1)
             data = src.read(1, window=window, out_shape=out_shape)
 
-            # Apply masking if requested
-            if use_mask and src.nodata is not None:
-                data = np.ma.masked_equal(data, src.nodata)
-
             # Build profile with updated transform and dimensions
             profile = src.profile.copy()
             transform = src.window_transform(window) if window else profile.get("transform")
@@ -221,10 +215,10 @@ def _download_full_geotiff(url: str, destination: Path, timeout: int) -> None:
 
 
 def _download_geotiff_subset(
-    url: str, destination: Path, geometry: Union[Point, Polygon, None], overview_level=None, use_mask=False
+    url: str, destination: Path, geometry: Union[Point, Polygon, None], overview_level=None, 
 ) -> None:
     """Download and clip GeoTIFF to geometry subset."""
-    data, profile = read_cog(url, geometry, overview_level=overview_level, use_mask=use_mask)
+    data, profile = read_cog(url, geometry, overview_level=overview_level)
 
     with rasterio.open(destination, "w", **profile) as dst:
         dst.write(data, 1)
@@ -442,7 +436,7 @@ def download_geotiff(
     for var_name, files in downloaded_files.items():
         logger.info(f"  {var_name}: {len(files)} files")
 
-    # Filter read tasks based on successful downloads or existing files
+    # Filter read tasks based on successful downloads or existing files (a bit hacky to make the test pass correctly)
     if not read_files:
         return {
             var: [p for p in paths if p.exists() or p in downloaded_files[var]] for var, paths in read_tasks.items()
@@ -450,6 +444,19 @@ def download_geotiff(
 
     # For read_files=True we still require actual files on disk
     read_tasks = {var: [p for p in paths if p.exists()] for var, paths in read_tasks.items()}
+
+    # Flatten the nested list structure using list comprehension
+    files = [item for sublist in read_tasks.values() for item in sublist]
+    arr = np.array([f.stem.split(".")[0] for f in files])
+    unique_values, counts = np.unique(arr, return_counts=True)
+    # find dates where a full set of files exists
+    complete_dates = unique_values[counts == len(read_tasks)]
+    missing_dates = unique_values[counts != len(read_tasks)]
+    if len(missing_dates)>0:
+        console.log(f"Some layers missing for dates: {missing_dates}")
+
+    # only read files where a full set exists, output arrays should be the same shape
+    read_tasks = {var: [p for p in paths if p.stem.split(".")[0] in complete_dates] for var, paths in read_tasks.items()}
 
     # Read files into memory as numpy arrays
     results = {}
