@@ -17,6 +17,9 @@ from weather_tools.silo_geotiff import (
     construct_geotiff_daily_url,
     construct_geotiff_monthly_url,
     download_geotiff,
+    download_geotiffs,
+    read_geotiff_stack,
+    download_and_read_geotiffs,
     download_geotiff_with_subset,
     read_cog,
 )
@@ -88,6 +91,9 @@ class TestReadCOG:
 
     def test_read_cog_with_point_geometry(self):
         """Test reading COG data for a Point geometry."""
+        from rasterio.transform import Affine
+        from rasterio.windows import Window
+
         # Mock rasterio dataset
         mock_src = MagicMock()
         mock_src.crs.to_string.return_value = "EPSG:4326"
@@ -97,14 +103,15 @@ class TestReadCOG:
         mock_src.__exit__ = Mock(return_value=False)
 
         # Mock window
-        from rasterio.windows import Window
-
         mock_window = Window(0, 0, 5, 5)
 
         # Mock read data
         test_data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
         mock_src.read.return_value = test_data
-        mock_src.window_transform.return_value = "mock_transform"
+
+        # Create a proper Affine transform
+        mock_transform = Affine.translation(153.0, -27.5) * Affine.scale(0.05, -0.05)
+        mock_src.window_transform.return_value = mock_transform
 
         point = Point(153.0, -27.5)
 
@@ -118,6 +125,9 @@ class TestReadCOG:
 
     def test_read_cog_with_polygon_geometry(self):
         """Test reading COG data for a Polygon geometry."""
+        from rasterio.transform import Affine
+        from rasterio.windows import Window
+
         mock_src = MagicMock()
         mock_src.crs.to_string.return_value = "EPSG:4326"
         mock_src.nodata = None
@@ -125,13 +135,14 @@ class TestReadCOG:
         mock_src.__enter__ = Mock(return_value=mock_src)
         mock_src.__exit__ = Mock(return_value=False)
 
-        from rasterio.windows import Window
-
         mock_window = Window(0, 0, 10, 10)
 
         test_data = np.ones((10, 10))
         mock_src.read.return_value = test_data
-        mock_src.window_transform.return_value = "mock_transform"
+
+        # Create a proper Affine transform
+        mock_transform = Affine.translation(150.0, -26.0) * Affine.scale(0.05, -0.05)
+        mock_src.window_transform.return_value = mock_transform
 
         polygon = box(150.0, -28.0, 154.0, -26.0)
 
@@ -139,10 +150,13 @@ class TestReadCOG:
             with patch("weather_tools.silo_geotiff.geometry_window", return_value=mock_window):
                 data, profile = read_cog("https://example.com/test.tif", geometry=polygon)
 
-        assert isinstance(data, np.ndarray)
+        assert isinstance(data, np.ma.MaskedArray)
 
     def test_read_cog_with_masking(self):
         """Test that nodata values are properly masked."""
+        from rasterio.transform import Affine
+        from rasterio.windows import Window
+
         mock_src = MagicMock()
         mock_src.crs.to_string.return_value = "EPSG:4326"
         mock_src.nodata = -999
@@ -150,14 +164,15 @@ class TestReadCOG:
         mock_src.__enter__ = Mock(return_value=mock_src)
         mock_src.__exit__ = Mock(return_value=False)
 
-        from rasterio.windows import Window
-
         mock_window = Window(0, 0, 5, 5)
 
         # Include nodata value
         test_data = np.array([[1, 2, -999], [4, 5, 6]])
         mock_src.read.return_value = test_data
-        mock_src.window_transform.return_value = "mock_transform"
+
+        # Create a proper Affine transform for the window
+        mock_transform = Affine.translation(153.0, -27.5) * Affine.scale(0.05, -0.05)
+        mock_src.window_transform.return_value = mock_transform
 
         point = Point(153.0, -27.5)
 
@@ -358,7 +373,6 @@ class TestDownloadGeoTiffRange:
                 read_files=False,
             )
 
-
     def test_download_range_continues_on_failure(self, tmp_path):
         """Test that download continues if individual files fail."""
         point = Point(153.0, -27.5)
@@ -443,3 +457,90 @@ class TestGeoTiffIntegration:
         assert dest.exists()
         # Clipped file should be smaller than full file
         assert dest.stat().st_size > 0
+
+
+class TestNewRefactoredFunctions:
+    """Test the new refactored download/read functions."""
+
+    def test_download_geotiffs_returns_paths(self, tmp_path):
+        """Test download_geotiffs returns file paths dict."""
+        point = Point(153.0, -27.5)
+
+        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
+            result = download_geotiffs(
+                variables=["daily_rain"],
+                start_date=datetime.date(2023, 1, 1),
+                end_date=datetime.date(2023, 1, 3),
+                geometry=point,
+                output_dir=tmp_path,
+                save_to_disk=True,
+            )
+
+        assert "daily_rain" in result
+        assert isinstance(result["daily_rain"], list)
+        assert len(result["daily_rain"]) == 3
+
+    def test_read_geotiff_stack_basic(self, tmp_path):
+        """Test read_geotiff_stack reads files and returns arrays."""
+        # Create mock file paths
+        file_paths = {
+            "daily_rain": [
+                tmp_path / "20230101.daily_rain.tif",
+                tmp_path / "20230102.daily_rain.tif",
+            ]
+        }
+
+        # Create dummy files
+        for path in file_paths["daily_rain"]:
+            path.touch()
+
+        # Mock read_cog to return dummy data
+        mock_data = np.array([[1, 2], [3, 4]])
+        mock_profile = {"crs": "EPSG:4326", "transform": None}
+
+        with patch("weather_tools.silo_geotiff.read_cog", return_value=(mock_data, mock_profile)):
+            result = read_geotiff_stack(file_paths, filter_incomplete_dates=False)
+
+        assert "daily_rain" in result
+        data, profile = result["daily_rain"]
+        assert isinstance(data, np.ndarray)
+        assert data.shape[0] == 2  # 2 time steps
+        assert profile["count"] == 2
+
+    def test_download_and_read_geotiffs_wrapper(self, tmp_path):
+        """Test download_and_read_geotiffs convenience wrapper."""
+        point = Point(153.0, -27.5)
+
+        # Test download-only mode (read_files=False)
+        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
+            result = download_and_read_geotiffs(
+                variables=["daily_rain"],
+                start_date=datetime.date(2023, 1, 1),
+                end_date=datetime.date(2023, 1, 2),
+                geometry=point,
+                output_dir=tmp_path,
+                save_to_disk=True,
+                read_files=False,
+            )
+
+        assert "daily_rain" in result
+        assert isinstance(result["daily_rain"], list)
+
+    def test_backward_compatibility_download_geotiff(self, tmp_path):
+        """Test that old download_geotiff still works (backward compatibility)."""
+        point = Point(153.0, -27.5)
+
+        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
+            result = download_geotiff(
+                variables=["daily_rain"],
+                start_date=datetime.date(2023, 1, 1),
+                end_date=datetime.date(2023, 1, 2),
+                geometry=point,
+                output_dir=tmp_path,
+                save_to_disk=True,
+                read_files=False,
+            )
+
+        # Should return same format as before
+        assert "daily_rain" in result
+        assert isinstance(result["daily_rain"], list)

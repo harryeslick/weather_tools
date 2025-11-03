@@ -29,7 +29,14 @@ from weather_tools.silo_variables import (
     validate_silo_s3_variables,
 )
 from weather_tools.silo_netcdf import download_netcdf
-from weather_tools.silo_geotiff import download_geotiff, construct_geotiff_daily_url, construct_geotiff_monthly_url
+from weather_tools.silo_geotiff import (
+    download_geotiff,
+    download_geotiffs,
+    read_geotiff_stack,
+    download_and_read_geotiffs,
+    construct_geotiff_daily_url,
+    construct_geotiff_monthly_url,
+)
 
 __all__ = [
     "read_silo_xarray",
@@ -46,6 +53,9 @@ __all__ = [
     "SiloResponse",
     "download_netcdf",
     "download_geotiff",
+    "download_geotiffs",
+    "read_geotiff_stack",
+    "download_and_read_geotiffs",
     "construct_geotiff_daily_url",
     "construct_geotiff_monthly_url",
     "SiloDataError",

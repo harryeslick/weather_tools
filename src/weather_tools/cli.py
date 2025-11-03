@@ -8,6 +8,7 @@ from typing import Annotated, Literal, Optional, Union
 import pandas as pd
 import typer
 from typing_extensions import List
+from shapely.geometry import box
 
 from weather_tools.silo_netcdf import download_netcdf
 from weather_tools.silo_geotiff import download_geotiff
@@ -376,11 +377,11 @@ def geotiff_download(
             logger.error(f"[red]Error loading geometry file: {e}[/red]")
             raise typer.Exit(1)
 
-    # Convert bbox to bounding box tuple
-    bbox_tuple = None
+    # Convert bbox to Polygon geometry if provided
     if bbox is not None:
-        bbox_tuple = tuple(bbox)
-        logger.info(f"[cyan]Bounding box: {bbox_tuple}[/cyan]")
+        # Create a Polygon from bounding box (min_lon, min_lat, max_lon, max_lat)
+        geom_obj = box(*bbox)
+        logger.info(f"[cyan]Bounding box: {bbox} → Polygon[/cyan]")
 
     try:
         download_geotiff(
@@ -389,7 +390,6 @@ def geotiff_download(
             end_date=end,
             output_dir=output_dir,
             geometry=geom_obj,
-            bounding_box=bbox_tuple,
             force=force,
             console=console,
         )

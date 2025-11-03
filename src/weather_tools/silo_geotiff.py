@@ -19,7 +19,7 @@ import numpy as np
 import rasterio
 import rasterio.errors
 import requests
-from rasterio.features import geometry_window
+from rasterio.features import geometry_mask, geometry_window
 from rich.console import Console
 from shapely.geometry import Point, Polygon
 
@@ -128,7 +128,8 @@ def read_cog(
     file_path: str,
     geometry: Optional[Union[Point, Polygon]] = None,
     overview_level: Optional[int] = None,
-) -> Tuple[np.ndarray, dict]:
+    use_mask: bool = True,
+) -> Tuple[Union[np.ndarray, np.ma.MaskedArray], dict]:
     """
     Read COG data, optionally for a specific geometry, using HTTP range requests or local file access.
 
@@ -144,9 +145,12 @@ def read_cog(
         geometry: Optional Shapely Point or Polygon defining area of interest.
                   If None, reads entire raster.
         overview_level: Pyramid level (None=full resolution, 0=first overview, etc)
+        use_mask: If True, mask pixels outside geometry and apply nodata mask.
+                  If False, return regular array without masking.
 
     Returns:
-        Tuple of (data array, rasterio profile dict)
+        Tuple of (data array or masked array, rasterio profile dict).
+        Returns MaskedArray when use_mask=True, regular ndarray when use_mask=False.
 
     Raises:
         SiloGeoTiffError: If CRS is not EPSG:4326 or other errors occur
@@ -154,10 +158,10 @@ def read_cog(
     Example:
         >>> from shapely.geometry import Point
         >>> point = Point(153.0, -27.5)
-        >>> # Remote URL with geometry
-        >>> data, profile = read_cog("https://s3.../file.tif", geometry=point)
-        >>> # Local file, entire raster
-        >>> data, profile = read_cog("/path/to/local/file.tif")
+        >>> # Remote URL with geometry and masking
+        >>> data, profile = read_cog("https://s3.../file.tif", geometry=point, use_mask=True)
+        >>> # Local file, entire raster without masking
+        >>> data, profile = read_cog("/path/to/local/file.tif", use_mask=False)
     """
     try:
         with rasterio.open(file_path) as src:
@@ -198,6 +202,24 @@ def read_cog(
 
             profile.update({"height": data.shape[0], "width": data.shape[1], "transform": transform})
 
+            # Apply masking if requested
+            if use_mask:
+                # Create mask for pixels outside geometry
+                mask = np.zeros(data.shape, dtype=bool)
+
+                if geometry is not None:
+                    # Use geometry_mask to identify pixels outside the geometry
+                    # geometry_mask returns True for pixels OUTSIDE the geometry
+                    geom_mask = geometry_mask([geometry], out_shape=data.shape, transform=transform, invert=False)
+                    mask |= geom_mask
+
+                # Also mask nodata values
+                if src.nodata is not None:
+                    mask |= data == src.nodata
+
+                # Create masked array
+                data = np.ma.masked_array(data, mask=mask)
+
             return data, profile
 
     except rasterio.errors.RasterioIOError as e:
@@ -215,7 +237,10 @@ def _download_full_geotiff(url: str, destination: Path, timeout: int) -> None:
 
 
 def _download_geotiff_subset(
-    url: str, destination: Path, geometry: Union[Point, Polygon, None], overview_level=None, 
+    url: str,
+    destination: Path,
+    geometry: Union[Point, Polygon, None],
+    overview_level=None,
 ) -> None:
     """Download and clip GeoTIFF to geometry subset."""
     data, profile = read_cog(url, geometry, overview_level=overview_level)
@@ -291,24 +316,23 @@ def download_geotiff_with_subset(
         raise SiloGeoTiffError(f"Error downloading {url}: {e}")
 
 
-def download_geotiff(
+def download_geotiffs(
     variables: VariableInput,
     start_date: datetime.date,
     end_date: datetime.date,
     geometry: Union[Point, Polygon],
     output_dir: Optional[Path] = None,
     save_to_disk: bool = False,
-    read_files: bool = True,
     overview_level: Optional[int] = None,
     force: bool = False,
     timeout: int = DEFAULT_GEOTIFF_TIMEOUT,
     console: Optional[Console] = None,
-) -> Union[dict[str, np.ndarray], dict[str, List[Path]]]:
+) -> dict[str, List[Path]]:
     """
-    Download and optionally read SILO GeoTIFF files for date range and geometry.
+    Download SILO GeoTIFF files for date range and geometry.
 
-    This unified function downloads GeoTIFF files to disk (permanently or temporarily)
-    and optionally reads them into memory as numpy arrays. Files are always cached to
+    This function downloads GeoTIFF files to disk (permanently or temporarily)
+    and returns the paths to downloaded files. Files are always cached to
     enable efficient reuse, with temporary storage available for one-off queries.
 
     Args:
@@ -323,8 +347,6 @@ def download_geotiff(
                    uses default: ./DATA/silo_grids/geotiff
         save_to_disk: If False, uses session-persistent temp cache (survives across function calls
                      until system reboot). If True, files persist permanently in output_dir.
-        read_files: If True, return numpy arrays (3D: time, height, width).
-                   If False, return file paths only.
         overview_level: Optional pyramid level for reduced resolution
                        (None=full resolution, 0=first overview, 1=second overview, etc.)
         force: Overwrite existing files
@@ -332,8 +354,7 @@ def download_geotiff(
         console: Rich console for output
 
     Returns:
-        If read_files=True: Dict mapping variable names to 3D numpy arrays (time, height, width)
-        If read_files=False: Dict mapping variable names to lists of downloaded file paths
+        Dict mapping variable names to lists of downloaded file paths
 
     Raises:
         ValueError: For invalid parameter combinations or date ranges
@@ -344,27 +365,25 @@ def download_geotiff(
         >>> from datetime import date
         >>> from shapely.geometry import Point, box
         >>>
-        >>> # Stream data into memory with temp caching (persists across calls)
-        >>> data = download_geotiff(
+        >>> # Download with temp caching (persists across calls)
+        >>> files = download_geotiffs(
         ...     variables=["daily_rain"],
         ...     start_date=date(2023, 1, 1),
         ...     end_date=date(2023, 1, 31),
         ...     geometry=Point(153.0, -27.5),
-        ...     save_to_disk=False,  # Uses temp cache, reuses cached files
-        ...     read_files=True,
+        ...     save_to_disk=False,  # Uses temp cache
         ...     overview_level=1  # 4x reduced resolution
         ... )
         >>>
         >>> # Download and cache files with bounding box
         >>> bbox = box(150.5, -28.5, 154.0, -26.0)
-        >>> files = download_geotiff(
+        >>> files = download_geotiffs(
         ...     variables=["daily_rain", "max_temp"],
         ...     start_date=date(2023, 1, 1),
         ...     end_date=date(2023, 1, 31),
         ...     geometry=bbox,
         ...     output_dir=Path("./data"),
-        ...     save_to_disk=True,
-        ...     read_files=False
+        ...     save_to_disk=True
         ... )
     """
     # Initialize console if not provided
@@ -380,7 +399,9 @@ def download_geotiff(
     if start_date > today:
         logger.warning(f"[yellow]start_date ({start_date}) is in the future - no data will be available[/yellow]")
     elif end_date > today:
-        logger.warning(f"[yellow]end_date ({end_date}) is in the future - some dates may not have data available[/yellow]")
+        logger.warning(
+            f"[yellow]end_date ({end_date}) is in the future - some dates may not have data available[/yellow]"
+        )
 
     # Generate date sequence
     date_list = _generate_date_range(start_date, end_date)
@@ -402,14 +423,14 @@ def download_geotiff(
 
     # Build download task list
     download_tasks = []
-    read_tasks = {var: [] for var in metadata_map.keys()}
+    file_paths = {var: [] for var in metadata_map.keys()}
     for var_name, _ in metadata_map.items():
         for date in date_list:
             # Construct URL and destination path
             url = construct_geotiff_daily_url(var_name, date)
             dest_path = cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
 
-            read_tasks[var_name].append(dest_path)
+            file_paths[var_name].append(dest_path)
             if not dest_path.exists() or force:
                 download_tasks.append((var_name, date, url, dest_path))
 
@@ -436,54 +457,210 @@ def download_geotiff(
     for var_name, files in downloaded_files.items():
         logger.info(f"  {var_name}: {len(files)} files")
 
-    # Filter read tasks based on successful downloads or existing files (a bit hacky to make the test pass correctly)
-    if not read_files:
-        return {
-            var: [p for p in paths if p.exists() or p in downloaded_files[var]] for var, paths in read_tasks.items()
+    # Return paths to files that exist or were downloaded
+    return {var: [p for p in paths if p.exists() or p in downloaded_files[var]] for var, paths in file_paths.items()}
+
+
+def read_geotiff_stack(
+    file_paths: dict[str, List[Path]],
+    filter_incomplete_dates: bool = True,
+    console: Optional[Console] = None,
+) -> dict[str, tuple[np.ndarray, dict]]:
+    """
+    Read GeoTIFF files into memory as stacked numpy arrays.
+
+    This function reads downloaded GeoTIFF files and stacks them along the time dimension.
+    Optionally filters to only include dates where all variables have data available.
+
+    Args:
+        file_paths: Dict mapping variable names to lists of file paths
+        filter_incomplete_dates: If True, only read dates where all variables have files.
+                                If False, read all available files (arrays may have different lengths)
+        console: Rich console for output
+
+    Returns:
+        Dict mapping variable names to tuples of (3D numpy array, rasterio profile).
+        Arrays have shape (time, height, width).
+
+    Raises:
+        SiloGeoTiffError: If file reading fails
+
+    Examples:
+        >>> from pathlib import Path
+        >>>
+        >>> # Read files with filtering for complete dates
+        >>> file_paths = {
+        ...     "daily_rain": [Path("20230101.daily_rain.tif"), Path("20230102.daily_rain.tif")],
+        ...     "max_temp": [Path("20230101.max_temp.tif"), Path("20230102.max_temp.tif")]
+        ... }
+        >>> results = read_geotiff_stack(file_paths, filter_incomplete_dates=True)
+        >>> data, profile = results["daily_rain"]
+        >>> data.shape  # (2, height, width)
+        >>>
+        >>> # Read all files without filtering
+        >>> results = read_geotiff_stack(file_paths, filter_incomplete_dates=False)
+    """
+    # Initialize console if not provided
+    if console is None:
+        console = get_console()
+
+    # Filter to only existing files
+    existing_file_paths = {var: [p for p in paths if p.exists()] for var, paths in file_paths.items()}
+
+    # Filter for complete date sets if requested
+    if filter_incomplete_dates and len(existing_file_paths) > 1:
+        # Flatten the nested list structure using list comprehension
+        files = [item for sublist in existing_file_paths.values() for item in sublist]
+        arr = np.array([f.stem.split(".")[0] for f in files])
+        unique_values, counts = np.unique(arr, return_counts=True)
+        # find dates where a full set of files exists
+        complete_dates = unique_values[counts == len(existing_file_paths)]
+        missing_dates = unique_values[counts != len(existing_file_paths)]
+        if len(missing_dates) > 0:
+            console.log(f"Some layers missing for dates: {missing_dates}")
+
+        # only read files where a full set exists, output arrays should be the same shape
+        existing_file_paths = {
+            var: [p for p in paths if p.stem.split(".")[0] in complete_dates]
+            for var, paths in existing_file_paths.items()
         }
-
-    # For read_files=True we still require actual files on disk
-    read_tasks = {var: [p for p in paths if p.exists()] for var, paths in read_tasks.items()}
-
-    # Flatten the nested list structure using list comprehension
-    files = [item for sublist in read_tasks.values() for item in sublist]
-    arr = np.array([f.stem.split(".")[0] for f in files])
-    unique_values, counts = np.unique(arr, return_counts=True)
-    # find dates where a full set of files exists
-    complete_dates = unique_values[counts == len(read_tasks)]
-    missing_dates = unique_values[counts != len(read_tasks)]
-    if len(missing_dates)>0:
-        console.log(f"Some layers missing for dates: {missing_dates}")
-
-    # only read files where a full set exists, output arrays should be the same shape
-    read_tasks = {var: [p for p in paths if p.stem.split(".")[0] in complete_dates] for var, paths in read_tasks.items()}
 
     # Read files into memory as numpy arrays
     results = {}
-    for var_name, file_paths in read_tasks.items():
-        if not file_paths:
-            logger.warning(f"[yellow]No files downloaded for {var_name}[/yellow]")
+    for var_name, file_list in existing_file_paths.items():
+        if not file_list:
+            logger.warning(f"[yellow]No files available for {var_name}[/yellow]")
             continue
 
         logger.info(f"[cyan]Reading {var_name} into memory...[/cyan]")
         arrays = []
+        profile = None
 
-        for file_path in file_paths:
+        for file_path in file_list:
             try:
-                data, profile = read_cog(
+                data, file_profile = read_cog(
                     f"file://{file_path.absolute()}",
                 )  # geometry, overview_level already applied when downloading
                 arrays.append(data)
+                profile = file_profile  # Keep the last profile
             except SiloGeoTiffError as e:
                 logger.warning(f"[yellow]Failed to read {file_path}: {e}[/yellow]")
 
         # Stack arrays into 3D array (time, height, width)
-        if arrays:
-            # only need 1 profile, they should all be the same. Use the last one read.
+        if arrays and profile is not None:
+            # Update profile to reflect stacked data
             profile.update({"count": len(arrays)})
-            results[var_name] = np.stack(arrays, axis=0), profile
-            logger.info(f"[green]Loaded {var_name}: {results[var_name][0].shape}[/green]")
+            stacked_array = np.stack(arrays, axis=0)
+            results[var_name] = (stacked_array, profile)
+            logger.info(f"[green]Loaded {var_name}: {stacked_array.shape}[/green]")
         else:
             logger.warning(f"[yellow]No data loaded for {var_name}[/yellow]")
 
     return results
+
+
+def download_and_read_geotiffs(
+    variables: VariableInput,
+    start_date: datetime.date,
+    end_date: datetime.date,
+    geometry: Union[Point, Polygon],
+    output_dir: Optional[Path] = None,
+    save_to_disk: bool = False,
+    read_files: bool = True,
+    overview_level: Optional[int] = None,
+    force: bool = False,
+    timeout: int = DEFAULT_GEOTIFF_TIMEOUT,
+    filter_incomplete_dates: bool = True,
+    console: Optional[Console] = None,
+) -> Union[dict[str, tuple[np.ndarray, dict]], dict[str, List[Path]]]:
+    """
+    Download and optionally read SILO GeoTIFF files for date range and geometry.
+
+    This convenience function combines downloading and reading operations.
+    Use `download_geotiffs()` and `read_geotiff_stack()` separately for more control.
+
+    Args:
+        variables: Variable preset ("daily", "monthly", "temperature", etc.),
+                  variable name ("daily_rain", "max_temp", etc.),
+                  or list of presets/variable names
+        start_date: First date (inclusive)
+        end_date: Last date (inclusive)
+        geometry: Shapely geometry (Point or Polygon) for spatial subsetting.
+                  To use a bounding box, create a Polygon: box(min_lon, min_lat, max_lon, max_lat)
+        output_dir: Directory to save files. If None and save_to_disk=True,
+                   uses default: ./DATA/silo_grids/geotiff
+        save_to_disk: If False, uses session-persistent temp cache (survives across function calls
+                     until system reboot). If True, files persist permanently in output_dir.
+        read_files: If True, return numpy arrays (3D: time, height, width).
+                   If False, return file paths only.
+        overview_level: Optional pyramid level for reduced resolution
+                       (None=full resolution, 0=first overview, 1=second overview, etc.)
+        force: Overwrite existing files
+        timeout: Request timeout in seconds (default: 300)
+        filter_incomplete_dates: If True and read_files=True, only read dates where all
+                                variables have data. If False, read all available files.
+        console: Rich console for output
+
+    Returns:
+        If read_files=True: Dict mapping variable names to (3D numpy array, rasterio profile) tuples
+        If read_files=False: Dict mapping variable names to lists of file paths
+
+    Raises:
+        ValueError: For invalid parameter combinations or date ranges
+        SiloGeoTiffError: For download or read failures
+
+    Examples:
+        >>> from pathlib import Path
+        >>> from datetime import date
+        >>> from shapely.geometry import Point, box
+        >>>
+        >>> # Download and read into memory
+        >>> results = download_and_read_geotiffs(
+        ...     variables=["daily_rain"],
+        ...     start_date=date(2023, 1, 1),
+        ...     end_date=date(2023, 1, 31),
+        ...     geometry=Point(153.0, -27.5),
+        ...     save_to_disk=False,
+        ...     read_files=True
+        ... )
+        >>> data, profile = results["daily_rain"]
+        >>>
+        >>> # Download only (return paths)
+        >>> files = download_and_read_geotiffs(
+        ...     variables=["daily_rain", "max_temp"],
+        ...     start_date=date(2023, 1, 1),
+        ...     end_date=date(2023, 1, 31),
+        ...     geometry=box(150.5, -28.5, 154.0, -26.0),
+        ...     output_dir=Path("./data"),
+        ...     save_to_disk=True,
+        ...     read_files=False
+        ... )
+    """
+    # Download files
+    file_paths = download_geotiffs(
+        variables=variables,
+        start_date=start_date,
+        end_date=end_date,
+        geometry=geometry,
+        output_dir=output_dir,
+        save_to_disk=save_to_disk,
+        overview_level=overview_level,
+        force=force,
+        timeout=timeout,
+        console=console,
+    )
+
+    # Return file paths if not reading
+    if not read_files:
+        return file_paths
+
+    # Read files into memory
+    return read_geotiff_stack(
+        file_paths=file_paths,
+        filter_incomplete_dates=filter_incomplete_dates,
+        console=console,
+    )
+
+
+# Backward compatibility alias
+download_geotiff = download_and_read_geotiffs
