@@ -21,9 +21,10 @@ import rasterio.errors
 import requests
 from rasterio.features import geometry_mask, geometry_window
 from rich.console import Console
+from rich.logging import RichHandler
 from shapely.geometry import Point, Polygon
 
-from weather_tools.logging_utils import create_download_progress, get_console
+from weather_tools.logging_utils import configure_logging, create_download_progress, get_console
 from weather_tools.silo_variables import (
     DEFAULT_GEOTIFF_TIMEOUT,
     SILO_GEOTIFF_BASE_URL,
@@ -34,6 +35,14 @@ from weather_tools.silo_variables import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_logging_configured():
+    """Ensure logging is configured with RichHandler if not already done."""
+    root_logger = logging.getLogger()
+    has_rich_handler = any(isinstance(h, RichHandler) for h in root_logger.handlers)
+    if not has_rich_handler:
+        configure_logging()
 
 
 def _generate_date_range(start_date: datetime.date, end_date: datetime.date) -> List[datetime.date]:
@@ -386,6 +395,9 @@ def download_geotiffs(
         ...     save_to_disk=True
         ... )
     """
+    # Ensure logging is configured for Rich markup
+    _ensure_logging_configured()
+
     # Initialize console if not provided
     if console is None:
         console = get_console()
