@@ -154,12 +154,14 @@ weather-tools local download --var monthly \
 
 Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK messaging. Call `configure_logging()` once (for example in `cli.main()`) to attach the Rich-backed handler that writes through the shared console. When you need a console object for progress bars, call `get_console()`, but send user-facing messages through the standard logging APIs rather than `console.print()`. The configured handler already understands Rich markup such as `[green]...[/green]`, so existing styling keeps working. Avoid configuring logging manually in new modules; reuse these helpers to maintain consistent output formatting.
 
-**`cli.py`** - Typer-based command-line interface
-- Main app with three subcommands: `silo` (API queries), `local` (NetCDF files), `geotiff` (COG files)
-- `silo` commands: `patched-point`, `data-drill`, `search`
-- `local` commands: `extract`, `info`, `download`
-- `geotiff` commands: `download` (with optional --bbox or --geometry clipping)
-- Entry point: `main()` function registered as `weather-tools` script
+**`cli/`** - Modular Typer-based command-line interface
+- **`cli/__init__.py`** - Main app orchestrator that registers subapps and provides entry point
+- **`cli/silo.py`** - SILO API commands: `patched-point`, `data-drill`, `search`
+- **`cli/local.py`** - Local NetCDF commands: `extract`, `info`, `download`
+- **`cli/metno.py`** - Met.no API commands: `forecast`, `merge`, `info`
+- **`cli/geotiff.py`** - GeoTIFF commands: `download` (with optional --bbox or --geometry clipping)
+- **`cli/utils.py`** - Shared CLI utilities (minimal, following YAGNI)
+- Entry point: `main()` function in `cli/__init__.py` registered as `weather-tools` script
 
 ### Data Flow
 
@@ -221,10 +223,14 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 - Time dimension named "time" with datetime64 dtype
 
 ### Module Dependencies
-- CLI imports `silo_api`, `read_silo_xarray`, `download_silo`, and `silo_geotiff` modules
+- CLI modules (`cli/silo.py`, `cli/local.py`, `cli/metno.py`, `cli/geotiff.py`) import respective domain modules
+- `cli/silo.py` imports `silo_api` and `silo_models`
+- `cli/local.py` imports `read_silo_xarray` and `silo_netcdf`
+- `cli/metno.py` imports `metno_api`, `silo_api`, and `merge_weather_data`
+- `cli/geotiff.py` imports `silo_geotiff`
 - `silo_api` imports `silo_models` for all type definitions
 - `read_silo_xarray` imports `silo_variables` for preset expansion
-- `download_silo` imports `silo_variables` for variable metadata
+- `silo_netcdf` imports `silo_variables` for variable metadata
 - `silo_geotiff` imports `silo_variables` for variable metadata and preset expansion
 - `silo_geotiff` uses `rasterio` for COG reading and `shapely` for geometry handling
 - No circular dependencies
