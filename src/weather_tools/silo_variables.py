@@ -63,12 +63,9 @@ class VariableMetadata(BaseModel):
 SILO_VARIABLES = {
     # Rainfall
     "R": VariableMetadata(api_code="R", netcdf_name="daily_rain", full_name="Daily rainfall", units="mm"),
-    # "monthly_rain": VariableMetadata(
-    #     api_code=None,
-    #     netcdf_name="monthly_rain",
-    #     full_name="Monthly rainfall",
-    #     units="mm"
-    # ),
+    "monthly_rain": VariableMetadata(
+        api_code=None, netcdf_name="monthly_rain", full_name="Monthly rainfall", units="mm"
+    ),
     # Temperature
     "X": VariableMetadata(api_code="X", netcdf_name="max_temp", full_name="Maximum temperature", units="°C"),
     "N": VariableMetadata(api_code="N", netcdf_name="min_temp", full_name="Minimum temperature", units="°C"),
