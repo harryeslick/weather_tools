@@ -36,7 +36,7 @@ export SILO_DATA_DIR="/path/to/your/silo_data"
 # Query station data
 weather-tools silo patched-point --station 30043 \
     --start-date 20230101 --end-date 20230131 \
-    --var R --var X --output weather.csv
+    --var rainfall --var max_temp --output weather.csv
 
 # Search for stations
 weather-tools silo search --name Brisbane --state QLD
@@ -117,9 +117,10 @@ Data is available via:
 - Vapour pressure
 - Wind, humidity, pressure
 
-**Variable Codes:**
+**Variable Names:**
 
-- **API**: Single letters (R=rainfall, X=max_temp, N=min_temp, etc.)
+- **CLI**: Readable names (rainfall, max_temp, min_temp, evaporation, etc.)
+- **Python API (low-level)**: Single letter codes (R=rainfall, X=max_temp, N=min_temp, etc.)
 - **Local files**: Full names (daily_rain, max_temp, min_temp, etc.)
 
 See [full documentation](https://harryeslick.github.io/weather_tools/silo_api/#climate-variables) for complete variable list.

@@ -2,14 +2,40 @@
 
 import logging
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
 import typer
-from typing_extensions import List
 
 from weather_tools.silo_api import SiloAPI, SiloAPIError
 
+# from weather_tools.silo_variables import VariableKey
+
 logger = logging.getLogger(__name__)
+
+# Mapping from readable variable names to SILO API codes
+READABLE_TO_CODE = {
+    "rainfall": "R",
+    "max_temp": "X",
+    "min_temp": "N",
+    "evaporation": "E",
+    "radiation": "J",
+    "vapour_pressure": "V",
+    "max_rh": "H",
+    "min_rh": "G",
+    "pan_evaporation": "S",
+    "class_a_evaporation": "C",
+    "et_short_crop": "T",
+    "et_tall_crop": "A",
+    "et_morton_lake": "P",
+    "mslp": "M",
+    "rh_tmax": "D",
+    "rh_tmin": "L",
+    "dew_point": "F",
+    "vp_deficit": "W",
+}
+
+# Valid variable names for validation
+VALID_VARIABLES = list(READABLE_TO_CODE.keys())
 
 silo_app = typer.Typer(
     name="silo",
@@ -27,7 +53,11 @@ def silo_patched_point(
         typer.Option(help="Output format: csv, json, apsim, standard (auto-detected from filename if not specified)"),
     ] = None,
     variables: Annotated[
-        Optional[List[str]], typer.Option("--var", help="Climate variable codes (R, X, N, V, E, J, F, etc.)")
+        Optional[List[str]],
+        typer.Option(
+            "--var",
+            help="Climate variables: rainfall, max_temp, min_temp, evaporation, radiation, vapour_pressure, etc.",
+        ),
     ] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
@@ -51,7 +81,7 @@ def silo_patched_point(
         # Get rainfall and temperature for Brisbane Aero (format auto-detected)
         weather-tools silo patched-point --station 30043 \\
             --start-date 20230101 --end-date 20230131 \\
-            --var R --var X --var N --output data.csv
+            --var rainfall --var max_temp --var min_temp --output data.csv
         
         # Get all variables in APSIM format
         weather-tools silo patched-point --station 30043 \\
@@ -114,25 +144,18 @@ def silo_patched_point(
                 output = str(output_path) + expected_ext
 
     try:
-        # Convert variable strings to enums
-        variable_enums = None
-        if variables:
-            try:
-                variable_enums = [ClimateVariable(v) for v in variables]
-            except ValueError as e:
-                typer.echo(f"❌ Invalid variable code: {e}", err=True)
-                typer.echo("   Valid codes: R, X, N, V, E, J, F, T, A, P, W, L, S, C, H, G, D, M", err=True)
-                raise typer.Exit(1)
+        # Handle default variables
+        if variables is None:
+            variables = list(READABLE_TO_CODE.keys())
 
-        # Build query using Pydantic model - automatic validation!
-        query = PatchedPointQuery(
-            format=SiloFormat(format),
-            station_code=station,
-            date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-            values=variable_enums,
-        )
+        # Validate variable names
+        invalid_vars = [v for v in variables if v not in READABLE_TO_CODE]
+        if invalid_vars:
+            typer.echo(f"❌ Invalid variable names: {', '.join(invalid_vars)}", err=True)
+            typer.echo(f"   Valid options: {', '.join(VALID_VARIABLES)}", err=True)
+            raise typer.Exit(1)
 
-        # Initialize API and execute query
+        # Initialize API
         if api_key:
             api = SiloAPI(api_key=api_key, enable_cache=enable_cache, log_level=log_level)
         else:
@@ -143,12 +166,47 @@ def silo_patched_point(
         typer.echo(f"   Date Range: {start_date} to {end_date}")
         typer.echo(f"   Format: {format}")
 
-        response = api.query_patched_point(query)
+        # Branch: CSV/JSON use convenience methods, APSIM/standard use low-level API
+        if format in ["csv", "json"]:
+            # Use convenience method - returns DataFrame (return_metadata=False by default)
+            df = api.get_patched_point(
+                station_code=station,
+                start_date=start_date,
+                end_date=end_date,
+                variables=variables,
+                format=format,
+                return_metadata=False,
+            )
 
-        typer.echo("✅ Query successful!")
+            typer.echo("✅ Query successful!")
 
-        # Output results
-        result_text = response.to_csv() if format != "json" else str(response.to_dict())
+            # Convert DataFrame to output format
+            if format == "csv":
+                # Drop metadata column for cleaner CSV output
+                df = df.drop(columns=["metadata"], errors="ignore")
+                result_text = df.to_csv(index=False)
+            else:  # json
+                result_text = df.to_json(orient="records", date_format="iso")
+        else:
+            # Use low-level Pydantic API for APSIM/standard formats
+            # Convert readable names to SILO codes
+            variable_codes = [READABLE_TO_CODE[v] for v in variables]
+            variable_enums = [ClimateVariable(code) for code in variable_codes]
+
+            # Build query using Pydantic model
+            query = PatchedPointQuery(
+                format=SiloFormat(format),
+                station_code=station,
+                date_range=SiloDateRange(start_date=start_date, end_date=end_date),
+                values=variable_enums,
+            )
+
+            response = api.query_patched_point(query)
+
+            typer.echo("✅ Query successful!")
+
+            # Output results
+            result_text = response.to_csv()
 
         if output:
             output_path = Path(output)
@@ -186,7 +244,11 @@ def silo_data_drill(
     end_date: Annotated[str, typer.Option(help="End date in YYYYMMDD format")],
     format: Annotated[str, typer.Option(help="Output format: csv, json, apsim, alldata, standard")] = "csv",
     variables: Annotated[
-        Optional[List[str]], typer.Option("--var", help="Climate variable codes (R, X, N, V, E, J, F, etc.)")
+        Optional[List[str]],
+        typer.Option(
+            "--var",
+            help="Climate variables: rainfall, max_temp, min_temp, evaporation, radiation, vapour_pressure, etc.",
+        ),
     ] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
@@ -202,7 +264,7 @@ def silo_data_drill(
         # Get rainfall for a specific location
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\
             --start-date 20230101 --end-date 20230131 \\
-            --var R --output data.csv
+            --var rainfall --output data.csv
         
         # Get all variables for a location
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\
@@ -220,25 +282,18 @@ def silo_data_drill(
     )
 
     try:
-        # Convert variable strings to enums
-        variable_enums = None
-        if variables:
-            try:
-                variable_enums = [ClimateVariable(v) for v in variables]
-            except ValueError as e:
-                typer.echo(f"❌ Invalid variable code: {e}", err=True)
-                typer.echo("   Valid codes: R, X, N, V, E, J, F, T, A, P, W, L, S, C, H, G, D, M", err=True)
-                raise typer.Exit(1)
+        # Handle default variables
+        if variables is None:
+            variables = list(READABLE_TO_CODE.keys())
 
-        # Build query using Pydantic model - automatic validation!
-        query = DataDrillQuery(
-            coordinates=AustralianCoordinates(latitude=latitude, longitude=longitude),
-            date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-            format=SiloFormat(format),
-            values=variable_enums,
-        )
+        # Validate variable names
+        invalid_vars = [v for v in variables if v not in READABLE_TO_CODE]
+        if invalid_vars:
+            typer.echo(f"❌ Invalid variable names: {', '.join(invalid_vars)}", err=True)
+            typer.echo(f"   Valid options: {', '.join(VALID_VARIABLES)}", err=True)
+            raise typer.Exit(1)
 
-        # Initialize API and execute query
+        # Initialize API
         if api_key:
             api = SiloAPI(api_key=api_key, enable_cache=enable_cache, log_level=log_level)
         else:
@@ -249,12 +304,48 @@ def silo_data_drill(
         typer.echo(f"   Date Range: {start_date} to {end_date}")
         typer.echo(f"   Format: {format}")
 
-        response = api.query_data_drill(query)
+        # Branch: CSV/JSON use convenience methods, APSIM/alldata/standard use low-level API
+        if format in ["csv", "json"]:
+            # Use convenience method - returns DataFrame (return_metadata=False by default)
+            df = api.get_data_drill(
+                latitude=latitude,
+                longitude=longitude,
+                start_date=start_date,
+                end_date=end_date,
+                variables=variables,
+                format=format,
+                return_metadata=False,
+            )
 
-        typer.echo("✅ Query successful!")
+            typer.echo("✅ Query successful!")
 
-        # Output results
-        result_text = response.to_csv() if format != "json" else str(response.to_dict())
+            # Convert DataFrame to output format
+            if format == "csv":
+                # Drop metadata column for cleaner CSV output
+                df = df.drop(columns=["metadata"], errors="ignore")
+                result_text = df.to_csv(index=False)
+            else:  # json
+                result_text = df.to_json(orient="records", date_format="iso")
+        else:
+            # Use low-level Pydantic API for APSIM/alldata/standard formats
+            # Convert readable names to SILO codes
+            variable_codes = [READABLE_TO_CODE[v] for v in variables]
+            variable_enums = [ClimateVariable(code) for code in variable_codes]
+
+            # Build query using Pydantic model
+            query = DataDrillQuery(
+                coordinates=AustralianCoordinates(latitude=latitude, longitude=longitude),
+                date_range=SiloDateRange(start_date=start_date, end_date=end_date),
+                format=SiloFormat(format),
+                values=variable_enums,
+            )
+
+            response = api.query_data_drill(query)
+
+            typer.echo("✅ Query successful!")
+
+            # Output results
+            result_text = response.to_csv()
 
         if output:
             output_path = Path(output)

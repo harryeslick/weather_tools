@@ -8,7 +8,8 @@
       "Bash(uv run ruff check:*)",
       "Bash(python -c:*)",
       "Bash(uv run python:*)",
-      "Bash(timeout 30 uv run:*)"
+      "Bash(timeout 30 uv run:*)",
+      "Skill(superpowers:brainstorming)"
     ],
     "deny": [],
     "ask": []
