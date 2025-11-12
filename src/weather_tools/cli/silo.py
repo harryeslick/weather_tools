@@ -318,7 +318,7 @@ def silo_search(
     """
     from pydantic import ValidationError
 
-    from .silo_models import PatchedPointQuery, SiloFormat
+    from weather_tools.silo_models import PatchedPointQuery, SiloFormat
 
     try:
         if api_key:
