@@ -46,7 +46,7 @@ uv run pytest tests/test_read_silo_simple.py::test_extract_single_point -v
 uv run pytest tests/ -m "not integration"
 ```
 
-**Note:** Tests require SILO data in `~/Developer/DATA/silo_grids/`. If unavailable, tests auto-skip.
+**Note:** Tests require SILO data in `~/DATA/silo_grids/`. If unavailable, tests auto-skip.
 
 ### Code Quality
 ```bash
@@ -137,7 +137,7 @@ weather-tools local download --var monthly \
 - `read_silo_xarray()` loads local SILO gridded data into xarray datasets
 - Supports variable presets: "daily", "monthly", or explicit variable lists
 - Uses centralized preset definitions from `silo_variables.py`
-- Default data directory: `~/Developer/DATA/silo_grids/`
+- Default data directory: `~/DATA/silo_grids/`
 - Expected structure: `{variable_name}/{year}.{variable_name}.nc`
 
 **`silo_geotiff.py`** - Cloud-Optimized GeoTIFF support

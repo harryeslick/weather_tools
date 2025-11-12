@@ -1,6 +1,6 @@
 """Simple smoke tests for read_silo_xarray module.
 
-These tests assume the presence of SILO data in ~/Developer/DATA/silo_grids
+These tests assume the presence of SILO data in ~/DATA/silo_grids
 and focus on basic functionality without loading large datasets.
 """
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import xarray as xr
 
-from weather_tools.read_silo_xarray import read_silo_xarray, expand_variable_preset
+from weather_tools.read_silo_xarray import expand_variable_preset, read_silo_xarray
 
 # Define the expected SILO data directory
 SILO_DIR = Path.home() / "Developer/DATA/silo_grids"

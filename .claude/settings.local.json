@@ -6,7 +6,9 @@
       "Bash(uv run weather_tools:*)",
       "Bash(uv run weather-tools:*)",
       "Bash(uv run ruff check:*)",
-      "Bash(python -c:*)"
+      "Bash(python -c:*)",
+      "Bash(uv run python:*)",
+      "Bash(timeout 30 uv run:*)"
     ],
     "deny": [],
     "ask": []

@@ -20,7 +20,7 @@ def read_silo_xarray(
         silo_dir: Path to the directory containing variable subdirectories (each containing .nc files).
             Defaults to Path.home()/"Developer/DATA/silo_grids".
             Expects the following structure:
-                ~/Developer/DATA/silo_grids
+                ~/DATA/silo_grids
                 ├── daily_rain
                 ├── evap_syn
                 ├── max_temp

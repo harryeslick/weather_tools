@@ -259,7 +259,7 @@ weather-tools local info [OPTIONS]
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
-| `--silo-dir` | PATH | Path to SILO data directory | `~/Developer/DATA/silo_grids` |
+| `--silo-dir` | PATH | Path to SILO data directory | `~/DATA/silo_grids` |
 | `--help` | | Show help message and exit | |
 
 #### Example Usage
@@ -313,7 +313,7 @@ weather-tools local extract [OPTIONS]
 |--------|------|-------------|---------|
 | `--output` | TEXT | Output CSV filename | `weather_data.csv` |
 | `--variables` | TEXT | Weather variables to extract (see below) | `daily` |
-| `--silo-dir` | PATH | Path to SILO data directory | `~/Developer/DATA/silo_grids` |
+| `--silo-dir` | PATH | Path to SILO data directory | `~/DATA/silo_grids` |
 | `--tolerance` | FLOAT | Maximum distance (in degrees) for nearest neighbor selection | `0.1` |
 | `--keep-location` | BOOLEAN | Keep location columns (crs, lat, lon) in output CSV | `False` (columns are dropped by default) |
 | `--help` | | Show help message and exit | |
@@ -452,7 +452,7 @@ The CLI generates CSV files with the following structure:
 The CLI expects SILO data to be organized as follows:
 
 ```
-~/Developer/DATA/silo_grids/
+~/DATA/silo_grids/
 ├── daily_rain/
 │   ├── 2020.daily_rain.nc
 │   ├── 2021.daily_rain.nc

@@ -512,6 +512,9 @@ def read_geotiff_stack(
         >>> # Read all files without filtering
         >>> results = read_geotiff_stack(file_paths, filter_incomplete_dates=False)
     """
+    # Ensure logging is configured for Rich markup
+    _ensure_logging_configured()
+
     # Initialize console if not provided
     if console is None:
         console = get_console()
@@ -648,6 +651,10 @@ def download_and_read_geotiffs(
         ...     read_files=False
         ... )
     """
+
+    # Ensure logging is configured for Rich markup
+    _ensure_logging_configured()
+
     # Download files
     file_paths = download_geotiffs(
         variables=variables,

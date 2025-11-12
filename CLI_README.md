@@ -211,7 +211,7 @@ weather-tools local download [OPTIONS]
 - `--end-year INTEGER` - Last year to download (1889-present, varies by variable)
 
 **Optional Options:**
-- `--silo-dir PATH` - Directory to save files (default: ~/Developer/DATA/silo_grids)
+- `--silo-dir PATH` - Directory to save files (default: ~/DATA/silo_grids)
 - `--force` - Re-download and overwrite existing files
 
 **Variable Options:**
@@ -264,7 +264,7 @@ weather-tools local download --var daily_rain \
 
 Files are organized by variable in subdirectories:
 ```
-~/Developer/DATA/silo_grids/
+~/DATA/silo_grids/
 ├── daily_rain/
 │   ├── 2020.daily_rain.nc
 │   ├── 2021.daily_rain.nc
@@ -305,7 +305,7 @@ weather-tools local extract [OPTIONS]
   - `daily` (default) - Extracts max_temp, min_temp, daily_rain, evap_syn
   - `monthly` - Extracts monthly_rain
   - Individual variables: `max_temp`, `min_temp`, `daily_rain`, `evap_syn`, `monthly_rain`
-- `--silo-dir PATH` - Path to SILO data directory (default: ~/Developer/DATA/silo_grids)
+- `--silo-dir PATH` - Path to SILO data directory (default: ~/DATA/silo_grids)
 - `--tolerance FLOAT` - Maximum distance (in degrees) for nearest neighbor selection (default: 0.1)
 - `--keep-location` - Keep location columns (crs, lat, lon) in output CSV
 
@@ -341,7 +341,7 @@ weather-tools local info [OPTIONS]
 ```
 
 **Options:**
-- `--silo-dir PATH` - Path to SILO data directory (default: ~/Developer/DATA/silo_grids)
+- `--silo-dir PATH` - Path to SILO data directory (default: ~/DATA/silo_grids)
 
 **Example:**
 
@@ -422,7 +422,7 @@ Download files manually from AWS S3:
 **Expected Directory Structure:**
 
 ```
-~/Developer/DATA/silo_grids/
+~/DATA/silo_grids/
 ├── daily_rain/
 │   ├── 2020.daily_rain.nc
 │   ├── 2021.daily_rain.nc

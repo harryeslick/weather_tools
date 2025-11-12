@@ -96,6 +96,15 @@ def configure_logging(
             handler.setLevel(numeric_level)
             return
 
+    # Remove any existing non-RichHandler handlers to avoid duplicate output
+    # This can happen if other packages add their own handlers to the root logger
+    handlers_to_remove = [
+        h for h in root_logger.handlers
+        if not isinstance(h, RichHandler)
+    ]
+    for handler in handlers_to_remove:
+        root_logger.removeHandler(handler)
+
     # Create and attach new handler
     rich_handler = RichHandler(
         console=console,

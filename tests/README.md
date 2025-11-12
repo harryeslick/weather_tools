@@ -6,7 +6,7 @@ This directory contains pytest tests for the weather_tools package.
 
 The tests assume the presence of SILO data in the following location:
 ```
-~/Developer/DATA/silo_grids/
+~/DATA/silo_grids/
 ├── daily_rain/
 ├── evap_syn/
 ├── max_temp/
