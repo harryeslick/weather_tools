@@ -30,6 +30,9 @@ uvx --from git+https://github.com/harryeslick/weather_tools.git weather-tools --
 # Set API key (your email address)
 export SILO_API_KEY="your.email@example.com"
 
+# Optional: Set custom SILO data directory (default: ~/DATA/silo_grids)
+export SILO_DATA_DIR="/path/to/your/silo_data"
+
 # Query station data
 weather-tools silo patched-point --station 30043 \
     --start-date 20230101 --end-date 20230131 \
@@ -71,6 +74,24 @@ print(stations[['name', 'station_code', 'latitude', 'longitude']])
 ```
 
 📖 **[Complete Python API Guide →](PY_README.md)** - Comprehensive Python API documentation with examples
+
+## Configuration
+
+### Environment Variables
+
+**SILO_API_KEY** (required for API access)
+- Your email address used as the API key for SILO API access
+- Example: `export SILO_API_KEY="your.email@example.com"`
+
+**SILO_DATA_DIR** (optional)
+- Custom location for SILO data files (NetCDF and GeoTIFF)
+- Default: `~/DATA/silo_grids`
+- Example: `export SILO_DATA_DIR="/custom/path/to/silo_data"`
+- Affects:
+  - NetCDF files: `$SILO_DATA_DIR/{variable}/{year}.{variable}.nc`
+  - GeoTIFF files: `$SILO_DATA_DIR/geotiff/{variable}/{year}/{date}.{variable}.tif`
+  - Local extraction commands: `weather-tools local extract/info`
+  - Download commands: `weather-tools local download` and `weather-tools geotiff download`
 
 ## What is SILO?
 

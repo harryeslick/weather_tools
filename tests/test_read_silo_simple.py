@@ -9,10 +9,12 @@ from pathlib import Path
 import pytest
 import xarray as xr
 
-from weather_tools.read_silo_xarray import expand_variable_preset, read_silo_xarray
+from weather_tools.config import get_silo_data_dir
+from weather_tools.read_silo_xarray import read_silo_xarray
+from weather_tools.silo_variables import expand_variable_preset
 
 # Define the expected SILO data directory
-SILO_DIR = Path.home() / "Developer/DATA/silo_grids"
+SILO_DIR = get_silo_data_dir()
 
 
 def read_silo_test_safe(variables="daily", silo_dir=SILO_DIR, max_year=2024):

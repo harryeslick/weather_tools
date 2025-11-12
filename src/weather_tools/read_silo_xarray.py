@@ -3,12 +3,13 @@ from pathlib import Path
 
 import xarray as xr
 
+from weather_tools.config import get_silo_data_dir
 from weather_tools.silo_variables import VariableInput, expand_variable_preset
 
 
 def read_silo_xarray(
     variables: VariableInput = "daily",
-    silo_dir: Path = Path.home() / "Developer/DATA/silo_grids",
+    silo_dir: Path | None = None,
 ) -> xr.Dataset:
     """
     Read SILO data from a directory containing the SILO netCDF files and return a merged xarray dataset.
@@ -18,9 +19,10 @@ def read_silo_xarray(
                   variable name ("daily_rain", "max_temp", etc.),
                   or list of presets/variable names. Defaults to "daily".
         silo_dir: Path to the directory containing variable subdirectories (each containing .nc files).
-            Defaults to Path.home()/"Developer/DATA/silo_grids".
+            If None, uses the directory from SILO_DATA_DIR environment variable or
+            defaults to ~/DATA/silo_grids.
             Expects the following structure:
-                ~/DATA/silo_grids
+                silo_dir/
                 ├── daily_rain
                 ├── evap_syn
                 ├── max_temp
@@ -47,6 +49,10 @@ def read_silo_xarray(
         >>> print(ds3)
 
     """
+    # Use environment variable or default if silo_dir not provided
+    if silo_dir is None:
+        silo_dir = get_silo_data_dir()
+
     # Use centralized variable preset expansion
     variables = expand_variable_preset(variables)
 

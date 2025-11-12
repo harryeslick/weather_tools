@@ -24,6 +24,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from shapely.geometry import Point, Polygon
 
+from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import configure_logging, create_download_progress, get_console
 from weather_tools.silo_variables import (
     DEFAULT_GEOTIFF_TIMEOUT,
@@ -353,7 +354,7 @@ def download_geotiffs(
         geometry: Shapely geometry (Point or Polygon) for spatial subsetting.
                   To use a bounding box, create a Polygon: box(min_lon, min_lat, max_lon, max_lat)
         output_dir: Directory to save files. If None and save_to_disk=True,
-                   uses default: ./DATA/silo_grids/geotiff
+                   uses SILO_DATA_DIR/geotiff (or ~/DATA/silo_grids/geotiff by default)
         save_to_disk: If False, uses session-persistent temp cache (survives across function calls
                      until system reboot). If True, files persist permanently in output_dir.
         overview_level: Optional pyramid level for reduced resolution
@@ -425,7 +426,7 @@ def download_geotiffs(
     if save_to_disk:
         # Use permanent storage
         if output_dir is None:
-            cache_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
+            cache_dir = get_silo_data_dir() / "geotiff"
         else:
             cache_dir = output_dir
     else:
@@ -603,7 +604,7 @@ def download_and_read_geotiffs(
         geometry: Shapely geometry (Point or Polygon) for spatial subsetting.
                   To use a bounding box, create a Polygon: box(min_lon, min_lat, max_lon, max_lat)
         output_dir: Directory to save files. If None and save_to_disk=True,
-                   uses default: ./DATA/silo_grids/geotiff
+                   uses SILO_DATA_DIR/geotiff (or ~/DATA/silo_grids/geotiff by default)
         save_to_disk: If False, uses session-persistent temp cache (survives across function calls
                      until system reboot). If True, files persist permanently in output_dir.
         read_files: If True, return numpy arrays (3D: time, height, width).

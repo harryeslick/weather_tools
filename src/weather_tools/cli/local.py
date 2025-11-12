@@ -8,6 +8,7 @@ import pandas as pd
 import typer
 from typing_extensions import List
 
+from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_netcdf import download_netcdf
@@ -56,7 +57,7 @@ def extract(
         variables_to_use = variables
 
     if silo_dir is None:
-        silo_dir = Path.home() / "DATA" / "silo_grids"
+        silo_dir = get_silo_data_dir()
 
     try:
         # Validate date formats
@@ -115,7 +116,7 @@ def local_info(
     Display information about available local SILO data.
     """
     if silo_dir is None:
-        silo_dir = Path.home() / "DATA" / "silo_grids"
+        silo_dir = get_silo_data_dir()
 
     typer.echo(f"SILO data directory: {silo_dir}")
 
@@ -200,7 +201,7 @@ def download(
         variables = ["daily"]
 
     if silo_dir is None:
-        silo_dir = Path.home() / "DATA" / "silo_grids"
+        silo_dir = get_silo_data_dir()
 
     console = get_console()
 

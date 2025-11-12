@@ -176,7 +176,7 @@ def download_netcdf(
         ...     variables="daily",
         ...     start_year=2020,
         ...     end_year=2023,
-        ...     output_dir=Path.home() / "Developer/DATA/silo_grids"
+        ...     output_dir=Path.home() / "DATA/silo_grids"
         ... )
         >>> print(downloaded)
         {'daily_rain': [Path(...), ...], 'max_temp': [...], ...}

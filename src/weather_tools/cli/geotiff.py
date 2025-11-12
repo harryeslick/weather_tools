@@ -9,6 +9,7 @@ import typer
 from shapely.geometry import box
 from typing_extensions import List
 
+from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
 from weather_tools.silo_geotiff import download_geotiff
 from weather_tools.silo_variables import SiloGeoTiffError
@@ -83,7 +84,7 @@ def geotiff_download(
         variables = ["daily_rain"]
 
     if output_dir is None:
-        output_dir = Path.cwd() / "DATA" / "silo_grids" / "geotiff"
+        output_dir = get_silo_data_dir() / "geotiff"
 
     console = get_console()
 
