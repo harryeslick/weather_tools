@@ -62,47 +62,114 @@ class VariableMetadata(BaseModel):
 # Complete mapping of all SILO variables
 SILO_VARIABLES = {
     # Rainfall
-    "R": VariableMetadata(api_code="R", netcdf_name="daily_rain", full_name="Daily rainfall", units="mm"),
+    "R": VariableMetadata(
+        api_code="R",
+        netcdf_name="daily_rain",
+        full_name="Daily rainfall",
+        units="mm",
+    ),
     "monthly_rain": VariableMetadata(
-        api_code=None, netcdf_name="monthly_rain", full_name="Monthly rainfall", units="mm"
+        api_code=None,
+        netcdf_name="monthly_rain",
+        full_name="Monthly rainfall",
+        units="mm",
     ),
     # Temperature
-    "X": VariableMetadata(api_code="X", netcdf_name="max_temp", full_name="Maximum temperature", units="°C"),
-    "N": VariableMetadata(api_code="N", netcdf_name="min_temp", full_name="Minimum temperature", units="°C"),
+    "X": VariableMetadata(
+        api_code="X",
+        netcdf_name="max_temp",
+        full_name="Maximum temperature",
+        units="°C",
+    ),
+    "N": VariableMetadata(
+        api_code="N",
+        netcdf_name="min_temp",
+        full_name="Minimum temperature",
+        units="°C",
+    ),
     # Humidity and Pressure
-    "V": VariableMetadata(api_code="V", netcdf_name="vp", full_name="Vapour pressure", units="hPa"),
-    "D": VariableMetadata(api_code="D", netcdf_name="vp_deficit", full_name="Vapour pressure deficit", units="hPa"),
+    "V": VariableMetadata(
+        api_code="V",
+        netcdf_name="vp",
+        full_name="Vapour pressure",
+        units="hPa",
+    ),
+    "D": VariableMetadata(
+        api_code="D",
+        netcdf_name="vp_deficit",
+        full_name="Vapour pressure deficit",
+        units="hPa",
+    ),
     "H": VariableMetadata(
-        api_code="H", netcdf_name="rh_tmax", full_name="Relative humidity at time of maximum temperature", units="%"
+        api_code="H",
+        netcdf_name="rh_tmax",
+        full_name="Relative humidity at time of maximum temperature",
+        units="%",
     ),
     "G": VariableMetadata(
-        api_code="G", netcdf_name="rh_tmin", full_name="Relative humidity at time of minimum temperature", units="%"
+        api_code="G",
+        netcdf_name="rh_tmin",
+        full_name="Relative humidity at time of minimum temperature",
+        units="%",
     ),
     "M": VariableMetadata(
-        api_code="M", netcdf_name="mslp", full_name="Mean sea level pressure", units="hPa", start_year=1957
+        api_code="M",
+        netcdf_name="mslp",
+        full_name="Mean sea level pressure",
+        units="hPa",
+        start_year=1957,
     ),
     # Evaporation
     "E": VariableMetadata(
-        api_code="E", netcdf_name="evap_pan", full_name="Class A pan evaporation", units="mm", start_year=1970
+        api_code="E",
+        netcdf_name="evap_pan",
+        full_name="Class A pan evaporation",
+        units="mm",
+        start_year=1970,
     ),
-    "S": VariableMetadata(api_code="S", netcdf_name="evap_syn", full_name="Synthetic estimate evaporation", units="mm"),
-    "C": VariableMetadata(api_code="C", netcdf_name="evap_comb", full_name="Combination evaporation", units="mm"),
+    "S": VariableMetadata(
+        api_code="S",
+        netcdf_name="evap_syn",
+        full_name="Synthetic estimate evaporation",
+        units="mm",
+    ),
+    "C": VariableMetadata(
+        api_code="C",
+        netcdf_name="evap_comb",
+        full_name="Combination evaporation",
+        units="mm",
+    ),
     "L": VariableMetadata(
-        api_code="L", netcdf_name="evap_morton_lake", full_name="Morton's shallow lake evaporation", units="mm"
+        api_code="L",
+        netcdf_name="evap_morton_lake",
+        full_name="Morton's shallow lake evaporation",
+        units="mm",
     ),
     # Radiation
     "J": VariableMetadata(
-        api_code="J", netcdf_name="radiation", full_name="Solar exposure (direct and diffuse)", units="MJ/m²"
+        api_code="J",
+        netcdf_name="radiation",
+        full_name="Solar exposure (direct and diffuse)",
+        units="MJ/m²",
     ),
     # Evapotranspiration
     "F": VariableMetadata(
-        api_code="F", netcdf_name="et_short_crop", full_name="FAO56 short crop evapotranspiration", units="mm"
+        api_code="F",
+        netcdf_name="et_short_crop",
+        full_name="FAO56 short crop evapotranspiration",
+        units="mm",
     ),
     "T": VariableMetadata(
-        api_code="T", netcdf_name="et_tall_crop", full_name="ASCE tall crop evapotranspiration", units="mm"
+        api_code="T",
+        netcdf_name="et_tall_crop",
+        full_name="ASCE tall crop evapotranspiration",
+        units="mm",
     ),
     "A": VariableMetadata(
-        api_code="A", netcdf_name="et_morton_actual", full_name="Morton's areal actual evapotranspiration", units="mm"
+        api_code="A",
+        netcdf_name="et_morton_actual",
+        full_name="Morton's areal actual evapotranspiration",
+        units="mm",
     ),
     "P": VariableMetadata(
         api_code="P",
@@ -167,7 +234,7 @@ def get_variable_metadata(identifier: str) -> Optional[VariableMetadata]:
     Get variable metadata by API code or NetCDF name.
 
     Args:
-        identifier: API code (e.g., "R") or NetCDF name (e.g., "daily_rain")
+        identifier: API code (e.g., "R",) or NetCDF name (e.g., "daily_rain",)
 
     Returns:
         VariableMetadata or None if not found
@@ -197,7 +264,7 @@ def expand_variable_preset(preset_or_vars: VariableInput) -> list[str]:
         List of NetCDF variable names
 
     Example:
-        >>> expand_variable_preset("daily")
+        >>> expand_variable_preset("daily",)
         ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
         >>> expand_variable_preset(["daily_rain", "max_temp"])
         ['daily_rain', 'max_temp']

@@ -9,7 +9,8 @@
       "Bash(python -c:*)",
       "Bash(uv run python:*)",
       "Bash(timeout 30 uv run:*)",
-      "Skill(superpowers:brainstorming)"
+      "Skill(superpowers:brainstorming)",
+      "Skill(weather_tools_skill)"
     ],
     "deny": [],
     "ask": []
