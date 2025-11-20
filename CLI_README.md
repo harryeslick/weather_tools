@@ -48,12 +48,12 @@ export SILO_API_KEY="your_email@example.com"
 # Query station data
 weather-tools silo patched-point --station 30043 \
     --start-date 20230101 --end-date 20230131 \
-    --var R --var X --output weather.csv
+    --var daily_rain --var max_temp --output weather.csv
 
 # Query gridded data
 weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
     --start-date 20230101 --end-date 20230131 \
-    --var R --output weather.csv
+    --var daily_rain --output weather.csv
 
 # Search for stations
 weather-tools silo search --name Brisbane
@@ -95,7 +95,7 @@ weather-tools silo patched-point [OPTIONS]
 
 **Optional Options:**
 - `--format TEXT` - Output format: csv, json, apsim, standard (auto-detected from filename if not specified)
-- `--var TEXT` - Climate variable codes (can be used multiple times): R, X, N, V, E, J, F, T, A, P, W, L, S, C, H, G, D, M
+- `--var TEXT` - Climate variable names (can be used multiple times): daily_rain, max_temp, min_temp, vp, evap_pan, radiation, etc.
 - `--output, -o TEXT` - Output filename (extension auto-corrected to match format)
 - `--api-key TEXT` - SILO API key (or set SILO_API_KEY env var)  
 - `--enable-cache` - Enable response caching
@@ -114,7 +114,7 @@ File extensions automatically determine output format:
 # Get rainfall and temperature for Brisbane Aero (format auto-detected from .csv)
 weather-tools silo patched-point --station 30043 \
     --start-date 20230101 --end-date 20230131 \
-    --var R --var X --var N --output data.csv
+    --var daily_rain --var max_temp --var min_temp --output data.csv
 
 # Get all variables in APSIM format (auto-detected from .apsim extension)
 weather-tools silo patched-point --station 30043 \
@@ -155,7 +155,7 @@ weather-tools silo data-drill [OPTIONS]
 # Get rainfall for a specific location
 weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
     --start-date 20230101 --end-date 20230131 \
-    --var R --output data.csv
+    --var daily_rain --output data.csv
 
 # Get all variables for a location
 weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
@@ -361,31 +361,31 @@ weather-tools local info --silo-dir /path/to/silo/data
 
 ## Climate Variables
 
-### SILO API Variable Codes
+### SILO Variable Names
 
-When using `silo patched-point` or `silo data-drill`, use these single-letter codes:
+When using `silo patched-point` or `silo data-drill`, use these consistent string names:
 
 **Primary Variables (Observed):**
-- `R` - Daily rainfall (mm)
-- `X` - Maximum temperature (°C)
-- `N` - Minimum temperature (°C)
-- `V` - Vapour pressure (hPa)
-- `E` - Class A pan evaporation (mm)
+- `daily_rain` - Daily rainfall (mm)
+- `max_temp` - Maximum temperature (°C)
+- `min_temp` - Minimum temperature (°C)
+- `vp` - Vapour pressure (hPa)
+- `evap_pan` - Class A pan evaporation (mm)
 
 **Derived Variables:**
-- `J` - Solar radiation (MJ/m²)
-- `F` - FAO56 short crop evapotranspiration (mm)
-- `T` - ASCE tall crop evapotranspiration (mm)
-- `A` - Morton's actual evapotranspiration (mm)
-- `P` - Morton's potential evapotranspiration (mm)
-- `W` - Morton's wet-environment evapotranspiration (mm)
-- `L` - Morton's shallow lake evaporation (mm)
-- `S` - Synthetic evaporation estimate (mm)
-- `C` - Combined evaporation (mm)
-- `H` - Relative humidity at Tmax (%)
-- `G` - Relative humidity at Tmin (%)
-- `D` - Vapour pressure deficit (hPa)
-- `M` - Mean sea level pressure (hPa)
+- `radiation` - Solar radiation (MJ/m²)
+- `et_short_crop` - FAO56 short crop evapotranspiration (mm)
+- `et_tall_crop` - ASCE tall crop evapotranspiration (mm)
+- `et_morton_actual` - Morton's actual evapotranspiration (mm)
+- `et_morton_potential` - Morton's potential evapotranspiration (mm)
+- `et_morton_wet` - Morton's wet-environment evapotranspiration (mm)
+- `evap_morton_lake` - Morton's shallow lake evaporation (mm)
+- `evap_syn` - Synthetic evaporation estimate (mm)
+- `evap_comb` - Combined evaporation (mm)
+- `rh_tmax` - Relative humidity at Tmax (%)
+- `rh_tmin` - Relative humidity at Tmin (%)
+- `vp_deficit` - Vapour pressure deficit (hPa)
+- `mslp` - Mean sea level pressure (hPa)
 
 ### Local File Variable Names
 

@@ -117,7 +117,7 @@ weather-tools silo patched-point [OPTIONS]
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--format` | TEXT | Output format: 'csv', 'json', 'apsim', 'standard' | Auto-detected from output filename |
-| `--variables` | TEXT | Weather variables (can be used multiple times) | All available |
+| `--variables` | TEXT | Weather variables (e.g. daily_rain, max_temp) (can be used multiple times) | All available |
 | `--output` | PATH | Output filename | Required |
 | `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
 
@@ -132,7 +132,7 @@ weather-tools silo patched-point --station 30043 \
 # Query with specific variables
 weather-tools silo patched-point --station 30043 \
     --start-date 20230101 --end-date 20230131 \
-    --variables R --variables X --variables N \
+    --variables daily_rain --variables max_temp --variables min_temp \
     --output station_data.csv
 
 # Auto-detect format from extension

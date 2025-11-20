@@ -13,6 +13,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Atmospheric Science",
     "Environment :: Console",
 ]
+
 requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
@@ -53,8 +54,13 @@ build-backend = "setuptools.build_meta"
 
 
 [tool.ruff]
-line-length = 120
+line-length = 100
 indent-width = 4
+extend-exclude = ["./scratch.py"]
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["I"]  # Enable isort rules
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
