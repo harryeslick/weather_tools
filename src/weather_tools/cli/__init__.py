@@ -33,10 +33,11 @@ def main_callback(
         help="Show version and exit",
         callback=version_callback,
         is_eager=True,
-    )
+    ),
 ):
     """Main callback to handle global options."""
     pass
+
 
 # Register subapps
 app.add_typer(silo_app, name="silo")

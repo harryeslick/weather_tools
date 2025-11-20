@@ -3,6 +3,7 @@ Tests for met.no API client.
 
 Tests API client functionality with mocked responses.
 """
+
 import datetime as dt
 import json
 import logging
@@ -215,7 +216,7 @@ class TestMetNoAPIRequests:
             # First call: timeout, second call: success
             mock_get.side_effect = [
                 requests.exceptions.Timeout("Connection timeout"),
-                Mock(status_code=200, json=lambda: mock_metno_response)
+                Mock(status_code=200, json=lambda: mock_metno_response),
             ]
 
             response = api.query_forecast(query)
@@ -359,9 +360,7 @@ class TestMetNoAPIConvenience:
         from weather_tools.metno_models import MetNoResponse
 
         response = MetNoResponse(
-            raw_data=mock_metno_response,
-            format=MetNoFormat.COMPACT,
-            coordinates=sample_coords
+            raw_data=mock_metno_response, format=MetNoFormat.COMPACT, coordinates=sample_coords
         )
 
         df = api.to_dataframe(response, aggregate_to_daily=True)
@@ -379,9 +378,7 @@ class TestMetNoAPIConvenience:
         from weather_tools.metno_models import MetNoResponse
 
         response = MetNoResponse(
-            raw_data=mock_metno_response,
-            format=MetNoFormat.COMPACT,
-            coordinates=sample_coords
+            raw_data=mock_metno_response, format=MetNoFormat.COMPACT, coordinates=sample_coords
         )
 
         df = api.to_dataframe(response, aggregate_to_daily=False)
@@ -414,11 +411,7 @@ class TestMetNoAPIIntegration:
         api = MetNoAPI()
 
         try:
-            forecasts = api.get_daily_forecast(
-                latitude=-27.5,
-                longitude=153.0,
-                days=3
-            )
+            forecasts = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=3)
             assert len(forecasts) == 3
             assert all(f.date is not None for f in forecasts)
         except Exception as e:

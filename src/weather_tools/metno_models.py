@@ -45,9 +45,12 @@ class MetNoQuery(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
     coordinates: Any = Field(
-        ..., description="Australian coordinates (GDA94). Import AustralianCoordinates from silo_models."
+        ...,
+        description="Australian coordinates (GDA94). Import AustralianCoordinates from silo_models.",
     )
-    format: MetNoFormat = Field(default=MetNoFormat.COMPACT, description="Response format (compact or complete)")
+    format: MetNoFormat = Field(
+        default=MetNoFormat.COMPACT, description="Response format (compact or complete)"
+    )
 
     def to_api_params(self) -> Dict[str, Any]:
         """
@@ -96,7 +99,8 @@ class MetNoResponse(BaseModel):
     format: MetNoFormat = Field(..., description="Response format used (compact or complete)")
     coordinates: Any = Field(..., description="Coordinates for this forecast")
     generated_at: dt.datetime = Field(
-        default_factory=lambda: dt.datetime.now(dt.UTC), description="Timestamp when forecast was retrieved"
+        default_factory=lambda: dt.datetime.now(dt.UTC),
+        description="Timestamp when forecast was retrieved",
     )
 
     def get_timeseries(self) -> List[Dict[str, Any]]:
@@ -172,27 +176,39 @@ class DailyWeatherSummary(BaseModel):
     date: dt.date = Field(..., description="Date for this daily summary")
 
     # Temperature (°C)
-    min_temperature: Optional[float] = Field(None, description="Minimum temperature for the day (°C)")
-    max_temperature: Optional[float] = Field(None, description="Maximum temperature for the day (°C)")
+    min_temperature: Optional[float] = Field(
+        None, description="Minimum temperature for the day (°C)"
+    )
+    max_temperature: Optional[float] = Field(
+        None, description="Maximum temperature for the day (°C)"
+    )
 
     # Precipitation (mm)
-    total_precipitation: Optional[float] = Field(None, description="Total precipitation for the day (mm)")
+    total_precipitation: Optional[float] = Field(
+        None, description="Total precipitation for the day (mm)"
+    )
 
     # Wind (m/s)
     avg_wind_speed: Optional[float] = Field(None, description="Average wind speed (m/s)")
     max_wind_speed: Optional[float] = Field(None, description="Maximum wind speed (m/s)")
 
     # Humidity (%)
-    avg_relative_humidity: Optional[float] = Field(None, description="Average relative humidity (%)")
+    avg_relative_humidity: Optional[float] = Field(
+        None, description="Average relative humidity (%)"
+    )
 
     # Pressure (hPa)
     avg_pressure: Optional[float] = Field(None, description="Average sea level pressure (hPa)")
 
     # Cloud cover (%)
-    avg_cloud_fraction: Optional[float] = Field(None, description="Average cloud cover fraction (%)")
+    avg_cloud_fraction: Optional[float] = Field(
+        None, description="Average cloud cover fraction (%)"
+    )
 
     # Weather condition
-    dominant_weather_symbol: Optional[str] = Field(None, description="Most common or severe weather symbol for the day")
+    dominant_weather_symbol: Optional[str] = Field(
+        None, description="Most common or severe weather symbol for the day"
+    )
 
 
 class MetNoAPIError(Exception):

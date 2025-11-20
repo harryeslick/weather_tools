@@ -34,7 +34,9 @@ def geotiff_download(
             help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.",
         ),
     ] = None,
-    output_dir: Annotated[Optional[Path], typer.Option(help="Output directory for downloaded GeoTIFF files")] = None,
+    output_dir: Annotated[
+        Optional[Path], typer.Option(help="Output directory for downloaded GeoTIFF files")
+    ] = None,
     bbox: Annotated[
         Optional[List[float]],
         typer.Option(
@@ -43,7 +45,9 @@ def geotiff_download(
     ] = None,
     geometry: Annotated[
         Optional[Path],
-        typer.Option(help="Path to GeoJSON file with Polygon for clipping (mutually exclusive with --bbox)"),
+        typer.Option(
+            help="Path to GeoJSON file with Polygon for clipping (mutually exclusive with --bbox)"
+        ),
     ] = None,
     force: Annotated[bool, typer.Option(help="Overwrite existing files")] = False,
 ) -> None:
@@ -96,7 +100,9 @@ def geotiff_download(
     # Validate bbox format
     if bbox is not None:
         if len(bbox) != 4:
-            logger.error("[red]Error: --bbox requires exactly 4 values: min_lon min_lat max_lon max_lat[/red]")
+            logger.error(
+                "[red]Error: --bbox requires exactly 4 values: min_lon min_lat max_lon max_lat[/red]"
+            )
             raise typer.Exit(1)
 
     # Parse dates

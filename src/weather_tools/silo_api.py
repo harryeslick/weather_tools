@@ -4,6 +4,7 @@ SILO API client for Australian climate data.
 This module provides a type-safe, validated interface to the SILO
 (Scientific Information for Land Owners) API using Pydantic models.
 """
+
 import hashlib
 import io
 import json
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 class SiloAPIError(Exception):
     """SILO API error exception."""
+
     pass
 
 
@@ -156,7 +158,9 @@ class SiloAPI:
         # lowest (most verbose) level requested by any active API instance.
         # Since we can't track all instances, we conservatively match this instance's level.
         for handler in root_logger.handlers:
-            if isinstance(handler, logging.Handler) and getattr(handler, "_weather_tools_handler", False):
+            if isinstance(handler, logging.Handler) and getattr(
+                handler, "_weather_tools_handler", False
+            ):
                 # Always update handler to match the current API instance level
                 # This allows users to control verbosity by creating new instances
                 handler.setLevel(self.log_level)
@@ -194,12 +198,16 @@ class SiloAPI:
         last_exception = None
         for attempt in range(self.max_retries):
             try:
-                logger.debug("Making request (attempt %d/%d): %s", attempt + 1, self.max_retries, url)
+                logger.debug(
+                    "Making request (attempt %d/%d): %s", attempt + 1, self.max_retries, url
+                )
                 response = requests.get(url, params=params, timeout=self.timeout)
 
                 # HTTP error handling
                 if response.status_code >= 400:
-                    raise SiloAPIError(f"HTTP {response.status_code}: {response.reason}\n{response.text}")
+                    raise SiloAPIError(
+                        f"HTTP {response.status_code}: {response.reason}\n{response.text}"
+                    )
 
                 # Check for SILO-specific error messages
                 if "Sorry" in response.text or "Request Rejected" in response.text:
@@ -216,7 +224,9 @@ class SiloAPI:
 
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
                 last_exception = e
-                logger.warning("Transient error on attempt %d/%d: %s", attempt + 1, self.max_retries, e)
+                logger.warning(
+                    "Transient error on attempt %d/%d: %s", attempt + 1, self.max_retries, e
+                )
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay * (attempt + 1))  # Exponential backoff
                     continue
@@ -416,7 +426,9 @@ class SiloAPI:
                 "max_rh": ClimateVariable.RH_TMAX,
                 "min_rh": ClimateVariable.RH_TMIN,
             }
-            climate_vars = [var_mapping[var.lower()] for var in variables if var.lower() in var_mapping]
+            climate_vars = [
+                var_mapping[var.lower()] for var in variables if var.lower() in var_mapping
+            ]
             if not climate_vars:
                 raise ValueError(f"No valid variables found. Available: {list(var_mapping.keys())}")
 
@@ -517,7 +529,9 @@ class SiloAPI:
                 "max_rh": ClimateVariable.RH_TMAX,
                 "min_rh": ClimateVariable.RH_TMIN,
             }
-            climate_vars = [var_mapping[var.lower()] for var in variables if var.lower() in var_mapping]
+            climate_vars = [
+                var_mapping[var.lower()] for var in variables if var.lower() in var_mapping
+            ]
             if not climate_vars:
                 raise ValueError(f"No valid variables found. Available: {list(var_mapping.keys())}")
 
@@ -584,7 +598,6 @@ class SiloAPI:
             >>> stations = api.search_stations("Brisbane")
             >>> print(stations[['name', 'station_code', 'latitude', 'longitude']])
         """
-        
 
         if name_fragment:
             name_fragment = name_fragment.replace(" ", "_")
@@ -593,9 +606,13 @@ class SiloAPI:
                 logger.warning("radius_km is ignored when searching by name_fragment")
 
         elif radius_km is not None:
-            query = PatchedPointQuery(format=SiloFormat.NEAR, radius=radius_km, station_code=station_code)
+            query = PatchedPointQuery(
+                format=SiloFormat.NEAR, radius=radius_km, station_code=station_code
+            )
         else:
-            raise ValueError("Either name_fragment or station_code+radius_km must be provided for station search")
+            raise ValueError(
+                "Either name_fragment or station_code+radius_km must be provided for station search"
+            )
 
         # Execute query
         response = self.query_patched_point(query)
@@ -615,9 +632,13 @@ class SiloAPI:
                 if not isinstance(raw_name, str) or not search_fragment:
                     return (0, 0, -(10**6), 0)
 
-                normalized_name = re.sub(r"\([^)]*\)", "", raw_name).replace("_", " ").strip().lower()
+                normalized_name = (
+                    re.sub(r"\([^)]*\)", "", raw_name).replace("_", " ").strip().lower()
+                )
 
-                whole_word_match = 1 if re.search(rf"\b{re.escape(search_fragment)}\b", normalized_name) else 0
+                whole_word_match = (
+                    1 if re.search(rf"\b{re.escape(search_fragment)}\b", normalized_name) else 0
+                )
                 start_index = normalized_name.find(search_fragment)
                 starts_with_fragment = 1 if start_index == 0 else 0
                 position_score = -start_index if start_index >= 0 else -(10**6)
@@ -696,7 +717,10 @@ class SiloAPI:
                 # Use StringIO to read CSV string
                 df = pd.read_csv(io.StringIO(csv_data))
                 metadata = df.metadata.dropna().to_list()
-                metadata = {k.strip(): v.strip() for k, v in (item.split("=") for item in metadata if item and "=" in item)}
+                metadata = {
+                    k.strip(): v.strip()
+                    for k, v in (item.split("=") for item in metadata if item and "=" in item)
+                }
 
                 df["date"] = pd.to_datetime(df["YYYY-MM-DD"], errors="coerce")
                 df = df.drop(columns=["metadata", "YYYY-MM-DD"], errors="ignore")

@@ -210,7 +210,9 @@ def read_cog(
                     (original_width / data.shape[-1]), (original_height / data.shape[-2])
                 )
 
-            profile.update({"height": data.shape[0], "width": data.shape[1], "transform": transform})
+            profile.update(
+                {"height": data.shape[0], "width": data.shape[1], "transform": transform}
+            )
 
             # Apply masking if requested
             if use_mask:
@@ -220,7 +222,9 @@ def read_cog(
                 if geometry is not None:
                     # Use geometry_mask to identify pixels outside the geometry
                     # geometry_mask returns True for pixels OUTSIDE the geometry
-                    geom_mask = geometry_mask([geometry], out_shape=data.shape, transform=transform, invert=False)
+                    geom_mask = geometry_mask(
+                        [geometry], out_shape=data.shape, transform=transform, invert=False
+                    )
                     mask |= geom_mask
 
                 # Also mask nodata values
@@ -410,7 +414,9 @@ def download_geotiffs(
     # Warn about future dates
     today = datetime.date.today()
     if start_date > today:
-        logger.warning(f"[yellow]start_date ({start_date}) is in the future - no data will be available[/yellow]")
+        logger.warning(
+            f"[yellow]start_date ({start_date}) is in the future - no data will be available[/yellow]"
+        )
     elif end_date > today:
         logger.warning(
             f"[yellow]end_date ({end_date}) is in the future - some dates may not have data available[/yellow]"
@@ -441,7 +447,9 @@ def download_geotiffs(
         for date in date_list:
             # Construct URL and destination path
             url = construct_geotiff_daily_url(var_name, date)
-            dest_path = cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
+            dest_path = (
+                cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
+            )
 
             file_paths[var_name].append(dest_path)
             if not dest_path.exists() or force:
@@ -457,7 +465,9 @@ def download_geotiffs(
             progress.update(task_id, description=f"[cyan]Downloading {var_name} {date}...")
 
             try:
-                downloaded = download_geotiff_with_subset(url, dest_path, geometry, overview_level, force, timeout)
+                downloaded = download_geotiff_with_subset(
+                    url, dest_path, geometry, overview_level, force, timeout
+                )
                 if downloaded:
                     downloaded_files[var_name].add(dest_path)
             except SiloGeoTiffError as e:
@@ -471,7 +481,10 @@ def download_geotiffs(
         logger.info(f"  {var_name}: {len(files)} files")
 
     # Return paths to files that exist or were downloaded
-    return {var: [p for p in paths if p.exists() or p in downloaded_files[var]] for var, paths in file_paths.items()}
+    return {
+        var: [p for p in paths if p.exists() or p in downloaded_files[var]]
+        for var, paths in file_paths.items()
+    }
 
 
 def read_geotiff_stack(
@@ -521,7 +534,9 @@ def read_geotiff_stack(
         console = get_console()
 
     # Filter to only existing files
-    existing_file_paths = {var: [p for p in paths if p.exists()] for var, paths in file_paths.items()}
+    existing_file_paths = {
+        var: [p for p in paths if p.exists()] for var, paths in file_paths.items()
+    }
 
     # Filter for complete date sets if requested
     if filter_incomplete_dates and len(existing_file_paths) > 1:

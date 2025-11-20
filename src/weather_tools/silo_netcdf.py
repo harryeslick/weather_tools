@@ -108,7 +108,7 @@ def download_file(
         response.raise_for_status()
 
         # Get total file size
-        total_size = int(response.headers.get('content-length', 0))
+        total_size = int(response.headers.get("content-length", 0))
 
         # Initialize progress task if provided
         if progress and task_id is not None:
@@ -118,7 +118,7 @@ def download_file(
         chunk_size = 8192
         downloaded = 0
 
-        with open(destination, 'wb') as f:
+        with open(destination, "wb") as f:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 if chunk:
                     f.write(chunk)
@@ -193,7 +193,9 @@ def download_netcdf(
 
     current_year = datetime.now().year
     if end_year > current_year:
-        raise ValueError(f"end_year ({end_year}) cannot be in the future (current year: {current_year})")
+        raise ValueError(
+            f"end_year ({end_year}) cannot be in the future (current year: {current_year})"
+        )
 
     # Build download list
     download_tasks = []
@@ -201,7 +203,9 @@ def download_netcdf(
         for year in range(start_year, end_year + 1):
             # Skip years before variable starts
             if year < metadata.start_year:
-                logger.warning(f"[yellow]Skipping {var} for {year} (data starts in {metadata.start_year})[/yellow]")
+                logger.warning(
+                    f"[yellow]Skipping {var} for {year} (data starts in {metadata.start_year})[/yellow]"
+                )
                 continue
 
             url = construct_netcdf_url(var, year)
@@ -224,7 +228,6 @@ def download_netcdf(
     downloaded_files = {var: [] for var in var_list}
 
     with create_download_progress(console=console, show_percentage=False) as progress:
-
         for idx, (var, year, url, dest) in enumerate(download_tasks, 1):
             task_desc = f"[{idx}/{len(download_tasks)}] {var}/{year}.{var}.nc"
             task_id = progress.add_task(task_desc, total=None)
@@ -243,7 +246,9 @@ def download_netcdf(
                     downloaded_files[var].append(dest)
                     progress.update(task_id, description=f"[green]✓[/green] {task_desc}")
                 else:
-                    progress.update(task_id, description=f"[yellow]↷[/yellow] {task_desc} (skipped)")
+                    progress.update(
+                        task_id, description=f"[yellow]↷[/yellow] {task_desc} (skipped)"
+                    )
 
             except SiloNetCDFError as e:
                 progress.update(task_id, description=f"[red]✗[/red] {task_desc}")

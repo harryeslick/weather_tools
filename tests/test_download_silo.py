@@ -4,18 +4,18 @@ These tests document how to construct URLs and validate downloads.
 Most tests use mocks to avoid actual network requests.
 """
 
-from pathlib import Path
 from datetime import datetime
-from unittest.mock import Mock, patch, mock_open
+from pathlib import Path
+from unittest.mock import Mock, mock_open, patch
 
 import pytest
 import requests
 
 from weather_tools.silo_netcdf import (
     construct_netcdf_url,
-    validate_year_for_variable,
     download_file,
     download_netcdf,
+    validate_year_for_variable,
 )
 from weather_tools.silo_variables import SiloNetCDFError
 
@@ -55,7 +55,9 @@ class TestURLConstruction:
         url = construct_netcdf_url("evap_syn", 2021)
 
         # Check URL structure
-        assert url.startswith("https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/")
+        assert url.startswith(
+            "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/annual/"
+        )
         assert "evap_syn/2021.evap_syn.nc" in url
 
 
@@ -183,7 +185,9 @@ class TestDownloadFile:
         dest = tmp_path / "test.nc"
 
         # Mock a network error
-        with patch("requests.get", side_effect=requests.exceptions.ConnectionError("Network error")):
+        with patch(
+            "requests.get", side_effect=requests.exceptions.ConnectionError("Network error")
+        ):
             with pytest.raises(SiloNetCDFError, match="Failed to download"):
                 download_file(
                     url="https://example.com/test.nc",

@@ -22,6 +22,7 @@ local_app = typer.Typer(
     no_args_is_help=True,
 )
 
+
 @local_app.command()
 def extract(
     lat: Annotated[float, typer.Option(help="Latitude coordinate")],
@@ -39,7 +40,9 @@ def extract(
     tolerance: Annotated[
         float, typer.Option(help="Maximum distance (in degrees) for nearest neighbor selection")
     ] = 0.1,
-    keep_location: Annotated[bool, typer.Option(help="Keep location columns (crs, lat, lon) in output CSV")] = False,
+    keep_location: Annotated[
+        bool, typer.Option(help="Keep location columns (crs, lat, lon) in output CSV")
+    ] = False,
 ) -> None:
     """
     Extract weather data from local netCDF files for a specific location and date range.
@@ -161,7 +164,9 @@ def download(
             help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.",
         ),
     ] = None,
-    silo_dir: Annotated[Optional[Path], typer.Option(help="Output directory for downloaded files")] = None,
+    silo_dir: Annotated[
+        Optional[Path], typer.Option(help="Output directory for downloaded files")
+    ] = None,
     force: Annotated[bool, typer.Option(help="Overwrite existing files")] = False,
     timeout: Annotated[int, typer.Option(help="Download timeout in seconds")] = 600,
 ) -> None:
@@ -225,4 +230,3 @@ def download(
     except Exception as e:
         logger.exception(f"[red]❌ Unexpected error: {e}[/red]")
         raise typer.Exit(1)
-

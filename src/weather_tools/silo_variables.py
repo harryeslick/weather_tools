@@ -16,18 +16,22 @@ from pydantic import BaseModel
 # Exception Hierarchy
 # ===========================
 
+
 class SiloDataError(Exception):
     """Base exception for SILO data operations."""
+
     pass
 
 
 class SiloNetCDFError(SiloDataError):
     """NetCDF-specific errors."""
+
     pass
 
 
 class SiloGeoTiffError(SiloDataError):
     """GeoTIFF-specific errors."""
+
     pass
 
 
@@ -49,8 +53,10 @@ DEFAULT_GEOTIFF_TIMEOUT = 300  # Smaller files or COG streaming
 # Variable Metadata
 # ===========================
 
+
 class VariableMetadata(BaseModel):
     """Metadata for a SILO climate variable."""
+
     api_code: Optional[str]  # Single letter code for API (None for monthly_rain)
     netcdf_name: str  # Filename used in NetCDF downloads
     full_name: str  # Human-readable name
@@ -286,8 +292,7 @@ def expand_variable_preset(preset_or_vars: VariableInput) -> list[str]:
 
 
 def validate_silo_s3_variables(
-    variables: VariableInput,
-    error_class: type[Exception] = ValueError
+    variables: VariableInput, error_class: type[Exception] = ValueError
 ) -> dict[str, VariableMetadata]:
     """
     Validate and expand variables, returning metadata map.
@@ -332,8 +337,10 @@ def validate_silo_s3_variables(
 # Met.no to SILO Variable Mapping
 # ===========================
 
+
 class MetNoVariableMapping(BaseModel):
     """Mapping from met.no variable to SILO variable."""
+
     metno_name: str
     silo_name: str
     conversion_func: Optional[str] = None  # Name of conversion function if needed
@@ -343,65 +350,45 @@ class MetNoVariableMapping(BaseModel):
 # Mappings from met.no daily summary fields to SILO column names
 METNO_TO_SILO_MAPPING = {
     # Direct mappings (same units, no conversion needed)
-    "min_temperature": MetNoVariableMapping(
-        metno_name="min_temperature",
-        silo_name="min_temp"
-    ),
-    "max_temperature": MetNoVariableMapping(
-        metno_name="max_temperature",
-        silo_name="max_temp"
-    ),
+    "min_temperature": MetNoVariableMapping(metno_name="min_temperature", silo_name="min_temp"),
+    "max_temperature": MetNoVariableMapping(metno_name="max_temperature", silo_name="max_temp"),
     "total_precipitation": MetNoVariableMapping(
-        metno_name="total_precipitation",
-        silo_name="daily_rain"
+        metno_name="total_precipitation", silo_name="daily_rain"
     ),
-    "avg_pressure": MetNoVariableMapping(
-        metno_name="avg_pressure",
-        silo_name="mslp"
-    ),
-
+    "avg_pressure": MetNoVariableMapping(metno_name="avg_pressure", silo_name="mslp"),
     # Approximate mappings (may need conversion)
     "avg_relative_humidity": MetNoVariableMapping(
         metno_name="avg_relative_humidity",
         silo_name="vp",
         conversion_func="rh_to_vapor_pressure",
-        requires_other_vars=["min_temperature", "max_temperature"]
+        requires_other_vars=["min_temperature", "max_temperature"],
     ),
-
     # Met.no only variables (no SILO equivalent)
-    "avg_wind_speed": MetNoVariableMapping(
-        metno_name="avg_wind_speed",
-        silo_name="wind_speed"
-    ),
-    "max_wind_speed": MetNoVariableMapping(
-        metno_name="max_wind_speed",
-        silo_name="wind_speed_max"
-    ),
+    "avg_wind_speed": MetNoVariableMapping(metno_name="avg_wind_speed", silo_name="wind_speed"),
+    "max_wind_speed": MetNoVariableMapping(metno_name="max_wind_speed", silo_name="wind_speed_max"),
     "avg_cloud_fraction": MetNoVariableMapping(
-        metno_name="avg_cloud_fraction",
-        silo_name="cloud_fraction"
+        metno_name="avg_cloud_fraction", silo_name="cloud_fraction"
     ),
     "dominant_weather_symbol": MetNoVariableMapping(
-        metno_name="dominant_weather_symbol",
-        silo_name="weather_symbol"
+        metno_name="dominant_weather_symbol", silo_name="weather_symbol"
     ),
 }
 
 # SILO variables that have no met.no equivalent
 SILO_ONLY_VARIABLES = [
-    "evap_pan",      # E - Class A pan evaporation
-    "evap_syn",      # S - Synthetic evaporation
-    "evap_comb",     # C - Combination evaporation
-    "radiation",     # J - Solar radiation (met.no has UV, not global radiation)
-    "vp_deficit",    # D - Vapor pressure deficit
-    "rh_tmax",       # H - RH at time of max temp
-    "rh_tmin",       # G - RH at time of min temp
-    "et_short_crop", # F - FAO56 ET
+    "evap_pan",  # E - Class A pan evaporation
+    "evap_syn",  # S - Synthetic evaporation
+    "evap_comb",  # C - Combination evaporation
+    "radiation",  # J - Solar radiation (met.no has UV, not global radiation)
+    "vp_deficit",  # D - Vapor pressure deficit
+    "rh_tmax",  # H - RH at time of max temp
+    "rh_tmin",  # G - RH at time of min temp
+    "et_short_crop",  # F - FAO56 ET
     "et_tall_crop",  # T - ASCE tall crop ET
-    "et_morton_actual",     # A
+    "et_morton_actual",  # A
     "et_morton_potential",  # P
-    "et_morton_wet",        # W
-    "evap_morton_lake",     # L
+    "et_morton_wet",  # W
+    "evap_morton_lake",  # L
 ]
 
 
@@ -452,7 +439,12 @@ def convert_metno_to_silo_columns(df, include_extra: bool = False) -> dict:
             mapping = METNO_TO_SILO_MAPPING[metno_col]
 
             # Skip met.no-only variables unless requested
-            if not include_extra and mapping.silo_name in ["wind_speed", "wind_speed_max", "cloud_fraction", "weather_symbol"]:
+            if not include_extra and mapping.silo_name in [
+                "wind_speed",
+                "wind_speed_max",
+                "cloud_fraction",
+                "weather_symbol",
+            ]:
                 continue
 
             column_mapping[metno_col] = mapping.silo_name

@@ -86,9 +86,13 @@ def merge_historical_and_forecast(
     logger.info(f"Auto-detected transition date: {transition_date}")
 
     # Validation checks
-    is_valid, issues = validate_merge_compatibility(silo_df, metno_df, transition_date, overlap_strategy)
+    is_valid, issues = validate_merge_compatibility(
+        silo_df, metno_df, transition_date, overlap_strategy
+    )
     if not is_valid:
-        raise MergeValidationError("Merge validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues))
+        raise MergeValidationError(
+            "Merge validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues)
+        )
 
     if overlap_strategy == "prefer_silo":
         # Remove overlapping dates from met.no data
@@ -97,7 +101,9 @@ def merge_historical_and_forecast(
         # Remove overlapping dates from SILO data
         silo_df = silo_df[~silo_df["date"].isin(metno_df["date"])]
     else:
-        raise ValueError(f"Invalid overlap_strategy: {overlap_strategy}. Must be 'prefer_silo', 'prefer_metno', ")
+        raise ValueError(
+            f"Invalid overlap_strategy: {overlap_strategy}. Must be 'prefer_silo', 'prefer_metno', "
+        )
 
     # Convert met.no columns to SILO format if needed
     metno_df = prepare_metno_for_merge(metno_df, silo_df)
@@ -141,12 +147,17 @@ def merge_historical_and_forecast(
     elif return_cols == "all":
         pass
     else:
-        raise ValueError(f"Invalid return_cols value: {return_cols}. Must be 'all', 'silo_only', or 'metno_only'.")
+        raise ValueError(
+            f"Invalid return_cols value: {return_cols}. Must be 'all', 'silo_only', or 'metno_only'."
+        )
     return merged_df
 
 
 def validate_merge_compatibility(
-    silo_data: pd.DataFrame, metno_data: pd.DataFrame, transition_date: pd.Timestamp, overlap_strategy: str
+    silo_data: pd.DataFrame,
+    metno_data: pd.DataFrame,
+    transition_date: pd.Timestamp,
+    overlap_strategy: str,
 ) -> Tuple[bool, List[str]]:
     """
     Validate that SILO and met.no data can be safely merged.
@@ -243,7 +254,8 @@ def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame) -> pd
             metno_df["vp"] = metno_df.apply(
                 lambda row: rh_to_vapor_pressure(
                     row["avg_relative_humidity"],
-                    (row["min_temperature"] + row.get("max_temperature", row["min_temperature"])) / 2,
+                    (row["min_temperature"] + row.get("max_temperature", row["min_temperature"]))
+                    / 2,
                 )
                 if pd.notna(row.get("avg_relative_humidity"))
                 else np.nan,
@@ -253,7 +265,9 @@ def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame) -> pd
     return metno_df
 
 
-def validate_date_continuity(df1: pd.DataFrame, df2: pd.DataFrame, max_gap_days: int = 1) -> Tuple[bool, Optional[str]]:
+def validate_date_continuity(
+    df1: pd.DataFrame, df2: pd.DataFrame, max_gap_days: int = 1
+) -> Tuple[bool, Optional[str]]:
     """
     Check for date gaps between two DataFrames.
 
@@ -279,7 +293,9 @@ def validate_date_continuity(df1: pd.DataFrame, df2: pd.DataFrame, max_gap_days:
         )
     elif gap_days < 0:
         overlap_days = abs(gap_days) + 1
-        return False, (f"Overlap of {overlap_days} days between datasets. Use overlap_strategy parameter to resolve")
+        return False, (
+            f"Overlap of {overlap_days} days between datasets. Use overlap_strategy parameter to resolve"
+        )
 
     return True, None
 

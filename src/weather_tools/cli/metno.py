@@ -24,6 +24,7 @@ metno_app = typer.Typer(
     no_args_is_help=True,
 )
 
+
 @metno_app.command()
 def forecast(
     lat: Annotated[float, typer.Option(help="Latitude coordinate (-9 to -44 for Australia)")],
@@ -31,7 +32,9 @@ def forecast(
     days: Annotated[int, typer.Option(help="Number of forecast days (1-9)")] = 7,
     output: Annotated[Optional[str], typer.Option(help="Output CSV filename (optional)")] = None,
     format_silo: Annotated[bool, typer.Option(help="Convert to SILO column names")] = True,
-    user_agent: Annotated[Optional[str], typer.Option(help="Custom User-Agent for met.no API")] = None,
+    user_agent: Annotated[
+        Optional[str], typer.Option(help="Custom User-Agent for met.no API")
+    ] = None,
 ) -> None:
     """
     Get met.no weather forecast for an Australian location.
@@ -51,13 +54,17 @@ def forecast(
             logger.error("[red]❌ Error: days must be between 1 and 9[/red]")
             raise typer.Exit(1)
 
-        logger.info(f"[cyan]📡 Fetching met.no forecast for {coords.latitude}, {coords.longitude}...[/cyan]")
+        logger.info(
+            f"[cyan]📡 Fetching met.no forecast for {coords.latitude}, {coords.longitude}...[/cyan]"
+        )
 
         # Create API client
         api = MetNoAPI(user_agent=user_agent)
 
         # Get daily forecast
-        daily_forecasts = api.get_daily_forecast(latitude=coords.latitude, longitude=coords.longitude, days=days)
+        daily_forecasts = api.get_daily_forecast(
+            latitude=coords.latitude, longitude=coords.longitude, days=days
+        )
 
         logger.info(f"[green]✓ Retrieved {len(daily_forecasts)} days of forecast data[/green]")
 
@@ -66,7 +73,10 @@ def forecast(
 
         if format_silo:
             # Rename columns to SILO format
-            from weather_tools.silo_variables import add_silo_date_columns, convert_metno_to_silo_columns
+            from weather_tools.silo_variables import (
+                add_silo_date_columns,
+                convert_metno_to_silo_columns,
+            )
 
             column_mapping = convert_metno_to_silo_columns(forecast_df, include_extra=False)
             forecast_df = forecast_df.rename(columns=column_mapping)
@@ -103,12 +113,23 @@ def merge(
     end_date: Annotated[str, typer.Option(help="Historical data end date (YYYY-MM-DD)")],
     output: Annotated[str, typer.Option(help="Output CSV filename")],
     forecast_days: Annotated[int, typer.Option(help="Number of forecast days to append (1-9)")] = 7,
-    api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
-    fill_missing: Annotated[bool, typer.Option(help="Fill missing SILO variables with estimates")] = False,
-    enable_cache: Annotated[bool, typer.Option(help="Enable response caching for SILO API")] = False,
-    user_agent: Annotated[Optional[str], typer.Option(help="Custom User-Agent for met.no API")] = None,
+    api_key: Annotated[
+        Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
+    ] = None,
+    fill_missing: Annotated[
+        bool, typer.Option(help="Fill missing SILO variables with estimates")
+    ] = False,
+    enable_cache: Annotated[
+        bool, typer.Option(help="Enable response caching for SILO API")
+    ] = False,
+    user_agent: Annotated[
+        Optional[str], typer.Option(help="Custom User-Agent for met.no API")
+    ] = None,
     log_level: Annotated[
-        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+        str,
+        typer.Option(
+            "--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)"
+        ),
     ] = "INFO",
 ) -> None:
     """
@@ -132,7 +153,9 @@ def merge(
             raise typer.Exit(1)
 
         # Step 1: Get SILO historical data via DataDrill API
-        logger.info(f"[cyan]📡 Querying SILO DataDrill API from {start_date} to {end_date}...[/cyan]")
+        logger.info(
+            f"[cyan]📡 Querying SILO DataDrill API from {start_date} to {end_date}...[/cyan]"
+        )
 
         # Convert dates from YYYY-MM-DD to YYYYMMDD format for SILO API
         silo_start = pd.to_datetime(start_date).strftime("%Y%m%d")
@@ -181,7 +204,9 @@ def merge(
         logger.info(f"  • Total records: {summary['total_records']}")
         logger.info(f"  • SILO records: {summary['silo_records']}")
         logger.info(f"  • met.no records: {summary['metno_records']}")
-        logger.info(f"  • Date range: {summary['date_range']['start'].date()} to {summary['date_range']['end'].date()}")
+        logger.info(
+            f"  • Date range: {summary['date_range']['start'].date()} to {summary['date_range']['end'].date()}"
+        )
         logger.info(f"  • Transition date: {summary['transition_date'].date()}")
 
         # Save to CSV

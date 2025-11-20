@@ -99,8 +99,12 @@ class SiloDateRange(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    start_date: str = Field(..., pattern=r"^\d{8}$", description="Start date in YYYYMMDD format (e.g., '20230101')")
-    end_date: str = Field(..., pattern=r"^\d{8}$", description="End date in YYYYMMDD format (e.g., '20230131')")
+    start_date: str = Field(
+        ..., pattern=r"^\d{8}$", description="Start date in YYYYMMDD format (e.g., '20230101')"
+    )
+    end_date: str = Field(
+        ..., pattern=r"^\d{8}$", description="End date in YYYYMMDD format (e.g., '20230131')"
+    )
 
     @field_validator("start_date", "end_date")
     @classmethod
@@ -124,7 +128,9 @@ class SiloDateRange(BaseModel):
     def validate_date_order(self) -> "SiloDateRange":
         """Ensure start_date is before or equal to end_date."""
         if self.start_date > self.end_date:
-            raise ValueError(f"start_date ({self.start_date}) must be before or equal to end_date ({self.end_date})")
+            raise ValueError(
+                f"start_date ({self.start_date}) must be before or equal to end_date ({self.end_date})"
+            )
         return self
 
 
@@ -136,8 +142,12 @@ class AustralianCoordinates(BaseModel):
     Longitude: 113°E to 154°E (positive for eastern hemisphere)
     """
 
-    latitude: float = Field(..., ge=-44.0, le=-10.0, description="Latitude in decimal degrees (South is negative)")
-    longitude: float = Field(..., ge=113.0, le=154.0, description="Longitude in decimal degrees (East is positive)")
+    latitude: float = Field(
+        ..., ge=-44.0, le=-10.0, description="Latitude in decimal degrees (South is negative)"
+    )
+    longitude: float = Field(
+        ..., ge=113.0, le=154.0, description="Longitude in decimal degrees (East is positive)"
+    )
 
 
 class BaseSiloQuery(BaseModel):
@@ -187,9 +197,13 @@ class PatchedPointQuery(BaseSiloQuery):
 
     dataset: SiloDataset = Field(default=SiloDataset.PATCHED_POINT, frozen=True)
     station_code: Optional[str] = Field(
-        default=None, pattern=r"^\d{4,6}$", description="BOM station number (e.g., '30043' for Brisbane Aero)"
+        default=None,
+        pattern=r"^\d{4,6}$",
+        description="BOM station number (e.g., '30043' for Brisbane Aero)",
     )
-    date_range: Optional[SiloDateRange] = Field(default=None, description="Date range for data queries")
+    date_range: Optional[SiloDateRange] = Field(
+        default=None, description="Date range for data queries"
+    )
     radius: Optional[float] = Field(
         default=None, ge=1.0, le=5000.0, description="Search radius in km (for 'near' format)"
     )
@@ -335,7 +349,9 @@ class SiloResponse(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    raw_data: Union[str, Dict[str, Any]] = Field(..., description="Raw response data (CSV string or JSON dict)")
+    raw_data: Union[str, Dict[str, Any]] = Field(
+        ..., description="Raw response data (CSV string or JSON dict)"
+    )
     format: SiloFormat = Field(..., description="Response format")
     dataset: SiloDataset = Field(..., description="Dataset type")
 

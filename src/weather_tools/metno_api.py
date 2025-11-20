@@ -149,7 +149,9 @@ class MetNoAPI:
         # lowest (most verbose) level requested by any active API instance.
         # Since we can't track all instances, we conservatively match this instance's level.
         for handler in root_logger.handlers:
-            if isinstance(handler, logging.Handler) and getattr(handler, "_weather_tools_handler", False):
+            if isinstance(handler, logging.Handler) and getattr(
+                handler, "_weather_tools_handler", False
+            ):
                 # Always update handler to match the current API instance level
                 # This allows users to control verbosity by creating new instances
                 handler.setLevel(self.log_level)
@@ -202,7 +204,9 @@ class MetNoAPI:
         last_exception = None
         for attempt in range(self.max_retries):
             try:
-                logger.debug("Making request (attempt %d/%d): %s", attempt + 1, self.max_retries, url)
+                logger.debug(
+                    "Making request (attempt %d/%d): %s", attempt + 1, self.max_retries, url
+                )
                 response = requests.get(url, params=params, headers=headers, timeout=self.timeout)
 
                 # Handle specific HTTP errors
@@ -217,7 +221,9 @@ class MetNoAPI:
                         "Met.no API rate limit exceeded. Please wait before making more requests."
                     )
                 elif response.status_code >= 400:
-                    raise MetNoAPIError(f"HTTP {response.status_code}: {response.reason}\n{response.text}")
+                    raise MetNoAPIError(
+                        f"HTTP {response.status_code}: {response.reason}\n{response.text}"
+                    )
 
                 # Cache successful response
                 if self.enable_cache and self._cache is not None:
@@ -230,7 +236,9 @@ class MetNoAPI:
 
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
                 last_exception = e
-                logger.warning("Transient error on attempt %d/%d: %s", attempt + 1, self.max_retries, e)
+                logger.warning(
+                    "Transient error on attempt %d/%d: %s", attempt + 1, self.max_retries, e
+                )
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (2**attempt)  # Exponential backoff
                     time.sleep(wait_time)
@@ -387,15 +395,17 @@ class MetNoAPI:
         df = df.set_index("time")
 
         # Define aggregations for each variable
-        aggregated = df.resample(freq).agg({
-            "air_temperature": ["min", "max"],
-            "precipitation_amount": "sum",
-            "wind_speed": ["mean", "max"],
-            "relative_humidity": "mean",
-            "air_pressure_at_sea_level": "mean",
-            "cloud_area_fraction": "mean",
-            "symbol_code": lambda x: self._get_dominant_symbol(x.dropna().tolist()),
-        })
+        aggregated = df.resample(freq).agg(
+            {
+                "air_temperature": ["min", "max"],
+                "precipitation_amount": "sum",
+                "wind_speed": ["mean", "max"],
+                "relative_humidity": "mean",
+                "air_pressure_at_sea_level": "mean",
+                "cloud_area_fraction": "mean",
+                "symbol_code": lambda x: self._get_dominant_symbol(x.dropna().tolist()),
+            }
+        )
 
         # Flatten multi-level column names
         aggregated.columns = ["_".join(col).strip("_") for col in aggregated.columns]
@@ -465,7 +475,10 @@ class MetNoAPI:
 
     # TODO confirm if metno timezones are handled correctly, else add timezone support. output should match SILO timezone.
     def to_dataframe(
-        self, response: MetNoResponse, frequency: str = "daily", aggregate_to_daily: Optional[bool] = None
+        self,
+        response: MetNoResponse,
+        frequency: str = "daily",
+        aggregate_to_daily: Optional[bool] = None,
     ) -> pd.DataFrame:
         """
         Convert met.no response to pandas DataFrame with flexible aggregation.

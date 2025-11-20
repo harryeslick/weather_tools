@@ -16,7 +16,7 @@ def read_cog(cog_url, aoi):
     """
     with rasterio.open(cog_url) as src:
         profile = src.profile
-        assert profile["crs"].to_string() == 'EPSG:4326', 'The CRS is not EPSG:4326'
+        assert profile["crs"].to_string() == "EPSG:4326", "The CRS is not EPSG:4326"
         window = geometry_window(src, [aoi])
 
         # Read the data including the nodata mask
@@ -24,31 +24,29 @@ def read_cog(cog_url, aoi):
 
         # Calculate the new affine transformation
         window_transform = src.window_transform(window)
-        profile.update(width=window.width,
-                        height=window.height,
-                        transform=window_transform
-                        )
+        profile.update(width=window.width, height=window.height, transform=window_transform)
     return data, profile
 
 
 def create_cog_url(variable, date: datetime.date):
     """creates a SILO COG URL for a given variable and date"""
     base_url = "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/"
-    product_suffix = f"{variable}/{date.year}/{date.strftime("%Y%m%d")}.{variable}.tif"
-    cog_url = base_url+product_suffix
+    product_suffix = f"{variable}/{date.year}/{date.strftime('%Y%m%d')}.{variable}.tif"
+    cog_url = base_url + product_suffix
     return cog_url
 
 
-def read_cog_arrays(startdate,
-                    enddate,
-                    aoi,
-                    variables =[
-                        "daily_rain",
-                        "max_temp",
-                        "min_temp",
-                        "evap_pan",
-                        ],
-                    ):
+def read_cog_arrays(
+    startdate,
+    enddate,
+    aoi,
+    variables=[
+        "daily_rain",
+        "max_temp",
+        "min_temp",
+        "evap_pan",
+    ],
+):
     """
     Read a sequence of COG weather files from SILO for a given date range and list of variables
 
@@ -61,9 +59,10 @@ def read_cog_arrays(startdate,
     Returns:
         dict of numpy arrays, keys == variables
     """
-    date_sequence = [startdate + datetime.timedelta(days=x) for x in range((enddate - startdate).days + 1)]
-    assert len(date_sequence) <365, "More than 365 days requested, are you sure?"
-
+    date_sequence = [
+        startdate + datetime.timedelta(days=x) for x in range((enddate - startdate).days + 1)
+    ]
+    assert len(date_sequence) < 365, "More than 365 days requested, are you sure?"
 
     all_grids = {}
     for variable in variables:

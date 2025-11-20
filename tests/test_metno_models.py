@@ -3,16 +3,18 @@ Tests for met.no API Pydantic models.
 
 Tests validation, serialization, and model methods for met.no API interaction.
 """
-import pytest
+
 import datetime as dt
+
+import pytest
 from pydantic import ValidationError
 
 from weather_tools.metno_models import (
+    DailyWeatherSummary,
+    ForecastTimestamp,
     MetNoFormat,
     MetNoQuery,
     MetNoResponse,
-    ForecastTimestamp,
-    DailyWeatherSummary,
 )
 from weather_tools.silo_models import AustralianCoordinates
 
@@ -91,22 +93,15 @@ class TestMetNoResponse:
                         "time": "2023-01-15T12:00:00Z",
                         "data": {
                             "instant": {
-                                "details": {
-                                    "air_temperature": 25.0,
-                                    "relative_humidity": 70.0
-                                }
+                                "details": {"air_temperature": 25.0, "relative_humidity": 70.0}
                             }
-                        }
+                        },
                     }
-                ]
-            }
+                ],
+            },
         }
 
-        response = MetNoResponse(
-            raw_data=raw_data,
-            format=MetNoFormat.COMPACT,
-            coordinates=coords
-        )
+        response = MetNoResponse(raw_data=raw_data, format=MetNoFormat.COMPACT, coordinates=coords)
 
         assert response.format == MetNoFormat.COMPACT
         assert response.coordinates.latitude == -27.5
@@ -120,17 +115,9 @@ class TestMetNoResponse:
             {"time": "2023-01-15T13:00:00Z", "data": {}},
         ]
 
-        raw_data = {
-            "properties": {
-                "timeseries": timeseries_data
-            }
-        }
+        raw_data = {"properties": {"timeseries": timeseries_data}}
 
-        response = MetNoResponse(
-            raw_data=raw_data,
-            format=MetNoFormat.COMPACT,
-            coordinates=coords
-        )
+        response = MetNoResponse(raw_data=raw_data, format=MetNoFormat.COMPACT, coordinates=coords)
 
         timeseries = response.get_timeseries()
         assert len(timeseries) == 2
@@ -141,11 +128,7 @@ class TestMetNoResponse:
         coords = AustralianCoordinates(latitude=-27.5, longitude=153.0)
         raw_data = {"properties": {}}
 
-        response = MetNoResponse(
-            raw_data=raw_data,
-            format=MetNoFormat.COMPACT,
-            coordinates=coords
-        )
+        response = MetNoResponse(raw_data=raw_data, format=MetNoFormat.COMPACT, coordinates=coords)
 
         timeseries = response.get_timeseries()
         assert timeseries == []
@@ -155,17 +138,9 @@ class TestMetNoResponse:
         coords = AustralianCoordinates(latitude=-27.5, longitude=153.0)
         meta_data = {"updated_at": "2023-01-15T12:00:00Z", "units": {}}
 
-        raw_data = {
-            "properties": {
-                "meta": meta_data
-            }
-        }
+        raw_data = {"properties": {"meta": meta_data}}
 
-        response = MetNoResponse(
-            raw_data=raw_data,
-            format=MetNoFormat.COMPACT,
-            coordinates=coords
-        )
+        response = MetNoResponse(raw_data=raw_data, format=MetNoFormat.COMPACT, coordinates=coords)
 
         meta = response.get_meta()
         assert meta["updated_at"] == "2023-01-15T12:00:00Z"
@@ -182,7 +157,7 @@ class TestForecastTimestamp:
             relative_humidity=70.0,
             wind_speed=5.5,
             precipitation_amount=2.5,
-            precipitation_period_hours=6
+            precipitation_period_hours=6,
         )
 
         assert timestamp.time == dt.datetime(2023, 1, 15, 12, 0, 0)
@@ -194,9 +169,7 @@ class TestForecastTimestamp:
 
     def test_timestamp_with_optional_fields(self):
         """Test creating timestamp with only required fields."""
-        timestamp = ForecastTimestamp(
-            time=dt.datetime(2023, 1, 15, 12, 0, 0)
-        )
+        timestamp = ForecastTimestamp(time=dt.datetime(2023, 1, 15, 12, 0, 0))
 
         assert timestamp.time == dt.datetime(2023, 1, 15, 12, 0, 0)
         assert timestamp.air_temperature is None
@@ -215,7 +188,7 @@ class TestForecastTimestamp:
             air_pressure_at_sea_level=1013.25,
             precipitation_amount=2.5,
             precipitation_period_hours=6,
-            weather_symbol="cloudy"
+            weather_symbol="cloudy",
         )
 
         assert timestamp.wind_from_direction == 180.0
@@ -233,7 +206,7 @@ class TestDailyWeatherSummary:
             date=dt.date(2023, 1, 15),
             min_temperature=18.5,
             max_temperature=28.3,
-            total_precipitation=5.2
+            total_precipitation=5.2,
         )
 
         assert summary.date == dt.date(2023, 1, 15)
@@ -253,7 +226,7 @@ class TestDailyWeatherSummary:
             avg_relative_humidity=75.0,
             avg_pressure=1013.25,
             avg_cloud_fraction=60.0,
-            dominant_weather_symbol="partlycloudy_day"
+            dominant_weather_symbol="partlycloudy_day",
         )
 
         assert summary.avg_wind_speed == 4.2
@@ -275,9 +248,7 @@ class TestDailyWeatherSummary:
     def test_summary_temperature_validation(self):
         """Test that temperatures can be negative (winter conditions)."""
         summary = DailyWeatherSummary(
-            date=dt.date(2023, 7, 15),
-            min_temperature=-5.0,
-            max_temperature=2.0
+            date=dt.date(2023, 7, 15), min_temperature=-5.0, max_temperature=2.0
         )
 
         assert summary.min_temperature == -5.0
@@ -285,9 +256,6 @@ class TestDailyWeatherSummary:
 
     def test_summary_zero_precipitation(self):
         """Test that zero precipitation is valid."""
-        summary = DailyWeatherSummary(
-            date=dt.date(2023, 1, 15),
-            total_precipitation=0.0
-        )
+        summary = DailyWeatherSummary(date=dt.date(2023, 1, 15), total_precipitation=0.0)
 
         assert summary.total_precipitation == 0.0

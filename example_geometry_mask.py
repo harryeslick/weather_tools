@@ -6,8 +6,10 @@ outside a specific geometry when reading SILO Cloud-Optimized GeoTIFF files.
 """
 
 import datetime
+
 from shapely.geometry import Point, box
-from weather_tools.silo_geotiff import read_cog, construct_geotiff_daily_url
+
+from weather_tools.silo_geotiff import construct_geotiff_daily_url, read_cog
 
 # Example 1: Read data for a point with masking enabled (default)
 print("Example 1: Point geometry with masking")

@@ -3,18 +3,20 @@ Tests for met.no to SILO variable mapping functions.
 
 Tests variable conversions and format transformations.
 """
-import pytest
-import pandas as pd
+
 import datetime as dt
 
+import pandas as pd
+import pytest
+
 from weather_tools.silo_variables import (
-    MetNoVariableMapping,
     METNO_TO_SILO_MAPPING,
     SILO_ONLY_VARIABLES,
-    rh_to_vapor_pressure,
+    MetNoVariableMapping,
+    add_silo_date_columns,
     convert_metno_to_silo_columns,
     get_silo_column_order,
-    add_silo_date_columns,
+    rh_to_vapor_pressure,
 )
 
 
@@ -23,10 +25,7 @@ class TestMetNoVariableMapping:
 
     def test_simple_mapping_creation(self):
         """Test creating simple variable mapping."""
-        mapping = MetNoVariableMapping(
-            metno_name="min_temperature",
-            silo_name="min_temp"
-        )
+        mapping = MetNoVariableMapping(metno_name="min_temperature", silo_name="min_temp")
 
         assert mapping.metno_name == "min_temperature"
         assert mapping.silo_name == "min_temp"
@@ -39,7 +38,7 @@ class TestMetNoVariableMapping:
             metno_name="avg_relative_humidity",
             silo_name="vp",
             conversion_func="rh_to_vapor_pressure",
-            requires_other_vars=["min_temperature", "max_temperature"]
+            requires_other_vars=["min_temperature", "max_temperature"],
         )
 
         assert mapping.conversion_func == "rh_to_vapor_pressure"
@@ -145,12 +144,14 @@ class TestColumnConversion:
 
     def test_convert_basic_columns(self):
         """Test converting basic met.no columns."""
-        df = pd.DataFrame({
-            "date": [dt.date(2023, 1, 1)],
-            "min_temperature": [18.5],
-            "max_temperature": [28.3],
-            "total_precipitation": [5.2]
-        })
+        df = pd.DataFrame(
+            {
+                "date": [dt.date(2023, 1, 1)],
+                "min_temperature": [18.5],
+                "max_temperature": [28.3],
+                "total_precipitation": [5.2],
+            }
+        )
 
         mapping = convert_metno_to_silo_columns(df, include_extra=False)
 
@@ -161,12 +162,14 @@ class TestColumnConversion:
 
     def test_convert_with_extra_columns(self):
         """Test converting with met.no-only columns."""
-        df = pd.DataFrame({
-            "date": [dt.date(2023, 1, 1)],
-            "min_temperature": [18.5],
-            "avg_wind_speed": [4.2],
-            "avg_cloud_fraction": [60.0]
-        })
+        df = pd.DataFrame(
+            {
+                "date": [dt.date(2023, 1, 1)],
+                "min_temperature": [18.5],
+                "avg_wind_speed": [4.2],
+                "avg_cloud_fraction": [60.0],
+            }
+        )
 
         mapping = convert_metno_to_silo_columns(df, include_extra=True)
 
@@ -177,11 +180,9 @@ class TestColumnConversion:
 
     def test_convert_exclude_extra_columns(self):
         """Test excluding met.no-only columns."""
-        df = pd.DataFrame({
-            "date": [dt.date(2023, 1, 1)],
-            "min_temperature": [18.5],
-            "avg_wind_speed": [4.2]
-        })
+        df = pd.DataFrame(
+            {"date": [dt.date(2023, 1, 1)], "min_temperature": [18.5], "avg_wind_speed": [4.2]}
+        )
 
         mapping = convert_metno_to_silo_columns(df, include_extra=False)
 
@@ -222,10 +223,9 @@ class TestAddSiloDateColumns:
 
     def test_add_date_columns(self):
         """Test adding day and year columns."""
-        df = pd.DataFrame({
-            "date": [dt.date(2023, 1, 15), dt.date(2023, 6, 30)],
-            "min_temp": [18.5, 12.0]
-        })
+        df = pd.DataFrame(
+            {"date": [dt.date(2023, 1, 15), dt.date(2023, 6, 30)], "min_temp": [18.5, 12.0]}
+        )
 
         result = add_silo_date_columns(df)
 
@@ -237,11 +237,7 @@ class TestAddSiloDateColumns:
 
     def test_add_date_columns_preserves_data(self):
         """Test that adding date columns doesn't modify original data."""
-        df = pd.DataFrame({
-            "date": [dt.date(2023, 1, 15)],
-            "min_temp": [18.5],
-            "max_temp": [28.3]
-        })
+        df = pd.DataFrame({"date": [dt.date(2023, 1, 15)], "min_temp": [18.5], "max_temp": [28.3]})
 
         result = add_silo_date_columns(df)
 
@@ -252,10 +248,7 @@ class TestAddSiloDateColumns:
 
     def test_add_date_columns_handles_string_dates(self):
         """Test conversion of string dates."""
-        df = pd.DataFrame({
-            "date": ["2023-01-15", "2023-12-31"],
-            "min_temp": [18.5, 20.0]
-        })
+        df = pd.DataFrame({"date": ["2023-01-15", "2023-12-31"], "min_temp": [18.5, 20.0]})
 
         result = add_silo_date_columns(df)
 
@@ -266,10 +259,7 @@ class TestAddSiloDateColumns:
 
     def test_add_date_columns_no_date_column(self):
         """Test behavior when date column is missing."""
-        df = pd.DataFrame({
-            "min_temp": [18.5],
-            "max_temp": [28.3]
-        })
+        df = pd.DataFrame({"min_temp": [18.5], "max_temp": [28.3]})
 
         result = add_silo_date_columns(df)
 
@@ -284,13 +274,15 @@ class TestIntegratedConversion:
     def test_full_metno_to_silo_conversion(self):
         """Test complete conversion from met.no to SILO format."""
         # Create met.no daily summary DataFrame
-        metno_df = pd.DataFrame({
-            "date": [dt.date(2023, 1, 15), dt.date(2023, 1, 16)],
-            "min_temperature": [18.5, 19.0],
-            "max_temperature": [28.3, 29.5],
-            "total_precipitation": [5.2, 0.0],
-            "avg_pressure": [1013.2, 1012.5]
-        })
+        metno_df = pd.DataFrame(
+            {
+                "date": [dt.date(2023, 1, 15), dt.date(2023, 1, 16)],
+                "min_temperature": [18.5, 19.0],
+                "max_temperature": [28.3, 29.5],
+                "total_precipitation": [5.2, 0.0],
+                "avg_pressure": [1013.2, 1012.5],
+            }
+        )
 
         # Get column mapping
         mapping = convert_metno_to_silo_columns(metno_df, include_extra=False)

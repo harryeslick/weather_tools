@@ -24,7 +24,13 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-__all__ = ["get_console", "configure_logging", "get_package_logger", "resolve_log_level", "create_download_progress"]
+__all__ = [
+    "get_console",
+    "configure_logging",
+    "get_package_logger",
+    "resolve_log_level",
+    "create_download_progress",
+]
 
 _LEVEL_MAP = {
     "CRITICAL": logging.CRITICAL,
@@ -98,10 +104,7 @@ def configure_logging(
 
     # Remove any existing non-RichHandler handlers to avoid duplicate output
     # This can happen if other packages add their own handlers to the root logger
-    handlers_to_remove = [
-        h for h in root_logger.handlers
-        if not isinstance(h, RichHandler)
-    ]
+    handlers_to_remove = [h for h in root_logger.handlers if not isinstance(h, RichHandler)]
     for handler in handlers_to_remove:
         root_logger.removeHandler(handler)
 
@@ -140,8 +143,7 @@ def get_package_logger() -> logging.Logger:
 
 
 def create_download_progress(
-    console: Console | None = None,
-    show_percentage: bool = False
+    console: Console | None = None, show_percentage: bool = False
 ) -> Progress:
     """Create standardized progress bar for downloads.
 
@@ -170,10 +172,12 @@ def create_download_progress(
     if show_percentage:
         columns.append(TextColumn("[progress.percentage]{task.percentage:>3.0f}%"))
 
-    columns.extend([
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-    ])
+    columns.extend(
+        [
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            TimeRemainingColumn(),
+        ]
+    )
 
     return Progress(*columns, console=console or get_console())

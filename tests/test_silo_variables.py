@@ -6,12 +6,12 @@ These tests document how to use the variable registry and preset system.
 import pytest
 
 from weather_tools.silo_variables import (
-    SILO_VARIABLES,
-    NETCDF_TO_API,
     API_TO_NETCDF,
+    NETCDF_TO_API,
+    SILO_VARIABLES,
     VARIABLE_PRESETS,
-    get_variable_metadata,
     expand_variable_preset,
+    get_variable_metadata,
 )
 
 

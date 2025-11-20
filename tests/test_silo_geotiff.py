@@ -16,12 +16,12 @@ from weather_tools.silo_geotiff import (
     SiloGeoTiffError,
     construct_geotiff_daily_url,
     construct_geotiff_monthly_url,
-    download_geotiff,
-    download_geotiffs,
-    read_geotiff_stack,
     download_and_read_geotiffs,
+    download_geotiff,
     download_geotiff_with_subset,
+    download_geotiffs,
     read_cog,
+    read_geotiff_stack,
 )
 
 
@@ -82,7 +82,9 @@ class TestURLConstruction:
         url = construct_geotiff_daily_url("evap_syn", datetime.date(2023, 7, 15))
 
         # Check URL structure
-        assert url.startswith("https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/")
+        assert url.startswith(
+            "https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/"
+        )
         assert "evap_syn/2023/20230715.evap_syn.tif" in url
 
 
@@ -117,7 +119,9 @@ class TestReadCOG:
 
         with patch("rasterio.open", return_value=mock_src):
             with patch("weather_tools.silo_geotiff.geometry_window", return_value=mock_window):
-                data, profile = read_cog("https://example.com/test.tif", geometry=point, use_mask=False)
+                data, profile = read_cog(
+                    "https://example.com/test.tif", geometry=point, use_mask=False
+                )
 
         # Check that data was returned
         assert isinstance(data, np.ndarray)
@@ -178,7 +182,9 @@ class TestReadCOG:
 
         with patch("rasterio.open", return_value=mock_src):
             with patch("weather_tools.silo_geotiff.geometry_window", return_value=mock_window):
-                data, profile = read_cog("https://example.com/test.tif", geometry=point, use_mask=True)
+                data, profile = read_cog(
+                    "https://example.com/test.tif", geometry=point, use_mask=True
+                )
 
         # Check that data is masked
         assert isinstance(data, np.ma.MaskedArray)
@@ -201,7 +207,12 @@ class TestReadCOG:
         mock_src = MagicMock()
         mock_src.crs.to_string.return_value = "EPSG:4326"
         mock_src.nodata = -999
-        mock_src.profile = {"driver": "GTiff", "height": 100, "width": 100, "transform": "mock_transform"}
+        mock_src.profile = {
+            "driver": "GTiff",
+            "height": 100,
+            "width": 100,
+            "transform": "mock_transform",
+        }
         mock_src.__enter__ = Mock(return_value=mock_src)
         mock_src.__exit__ = Mock(return_value=False)
 
@@ -225,7 +236,9 @@ class TestDownloadGeoTiffWithSubset:
         dest = tmp_path / "test.tif"
         dest.write_text("existing data")
 
-        result = download_geotiff_with_subset(url="https://example.com/test.tif", destination=dest, force=False)
+        result = download_geotiff_with_subset(
+            url="https://example.com/test.tif", destination=dest, force=False
+        )
 
         assert result is False
         assert dest.read_text() == "existing data"
@@ -274,7 +287,9 @@ class TestDownloadGeoTiffWithSubset:
         mock_response.raise_for_status = Mock(side_effect=http_error)
 
         with patch("requests.get", return_value=mock_response):
-            result = download_geotiff_with_subset(url="https://example.com/missing.tif", destination=dest)
+            result = download_geotiff_with_subset(
+                url="https://example.com/missing.tif", destination=dest
+            )
 
         # 404 should return False, not raise
         assert result is False
@@ -385,7 +400,9 @@ class TestDownloadGeoTiffRange:
                 raise SiloGeoTiffError("Simulated failure")
             return True
 
-        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", side_effect=mock_download):
+        with patch(
+            "weather_tools.silo_geotiff.download_geotiff_with_subset", side_effect=mock_download
+        ):
             result = download_geotiff(
                 variables=["daily_rain"],
                 start_date=datetime.date(2023, 1, 1),

@@ -43,14 +43,19 @@ silo_app = typer.Typer(
     no_args_is_help=True,
 )
 
+
 @silo_app.command(name="patched-point")
 def silo_patched_point(
-    station: Annotated[str, typer.Option(help="BOM station code (e.g., '30043' for Brisbane Aero)")],
+    station: Annotated[
+        str, typer.Option(help="BOM station code (e.g., '30043' for Brisbane Aero)")
+    ],
     start_date: Annotated[str, typer.Option(help="Start date in YYYYMMDD format")],
     end_date: Annotated[str, typer.Option(help="End date in YYYYMMDD format")],
     format: Annotated[
         Optional[str],
-        typer.Option(help="Output format: csv, json, apsim, standard (auto-detected from filename if not specified)"),
+        typer.Option(
+            help="Output format: csv, json, apsim, standard (auto-detected from filename if not specified)"
+        ),
     ] = None,
     variables: Annotated[
         Optional[List[str]],
@@ -60,10 +65,15 @@ def silo_patched_point(
         ),
     ] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
-    api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
+    api_key: Annotated[
+        Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
+    ] = None,
     enable_cache: Annotated[bool, typer.Option(help="Enable response caching")] = False,
     log_level: Annotated[
-        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+        str,
+        typer.Option(
+            "--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)"
+        ),
     ] = "INFO",
 ) -> None:
     """
@@ -124,7 +134,10 @@ def silo_patched_point(
 
     # Validate format
     if format not in valid_formats:
-        typer.echo(f"❌ Error: Invalid format '{format}'. Valid formats: {', '.join(valid_formats)}", err=True)
+        typer.echo(
+            f"❌ Error: Invalid format '{format}'. Valid formats: {', '.join(valid_formats)}",
+            err=True,
+        )
         typer.echo("   Use 'weather-tools silo search' for station search operations", err=True)
         raise typer.Exit(1)
 
@@ -242,7 +255,9 @@ def silo_data_drill(
     longitude: Annotated[float, typer.Option(help="Longitude in decimal degrees (113 to 154)")],
     start_date: Annotated[str, typer.Option(help="Start date in YYYYMMDD format")],
     end_date: Annotated[str, typer.Option(help="End date in YYYYMMDD format")],
-    format: Annotated[str, typer.Option(help="Output format: csv, json, apsim, alldata, standard")] = "csv",
+    format: Annotated[
+        str, typer.Option(help="Output format: csv, json, apsim, alldata, standard")
+    ] = "csv",
     variables: Annotated[
         Optional[List[str]],
         typer.Option(
@@ -251,10 +266,15 @@ def silo_data_drill(
         ),
     ] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
-    api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
+    api_key: Annotated[
+        Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
+    ] = None,
     enable_cache: Annotated[bool, typer.Option(help="Enable response caching")] = False,
     log_level: Annotated[
-        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+        str,
+        typer.Option(
+            "--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)"
+        ),
     ] = "INFO",
 ) -> None:
     """
@@ -377,18 +397,29 @@ def silo_data_drill(
 
 @silo_app.command(name="search")
 def silo_search(
-    name: Annotated[Optional[str], typer.Option(help="Search for stations by name fragment (e.g., 'Brisbane')")] = None,
-    station: Annotated[Optional[str], typer.Option(help="Station code for nearby search or details lookup")] = None,
-    radius: Annotated[Optional[int], typer.Option(help="Search radius in km (for nearby search)")] = None,
+    name: Annotated[
+        Optional[str], typer.Option(help="Search for stations by name fragment (e.g., 'Brisbane')")
+    ] = None,
+    station: Annotated[
+        Optional[str], typer.Option(help="Station code for nearby search or details lookup")
+    ] = None,
+    radius: Annotated[
+        Optional[int], typer.Option(help="Search radius in km (for nearby search)")
+    ] = None,
     state: Annotated[
         Optional[Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"]],
         typer.Option(help="Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT)"),
     ] = None,
     details: Annotated[bool, typer.Option(help="Get detailed info for a specific station")] = False,
-    api_key: Annotated[Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")] = None,
+    api_key: Annotated[
+        Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
+    ] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     log_level: Annotated[
-        str, typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)")
+        str,
+        typer.Option(
+            "--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)"
+        ),
     ] = "INFO",
 ) -> None:
     """

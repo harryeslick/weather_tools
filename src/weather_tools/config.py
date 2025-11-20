@@ -24,7 +24,7 @@ def get_silo_data_dir() -> Path:
         >>> os.environ['SILO_DATA_DIR'] = '/custom/path'
         >>> dir_path = get_silo_data_dir()
     """
-    env_dir = os.environ.get('SILO_DATA_DIR')
+    env_dir = os.environ.get("SILO_DATA_DIR")
     if env_dir:
         return Path(env_dir).expanduser()
     return Path.home() / "DATA" / "silo_grids"

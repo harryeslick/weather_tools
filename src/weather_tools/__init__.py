@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 __version__ = "0.0.2"
@@ -6,6 +5,14 @@ __version__ = "0.0.2"
 from weather_tools.cli import main as cli_main
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_api import SiloAPI, SiloAPIError
+from weather_tools.silo_geotiff import (
+    construct_geotiff_daily_url,
+    construct_geotiff_monthly_url,
+    download_and_read_geotiffs,
+    download_geotiff,
+    download_geotiffs,
+    read_geotiff_stack,
+)
 from weather_tools.silo_models import (
     AustralianCoordinates,
     ClimateVariable,
@@ -16,26 +23,18 @@ from weather_tools.silo_models import (
     SiloFormat,
     SiloResponse,
 )
+from weather_tools.silo_netcdf import download_netcdf
 from weather_tools.silo_variables import (
-    SILO_VARIABLES,
-    NETCDF_TO_API,
     API_TO_NETCDF,
+    NETCDF_TO_API,
+    SILO_VARIABLES,
     VARIABLE_PRESETS,
     SiloDataError,
-    SiloNetCDFError,
     SiloGeoTiffError,
-    get_variable_metadata,
+    SiloNetCDFError,
     expand_variable_preset,
+    get_variable_metadata,
     validate_silo_s3_variables,
-)
-from weather_tools.silo_netcdf import download_netcdf
-from weather_tools.silo_geotiff import (
-    download_geotiff,
-    download_geotiffs,
-    read_geotiff_stack,
-    download_and_read_geotiffs,
-    construct_geotiff_daily_url,
-    construct_geotiff_monthly_url,
 )
 
 __all__ = [
