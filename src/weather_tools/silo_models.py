@@ -127,7 +127,7 @@ class BaseSiloQuery(BaseModel):
         """Validate that all variable names exist in SILO registry."""
         if v is None:
             return v
-        invalid = [name for name in v if name not in SILO]
+        invalid = [name for name in v if name not in VARIABLES]
         if invalid:
             valid_names = ", ".join(sorted(VARIABLES.keys()))
             raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")

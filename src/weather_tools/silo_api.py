@@ -409,7 +409,7 @@ class SiloAPI:
             variables = ["daily_rain", "max_temp", "min_temp", "evap_pan", "radiation", "vp"]
 
         # Validate variables exist in registry
-        invalid = [v for v in variables if v not in SILO]
+        invalid = [v for v in variables if v not in VARIABLES]
         if invalid:
             valid_names = ", ".join(sorted(VARIABLES.keys()))
             raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")
@@ -495,7 +495,7 @@ class SiloAPI:
             variables = ["daily_rain", "max_temp", "min_temp", "evap_pan", "radiation", "vp"]
 
         # Validate variables exist in registry
-        invalid = [v for v in variables if v not in SILO]
+        invalid = [v for v in variables if v not in VARIABLES]
         if invalid:
             valid_names = ", ".join(sorted(VARIABLES.keys()))
             raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")

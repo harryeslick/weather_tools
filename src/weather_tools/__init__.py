@@ -24,7 +24,6 @@ from weather_tools.silo_models import (
 )
 from weather_tools.silo_netcdf import download_netcdf
 from weather_tools.silo_variables import (
-    API_TO_NETCDF,
     SILO_VARIABLES,
     VARIABLE_PRESETS,
     VARIABLES,
