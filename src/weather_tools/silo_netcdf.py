@@ -18,11 +18,18 @@ from weather_tools.logging_utils import create_download_progress, get_console
 from weather_tools.silo_variables import (
     DEFAULT_NETCDF_TIMEOUT,
     SILO_NETCDF_BASE_URL,
+    VARIABLES,
     SiloNetCDFError,
     VariableInput,
-    get_variable_metadata,
-    validate_silo_s3_variables,
 )
+
+# SILO NetCDF data availability start years
+# Most variables start in 1889, but some have later start dates
+SILO_NETCDF_START_YEARS: dict[str, int] = {
+    "mslp": 1957,  # Mean sea level pressure
+    "evap_pan": 1970,  # Class A pan evaporation
+}
+SILO_DEFAULT_START_YEAR = 1889
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +53,11 @@ def construct_netcdf_url(variable: str, year: int) -> str:
     return f"{SILO_NETCDF_BASE_URL}/{variable}/{filename}"
 
 
+def get_netcdf_start_year(variable: str) -> int:
+    """Get the start year for a SILO NetCDF variable."""
+    return SILO_NETCDF_START_YEARS.get(variable, SILO_DEFAULT_START_YEAR)
+
+
 def validate_year_for_variable(variable: str, year: int) -> bool:
     """
     Check if a year is valid for a given variable.
@@ -57,12 +69,13 @@ def validate_year_for_variable(variable: str, year: int) -> bool:
     Returns:
         True if valid, False otherwise
     """
-    metadata = get_variable_metadata(variable)
-    if metadata is None:
+    # Check variable exists in registry
+    if variable not in VARIABLES:
         return False
 
+    start_year = get_netcdf_start_year(variable)
     current_year = datetime.now().year
-    return metadata.start_year <= year <= current_year
+    return start_year <= year <= current_year
 
 
 def download_file(
@@ -185,7 +198,7 @@ def download_netcdf(
         console = get_console()
 
     # Validate variables and get metadata
-    metadata_map = validate_silo_s3_variables(variables, ValueError)
+    metadata_map = VARIABLES.validate(variables, ValueError)
 
     # Validate year range
     if start_year > end_year:
@@ -200,11 +213,12 @@ def download_netcdf(
     # Build download list
     download_tasks = []
     for var, metadata in metadata_map.items():
+        var_start_year = get_netcdf_start_year(var)
         for year in range(start_year, end_year + 1):
             # Skip years before variable starts
-            if year < metadata.start_year:
+            if year < var_start_year:
                 logger.warning(
-                    f"[yellow]Skipping {var} for {year} (data starts in {metadata.start_year})[/yellow]"
+                    f"[yellow]Skipping {var} for {year} (data starts in {var_start_year})[/yellow]"
                 )
                 continue
 

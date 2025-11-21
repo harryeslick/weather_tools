@@ -31,6 +31,7 @@ from weather_tools.silo_models import (
     SiloFormat,
     SiloResponse,
 )
+from weather_tools.silo_variables import VARIABLES
 
 SILO_BASE_URL = "https://www.longpaddock.qld.gov.au/cgi-bin/silo/"
 
@@ -380,9 +381,8 @@ class SiloAPI:
             station_code: Bureau of Meteorology station code (e.g., "30043")
             start_date: Start date in format "YYYYMMDD" (e.g., "20230101")
             end_date: End date in format "YYYYMMDD" (e.g., "20231231")
-            variables: List of climate variables. If None, gets all available variables.
-                      Options: "rainfall", "max_temp", "min_temp", "evaporation",
-                      "radiation", "vapour_pressure", "max_rh", "min_rh"
+            variables: List of canonical variable names from SILO registry (e.g., "daily_rain", "max_temp").
+                      If None, gets common variables: daily_rain, max_temp, min_temp, evap_pan, radiation, vp
             format: Response format, default "csv"
             return_metadata: If True, returns tuple of (DataFrame, metadata dict)
 
@@ -391,7 +391,7 @@ class SiloAPI:
 
         Example:
             >>> api = SiloAPI()
-            >>> df = api.get_patched_point("30043", "20230101", "20230131", ["rainfall", "max_temp"])
+            >>> df = api.get_patched_point("30043", "20230101", "20230131", ["daily_rain", "max_temp"])
             >>> print(df.head())
             >>>
             >>> # With metadata
@@ -399,38 +399,20 @@ class SiloAPI:
             ...                                       return_metadata=True)
         """
         from weather_tools.silo_models import (
-            ClimateVariable,
             PatchedPointQuery,
             SiloDateRange,
             SiloFormat,
         )
 
-        # Convert string variables to ClimateVariable enum
+        # Default variables if none specified
         if variables is None:
-            climate_vars = [
-                ClimateVariable.RAINFALL,
-                ClimateVariable.MAX_TEMP,
-                ClimateVariable.MIN_TEMP,
-                ClimateVariable.EVAPORATION,
-                ClimateVariable.SOLAR_RADIATION,
-                ClimateVariable.VAPOUR_PRESSURE,
-            ]
-        else:
-            var_mapping = {
-                "rainfall": ClimateVariable.RAINFALL,
-                "max_temp": ClimateVariable.MAX_TEMP,
-                "min_temp": ClimateVariable.MIN_TEMP,
-                "evaporation": ClimateVariable.EVAPORATION,
-                "radiation": ClimateVariable.SOLAR_RADIATION,
-                "vapour_pressure": ClimateVariable.VAPOUR_PRESSURE,
-                "max_rh": ClimateVariable.RH_TMAX,
-                "min_rh": ClimateVariable.RH_TMIN,
-            }
-            climate_vars = [
-                var_mapping[var.lower()] for var in variables if var.lower() in var_mapping
-            ]
-            if not climate_vars:
-                raise ValueError(f"No valid variables found. Available: {list(var_mapping.keys())}")
+            variables = ["daily_rain", "max_temp", "min_temp", "evap_pan", "radiation", "vp"]
+
+        # Validate variables exist in registry
+        invalid = [v for v in variables if v not in SILO]
+        if invalid:
+            valid_names = ", ".join(sorted(VARIABLES.keys()))
+            raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")
 
         # Convert format string to SiloFormat enum
         format_mapping = {
@@ -440,11 +422,11 @@ class SiloAPI:
         }
         silo_format = format_mapping.get(format.lower(), SiloFormat.CSV)
 
-        # Create query
+        # Create query with canonical variable names
         query = PatchedPointQuery(
             station_code=station_code,
             date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-            values=climate_vars,
+            variables=variables,
             format=silo_format,
         )
 
@@ -458,7 +440,7 @@ class SiloAPI:
             metadata = {
                 "station_code": station_code,
                 "date_range": {"start": start_date, "end": end_date},
-                "variables": variables or [var.value for var in climate_vars],
+                "variables": variables,
                 "format": format,
                 "dataset": "PatchedPoint",
             }
@@ -488,7 +470,8 @@ class SiloAPI:
             longitude: Longitude in decimal degrees (e.g., 151.0)
             start_date: Start date in format "YYYYMMDD" (e.g., "20230101")
             end_date: End date in format "YYYYMMDD" (e.g., "20231231")
-            variables: List of climate variables. If None, gets all available variables.
+            variables: List of canonical variable names from SILO registry (e.g., "daily_rain", "max_temp").
+                      If None, gets common variables: daily_rain, max_temp, min_temp, evap_pan, radiation, vp
             format: Response format, default "csv"
             return_metadata: If True, returns tuple of (DataFrame, metadata dict)
 
@@ -497,43 +480,25 @@ class SiloAPI:
 
         Example:
             >>> api = SiloAPI()
-            >>> df = api.get_data_drill(-27.5, 151.0, "20230101", "20230131", ["rainfall"])
+            >>> df = api.get_data_drill(-27.5, 151.0, "20230101", "20230131", ["daily_rain"])
             >>> print(df.head())
         """
         from weather_tools.silo_models import (
             AustralianCoordinates,
-            ClimateVariable,
             DataDrillQuery,
             SiloDateRange,
             SiloFormat,
         )
 
-        # Convert string variables to ClimateVariable enum (same as above)
+        # Default variables if none specified
         if variables is None:
-            climate_vars = [
-                ClimateVariable.RAINFALL,
-                ClimateVariable.MAX_TEMP,
-                ClimateVariable.MIN_TEMP,
-                ClimateVariable.EVAPORATION,
-                ClimateVariable.SOLAR_RADIATION,
-                ClimateVariable.VAPOUR_PRESSURE,
-            ]
-        else:
-            var_mapping = {
-                "rainfall": ClimateVariable.RAINFALL,
-                "max_temp": ClimateVariable.MAX_TEMP,
-                "min_temp": ClimateVariable.MIN_TEMP,
-                "evaporation": ClimateVariable.EVAPORATION,
-                "radiation": ClimateVariable.SOLAR_RADIATION,
-                "vapour_pressure": ClimateVariable.VAPOUR_PRESSURE,
-                "max_rh": ClimateVariable.RH_TMAX,
-                "min_rh": ClimateVariable.RH_TMIN,
-            }
-            climate_vars = [
-                var_mapping[var.lower()] for var in variables if var.lower() in var_mapping
-            ]
-            if not climate_vars:
-                raise ValueError(f"No valid variables found. Available: {list(var_mapping.keys())}")
+            variables = ["daily_rain", "max_temp", "min_temp", "evap_pan", "radiation", "vp"]
+
+        # Validate variables exist in registry
+        invalid = [v for v in variables if v not in SILO]
+        if invalid:
+            valid_names = ", ".join(sorted(VARIABLES.keys()))
+            raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")
 
         # Convert format string to SiloFormat enum
         format_mapping = {
@@ -543,11 +508,11 @@ class SiloAPI:
         }
         silo_format = format_mapping.get(format.lower(), SiloFormat.CSV)
 
-        # Create query
+        # Create query with canonical variable names
         query = DataDrillQuery(
             coordinates=AustralianCoordinates(latitude=latitude, longitude=longitude),
             date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-            values=climate_vars,
+            variables=variables,
             format=silo_format,
         )
 
@@ -562,12 +527,11 @@ class SiloAPI:
             {
                 "coordinates": {"latitude": latitude, "longitude": longitude},
                 "date_range": {"start": start_date, "end": end_date},
-                "variables": variables or [var.value for var in climate_vars],
+                "variables": variables,
                 "format": format,
                 "dataset": "DataDrill",
             }
         )
-        # df.drop(columns=["metadata"], inplace=True, errors="ignore")
         df.loc[0, "metadata"] = json.dumps(metadata)
 
         if return_metadata:

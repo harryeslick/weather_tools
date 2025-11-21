@@ -9,93 +9,88 @@ import datetime as dt
 import pandas as pd
 import pytest
 
+from weather_tools.cli.metno import add_silo_date_columns
 from weather_tools.silo_variables import (
-    METNO_TO_SILO_MAPPING,
-    SILO_ONLY_VARIABLES,
-    MetNoVariableMapping,
-    add_silo_date_columns,
+    VARIABLES,
     convert_metno_to_silo_columns,
-    get_silo_column_order,
-    rh_to_vapor_pressure,
 )
+from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
 
-class TestMetNoVariableMapping:
-    """Test MetNoVariableMapping model."""
-
-    def test_simple_mapping_creation(self):
-        """Test creating simple variable mapping."""
-        mapping = MetNoVariableMapping(metno_name="min_temperature", silo_name="min_temp")
-
-        assert mapping.metno_name == "min_temperature"
-        assert mapping.silo_name == "min_temp"
-        assert mapping.conversion_func is None
-        assert mapping.requires_other_vars is None
-
-    def test_mapping_with_conversion(self):
-        """Test mapping with conversion function."""
-        mapping = MetNoVariableMapping(
-            metno_name="avg_relative_humidity",
-            silo_name="vp",
-            conversion_func="rh_to_vapor_pressure",
-            requires_other_vars=["min_temperature", "max_temperature"],
-        )
-
-        assert mapping.conversion_func == "rh_to_vapor_pressure"
-        assert len(mapping.requires_other_vars) == 2
-
-
-class TestMetNoToSiloMappingRegistry:
-    """Test mapping registry constants."""
-
-    def test_mapping_registry_exists(self):
-        """Test that mapping registry is defined."""
-        assert METNO_TO_SILO_MAPPING is not None
-        assert isinstance(METNO_TO_SILO_MAPPING, dict)
+class TestVariableRegistryMetnoMappings:
+    """Test met.no mappings in unified VariableRegistry."""
 
     def test_direct_temperature_mappings(self):
         """Test temperature variable mappings."""
-        assert "min_temperature" in METNO_TO_SILO_MAPPING
-        assert "max_temperature" in METNO_TO_SILO_MAPPING
+        assert VARIABLES.has_metno_mapping("min_temperature")
+        assert VARIABLES.has_metno_mapping("max_temperature")
 
-        assert METNO_TO_SILO_MAPPING["min_temperature"].silo_name == "min_temp"
-        assert METNO_TO_SILO_MAPPING["max_temperature"].silo_name == "max_temp"
+        assert VARIABLES.name_from_metno("min_temperature") == "min_temp"
+        assert VARIABLES.name_from_metno("max_temperature") == "max_temp"
 
     def test_direct_precipitation_mapping(self):
         """Test precipitation mapping."""
-        assert "total_precipitation" in METNO_TO_SILO_MAPPING
-        assert METNO_TO_SILO_MAPPING["total_precipitation"].silo_name == "daily_rain"
+        assert VARIABLES.has_metno_mapping("total_precipitation")
+        assert VARIABLES.name_from_metno("total_precipitation") == "daily_rain"
 
     def test_pressure_mapping(self):
         """Test pressure mapping."""
-        assert "avg_pressure" in METNO_TO_SILO_MAPPING
-        assert METNO_TO_SILO_MAPPING["avg_pressure"].silo_name == "mslp"
+        assert VARIABLES.has_metno_mapping("avg_pressure")
+        assert VARIABLES.name_from_metno("avg_pressure") == "mslp"
 
-    def test_humidity_mapping_requires_conversion(self):
-        """Test humidity mapping requires conversion."""
-        assert "avg_relative_humidity" in METNO_TO_SILO_MAPPING
-        mapping = METNO_TO_SILO_MAPPING["avg_relative_humidity"]
+    def test_humidity_mapping(self):
+        """Test humidity mapping to vapour pressure."""
+        assert VARIABLES.has_metno_mapping("avg_relative_humidity")
+        canonical = VARIABLES.name_from_metno("avg_relative_humidity")
+        assert canonical == "vp"
 
-        assert mapping.silo_name == "vp"
-        assert mapping.conversion_func == "rh_to_vapor_pressure"
-        assert mapping.requires_other_vars is not None
+        # Verify the vp variable metadata
+        meta = VARIABLES[canonical]
+        assert meta.units == "hPa"
+        assert meta.full_name == "Vapour pressure"
 
     def test_metno_only_variables(self):
-        """Test met.no-only variables."""
-        assert "avg_wind_speed" in METNO_TO_SILO_MAPPING
-        assert "max_wind_speed" in METNO_TO_SILO_MAPPING
-        assert "avg_cloud_fraction" in METNO_TO_SILO_MAPPING
+        """Test met.no-only variables are in registry."""
+        assert VARIABLES.has_metno_mapping("avg_wind_speed")
+        assert VARIABLES.has_metno_mapping("max_wind_speed")
+        assert VARIABLES.has_metno_mapping("avg_cloud_fraction")
 
-    def test_silo_only_variables_list(self):
-        """Test SILO-only variables list."""
-        assert isinstance(SILO_ONLY_VARIABLES, list)
-        assert len(SILO_ONLY_VARIABLES) > 0
+        # Verify they map to canonical names
+        assert VARIABLES.name_from_metno("avg_wind_speed") == "wind_speed"
+        assert VARIABLES.name_from_metno("max_wind_speed") == "wind_speed_max"
+        assert VARIABLES.name_from_metno("avg_cloud_fraction") == "cloud_fraction"
 
-        # Check some known SILO-only variables
-        assert "evap_pan" in SILO_ONLY_VARIABLES
-        assert "evap_syn" in SILO_ONLY_VARIABLES
-        assert "radiation" in SILO_ONLY_VARIABLES
-        assert "et_short_crop" in SILO_ONLY_VARIABLES
+    def test_metno_only_flag(self):
+        """Test metno_only flag on variables."""
+        assert VARIABLES["wind_speed"].metno_only is True
+        assert VARIABLES["wind_speed_max"].metno_only is True
+        assert VARIABLES["cloud_fraction"].metno_only is True
+        assert VARIABLES["weather_symbol"].metno_only is True
+
+        # SILO variables should not have metno_only flag
+        assert VARIABLES["daily_rain"].metno_only is False
+        assert VARIABLES["max_temp"].metno_only is False
+
+    def test_metno_only_variables_method(self):
+        """Test metno_only_variables method."""
+        metno_only = VARIABLES.metno_only_variables()
+        assert "wind_speed" in metno_only
+        assert "wind_speed_max" in metno_only
+        assert "cloud_fraction" in metno_only
+        assert "weather_symbol" in metno_only
+
+        # SILO variables should not be in this list
+        assert "daily_rain" not in metno_only
+        assert "max_temp" not in metno_only
+
+    def test_silo_variables_method(self):
+        """Test silo_variables method."""
+        silo_vars = VARIABLES.silo_variables()
+        assert "daily_rain" in silo_vars
+        assert "max_temp" in silo_vars
+
+        # Met.no-only should not be in this list
+        assert "wind_speed" not in silo_vars
 
 
 class TestRelativeHumidityConversion:
@@ -188,34 +183,6 @@ class TestColumnConversion:
 
         assert "avg_wind_speed" not in mapping
         assert "min_temperature" in mapping
-
-
-class TestSiloColumnOrder:
-    """Test SILO column ordering."""
-
-    def test_get_silo_column_order(self):
-        """Test getting standard SILO column order."""
-        columns = get_silo_column_order()
-
-        assert isinstance(columns, list)
-        assert len(columns) > 0
-
-        # Check specific order
-        assert columns[0] == "date"
-        assert columns[1] == "day"
-        assert columns[2] == "year"
-
-        # Check key variables present
-        assert "daily_rain" in columns
-        assert "max_temp" in columns
-        assert "min_temp" in columns
-        assert "mslp" in columns
-
-    def test_silo_column_order_unique(self):
-        """Test that column order has no duplicates."""
-        columns = get_silo_column_order()
-
-        assert len(columns) == len(set(columns))
 
 
 class TestAddSiloDateColumns:

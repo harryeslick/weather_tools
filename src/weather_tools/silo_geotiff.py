@@ -29,10 +29,9 @@ from weather_tools.logging_utils import configure_logging, create_download_progr
 from weather_tools.silo_variables import (
     DEFAULT_GEOTIFF_TIMEOUT,
     SILO_GEOTIFF_BASE_URL,
+    VARIABLES,
     SiloGeoTiffError,
     VariableInput,
-    get_variable_metadata,
-    validate_silo_s3_variables,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,11 +92,11 @@ def construct_geotiff_daily_url(variable: str, date: datetime.date) -> str:
         'https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/daily_rain/2023/20230115.daily_rain.tif'
     """
     # Validate variable
-    metadata = get_variable_metadata(variable)
-    if metadata is None:
+    if variable not in VARIABLES:
         raise ValueError(f"Unknown variable: {variable}")
 
-    var_name = metadata.netcdf_name
+    metadata = VARIABLES[variable]
+    var_name = metadata.netcdf_name or variable
     year = date.year
     date_str = date.strftime("%Y%m%d")
 
@@ -124,11 +123,11 @@ def construct_geotiff_monthly_url(variable: str, year: int, month: int) -> str:
         'https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/monthly/monthly_rain/2023/202303.monthly_rain.tif'
     """
     # Validate variable
-    metadata = get_variable_metadata(variable)
-    if metadata is None:
+    if variable not in VARIABLES:
         raise ValueError(f"Unknown variable: {variable}")
 
-    var_name = metadata.netcdf_name
+    metadata = VARIABLES[variable]
+    var_name = metadata.netcdf_name or variable
     date_str = f"{year:04d}{month:02d}"
 
     return f"{SILO_GEOTIFF_BASE_URL}/monthly/{var_name}/{year}/{date_str}.{var_name}.tif"
@@ -426,7 +425,7 @@ def download_geotiffs(
     date_list = _generate_date_range(start_date, end_date)
 
     # Validate variables and get metadata
-    metadata_map = validate_silo_s3_variables(variables, ValueError)
+    metadata_map = VARIABLES.validate(variables, ValueError)
 
     # Determine cache directory
     if save_to_disk:

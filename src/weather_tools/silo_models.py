@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from weather_tools.silo_variables import VARIABLES
+
 
 class SiloDataset(str, Enum):
     """SILO dataset types."""
@@ -41,53 +43,6 @@ class SiloFormat(str, Enum):
     NEAR = "near"
     NAME = "name"
     ID = "id"
-
-
-class ClimateVariable(str, Enum):
-    """
-    SILO climate variable codes.
-
-    Primary variables (observed):
-    - R: Daily rainfall
-    - X: Maximum temperature
-    - N: Minimum temperature
-    - V: Vapour pressure
-    - E: Class A pan evaporation
-
-    Derived variables:
-    - J: Solar radiation
-    - F: FAO56 short crop ET
-    - T: ASCE tall crop ET
-    - A: Morton's actual ET
-    - P: Morton's potential ET
-    - W: Morton's wet-environment ET
-    - L: Morton's shallow lake evaporation
-    - S: Synthetic evaporation estimate
-    - C: Combined evaporation
-    - H: Relative humidity at Tmax
-    - G: Relative humidity at Tmin
-    - D: Vapour pressure deficit
-    - M: Mean sea level pressure
-    """
-
-    RAINFALL = "R"
-    MAX_TEMP = "X"
-    MIN_TEMP = "N"
-    VAPOUR_PRESSURE = "V"
-    EVAPORATION = "E"
-    SOLAR_RADIATION = "J"
-    FAO56_ET = "F"
-    ASCE_TALL_ET = "T"
-    MORTON_ACTUAL_ET = "A"
-    MORTON_POTENTIAL_ET = "P"
-    MORTON_WET_ET = "W"
-    MORTON_LAKE_ET = "L"
-    SYNTHETIC_EVAP = "S"
-    COMBINED_EVAP = "C"
-    RH_TMAX = "H"
-    RH_TMIN = "G"
-    VP_DEFICIT = "D"
-    MSLP = "M"
 
 
 class SiloDateRange(BaseModel):
@@ -151,15 +106,43 @@ class AustralianCoordinates(BaseModel):
 
 
 class BaseSiloQuery(BaseModel):
-    """Base query parameters for SILO API."""
+    """Base query parameters for SILO API.
+
+    The `variables` field accepts canonical variable names from SILO_VARIABLES.keys()
+    (e.g., "daily_rain", "max_temp"). These are converted to SILO API codes internally.
+    """
 
     model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
 
     dataset: SiloDataset
     format: SiloFormat = Field(default=SiloFormat.CSV)
-    values: Optional[List[ClimateVariable]] = Field(
-        default=None, description="Climate variables to retrieve (for csv/json formats)"
+    variables: Optional[List[str]] = Field(
+        default=None,
+        description="Climate variables to retrieve using canonical names (e.g., 'daily_rain', 'max_temp')",
     )
+
+    @field_validator("variables")
+    @classmethod
+    def validate_variables(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        """Validate that all variable names exist in SILO registry."""
+        if v is None:
+            return v
+        invalid = [name for name in v if name not in SILO]
+        if invalid:
+            valid_names = ", ".join(sorted(VARIABLES.keys()))
+            raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")
+        return v
+
+    def _get_silo_codes(self) -> str:
+        """Convert canonical variable names to SILO API codes string."""
+        if not self.variables:
+            return ""
+        codes = []
+        for name in self.variables:
+            code = VARIABLES.silo_code_from_name(name)
+            if code:  # Skip variables without API codes (e.g., monthly_rain)
+                codes.append(code)
+        return "".join(codes)
 
 
 class PatchedPointQuery(BaseSiloQuery):
@@ -175,7 +158,7 @@ class PatchedPointQuery(BaseSiloQuery):
         ...     station_code="30043",
         ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
         ...     format=SiloFormat.CSV,
-        ...     values=[ClimateVariable.RAINFALL, ClimateVariable.MAX_TEMP]
+        ...     variables=["daily_rain", "max_temp"]
         ... )
 
         # Search for stations by name (name_fragment is optional)
@@ -225,12 +208,6 @@ class PatchedPointQuery(BaseSiloQuery):
         elif format_val == SiloFormat.NEAR:
             if not self.station_code:
                 raise ValueError("station_code is required for 'near' format")
-        # else:
-        #     # Data formats (csv, json, apsim, alldata, standard)
-        #     if not self.station_code:
-        #         raise ValueError(f"station_code is required for '{format_val}' format")
-        #     if not self.date_range:
-        #         raise ValueError(f"date_range is required for '{format_val}' format")
 
         return self
 
@@ -277,8 +254,8 @@ class PatchedPointQuery(BaseSiloQuery):
             params["password"] = "apirequest"
 
         # Add variable selection for customizable formats
-        if self.format in ["csv", "json"] and self.values:
-            params["comment"] = "".join(self.values)
+        if self.format in ["csv", "json"] and self.variables:
+            params["comment"] = self._get_silo_codes()
 
         return params
 
@@ -296,7 +273,7 @@ class DataDrillQuery(BaseSiloQuery):
         ...     coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
         ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
         ...     format=SiloFormat.CSV,
-        ...     values=[ClimateVariable.RAINFALL, ClimateVariable.MAX_TEMP]
+        ...     variables=["daily_rain", "max_temp"]
         ... )
     """
 
@@ -334,8 +311,8 @@ class DataDrillQuery(BaseSiloQuery):
         }
 
         # Add variable selection for customizable formats
-        if self.format in ["csv", "json"] and self.values:
-            params["comment"] = "".join(self.values)
+        if self.format in ["csv", "json"] and self.variables:
+            params["comment"] = self._get_silo_codes()
 
         return params
 
@@ -386,7 +363,7 @@ class SiloResponse(BaseModel):
 
 class StationInfo(BaseModel):
     """
-    Station information from SILO.
+    Station information from VARIABLES.
 
     Returned by 'id' format queries.
     """

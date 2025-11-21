@@ -3,7 +3,7 @@ from pathlib import Path
 import xarray as xr
 
 from weather_tools.config import get_silo_data_dir
-from weather_tools.silo_variables import VariableInput, expand_variable_preset
+from weather_tools.silo_variables import VARIABLES, VariableInput
 
 
 def read_silo_xarray(
@@ -53,7 +53,7 @@ def read_silo_xarray(
         silo_dir = get_silo_data_dir()
 
     # Use centralized variable preset expansion
-    variables = expand_variable_preset(variables)
+    variables = VARIABLES.expand_preset(variables)
 
     dss = []
     for variable in variables:

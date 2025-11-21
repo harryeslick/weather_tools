@@ -14,8 +14,8 @@ import pandas as pd
 
 from weather_tools.silo_variables import (
     convert_metno_to_silo_columns,
-    rh_to_vapor_pressure,
 )
+from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
 logger = logging.getLogger(__name__)
 

@@ -25,6 +25,28 @@ metno_app = typer.Typer(
 )
 
 
+def add_silo_date_columns(df):
+    """
+    Add SILO-specific date columns (day, year) from date column.
+
+    Args:
+        df: DataFrame with 'date' column
+
+    Returns:
+        DataFrame with added 'day' and 'year' columns
+    """
+    import pandas as pd
+
+    df = df.copy()
+
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"])
+        df["day"] = df["date"].dt.dayofyear
+        df["year"] = df["date"].dt.year
+
+    return df
+
+
 @metno_app.command()
 def forecast(
     lat: Annotated[float, typer.Option(help="Latitude coordinate (-9 to -44 for Australia)")],
@@ -74,7 +96,6 @@ def forecast(
         if format_silo:
             # Rename columns to SILO format
             from weather_tools.silo_variables import (
-                add_silo_date_columns,
                 convert_metno_to_silo_columns,
             )
 

@@ -5,10 +5,10 @@ Maps between:
 - API single-letter codes (used in PatchedPoint/DataDrill queries)
 - NetCDF filenames (used for gridded data downloads)
 - Full variable names and metadata
-- SILO dataframe column names
+- DataFrame column names (canonical names = SILO_VARIABLES.keys())
 """
 
-from typing import List, Literal, Optional, Union
+from typing import Iterator, KeysView, List, Literal, Optional, Union, ValuesView
 
 from pydantic import BaseModel
 
@@ -55,148 +55,184 @@ DEFAULT_GEOTIFF_TIMEOUT = 300  # Smaller files or COG streaming
 
 
 class VariableMetadata(BaseModel):
-    """Metadata for a SILO climate variable."""
+    """Metadata for a climate variable.
 
-    api_code: Optional[str]  # Single letter code for API (None for monthly_rain)
-    netcdf_name: str  # Filename used in NetCDF downloads
-    full_name: str  # Human-readable name
-    units: str  # Units of measurement
-    start_year: int = 1889  # First available year (default 1889)
+    Attributes:
+        silo_code: Single letter code for SILO API (None for variables without API code)
+        netcdf_name: Filename used in NetCDF downloads (None for non-NetCDF variables)
+        metno_name: Corresponding met.no variable name for forecast data
+        full_name: Human-readable name
+        units: Units of measurement
+        description: Optional detailed description
+        metno_only: True if variable is only available from met.no (not in SILO)
+    """
+
+    silo_code: Optional[str] = None
+    netcdf_name: Optional[str] = None
+    metno_name: Optional[str] = None
+    full_name: str
+    units: str
     description: Optional[str] = None
+    metno_only: bool = False
 
 
 # Complete mapping of all SILO variables
-SILO_VARIABLES = {
+# Keys are canonical names used in DataFrames, CSV exports, and user-facing APIs
+SILO_VARIABLES: dict[str, VariableMetadata] = {
     # Rainfall
-    "R": VariableMetadata(
-        api_code="R",
+    "daily_rain": VariableMetadata(
+        silo_code="R",
         netcdf_name="daily_rain",
+        metno_name="total_precipitation",
         full_name="Daily rainfall",
         units="mm",
     ),
     "monthly_rain": VariableMetadata(
-        api_code=None,
+        silo_code=None,
         netcdf_name="monthly_rain",
         full_name="Monthly rainfall",
         units="mm",
     ),
     # Temperature
-    "X": VariableMetadata(
-        api_code="X",
+    "max_temp": VariableMetadata(
+        silo_code="X",
         netcdf_name="max_temp",
+        metno_name="max_temperature",
         full_name="Maximum temperature",
         units="°C",
     ),
-    "N": VariableMetadata(
-        api_code="N",
+    "min_temp": VariableMetadata(
+        silo_code="N",
         netcdf_name="min_temp",
+        metno_name="min_temperature",
         full_name="Minimum temperature",
         units="°C",
     ),
     # Humidity and Pressure
-    "V": VariableMetadata(
-        api_code="V",
+    "vp": VariableMetadata(
+        silo_code="V",
         netcdf_name="vp",
+        metno_name="avg_relative_humidity",
         full_name="Vapour pressure",
         units="hPa",
     ),
-    "D": VariableMetadata(
-        api_code="D",
+    "vp_deficit": VariableMetadata(
+        silo_code="D",
         netcdf_name="vp_deficit",
         full_name="Vapour pressure deficit",
         units="hPa",
     ),
-    "H": VariableMetadata(
-        api_code="H",
+    "rh_tmax": VariableMetadata(
+        silo_code="H",
         netcdf_name="rh_tmax",
         full_name="Relative humidity at time of maximum temperature",
         units="%",
     ),
-    "G": VariableMetadata(
-        api_code="G",
+    "rh_tmin": VariableMetadata(
+        silo_code="G",
         netcdf_name="rh_tmin",
         full_name="Relative humidity at time of minimum temperature",
         units="%",
     ),
-    "M": VariableMetadata(
-        api_code="M",
+    "mslp": VariableMetadata(
+        silo_code="M",
         netcdf_name="mslp",
+        metno_name="avg_pressure",
         full_name="Mean sea level pressure",
         units="hPa",
-        start_year=1957,
     ),
     # Evaporation
-    "E": VariableMetadata(
-        api_code="E",
+    "evap_pan": VariableMetadata(
+        silo_code="E",
         netcdf_name="evap_pan",
         full_name="Class A pan evaporation",
         units="mm",
-        start_year=1970,
     ),
-    "S": VariableMetadata(
-        api_code="S",
+    "evap_syn": VariableMetadata(
+        silo_code="S",
         netcdf_name="evap_syn",
         full_name="Synthetic estimate evaporation",
         units="mm",
     ),
-    "C": VariableMetadata(
-        api_code="C",
+    "evap_comb": VariableMetadata(
+        silo_code="C",
         netcdf_name="evap_comb",
         full_name="Combination evaporation",
         units="mm",
     ),
-    "L": VariableMetadata(
-        api_code="L",
+    "evap_morton_lake": VariableMetadata(
+        silo_code="L",
         netcdf_name="evap_morton_lake",
         full_name="Morton's shallow lake evaporation",
         units="mm",
     ),
     # Radiation
-    "J": VariableMetadata(
-        api_code="J",
+    "radiation": VariableMetadata(
+        silo_code="J",
         netcdf_name="radiation",
         full_name="Solar exposure (direct and diffuse)",
         units="MJ/m²",
     ),
     # Evapotranspiration
-    "F": VariableMetadata(
-        api_code="F",
+    "et_short_crop": VariableMetadata(
+        silo_code="F",
         netcdf_name="et_short_crop",
         full_name="FAO56 short crop evapotranspiration",
         units="mm",
     ),
-    "T": VariableMetadata(
-        api_code="T",
+    "et_tall_crop": VariableMetadata(
+        silo_code="T",
         netcdf_name="et_tall_crop",
         full_name="ASCE tall crop evapotranspiration",
         units="mm",
     ),
-    "A": VariableMetadata(
-        api_code="A",
+    "et_morton_actual": VariableMetadata(
+        silo_code="A",
         netcdf_name="et_morton_actual",
         full_name="Morton's areal actual evapotranspiration",
         units="mm",
     ),
-    "P": VariableMetadata(
-        api_code="P",
+    "et_morton_potential": VariableMetadata(
+        silo_code="P",
         netcdf_name="et_morton_potential",
         full_name="Morton's point potential evapotranspiration",
         units="mm",
     ),
-    "W": VariableMetadata(
-        api_code="W",
+    "et_morton_wet": VariableMetadata(
+        silo_code="W",
         netcdf_name="et_morton_wet",
         full_name="Morton's wet-environment areal potential evapotranspiration",
         units="mm",
     ),
+    # Met.no-only variables (not available in SILO)
+    "wind_speed": VariableMetadata(
+        metno_name="avg_wind_speed",
+        full_name="Average wind speed",
+        units="m/s",
+        metno_only=True,
+    ),
+    "wind_speed_max": VariableMetadata(
+        metno_name="max_wind_speed",
+        full_name="Maximum wind speed",
+        units="m/s",
+        metno_only=True,
+    ),
+    "cloud_fraction": VariableMetadata(
+        metno_name="avg_cloud_fraction",
+        full_name="Average cloud fraction",
+        units="%",
+        metno_only=True,
+    ),
+    "weather_symbol": VariableMetadata(
+        metno_name="dominant_weather_symbol",
+        full_name="Dominant weather symbol",
+        units="code",
+        metno_only=True,
+    ),
 }
 
-# Reverse mappings for convenience
-NETCDF_TO_API = {v.netcdf_name: v.api_code for k, v in SILO_VARIABLES.items()}
-API_TO_NETCDF = {v.api_code: v.netcdf_name for k, v in SILO_VARIABLES.items() if v.api_code}
-
-# Preset groups
-VARIABLE_PRESETS = {
+# Preset groups for common variable combinations
+VARIABLE_PRESETS: dict[str, list[str]] = {
     "daily": ["daily_rain", "max_temp", "min_temp", "evap_syn"],
     "monthly": ["monthly_rain"],
     "temperature": ["max_temp", "min_temp"],
@@ -207,7 +243,6 @@ VARIABLE_PRESETS = {
 
 # Type hints for valid variable inputs
 VariablePreset = Literal["daily", "monthly", "temperature", "evaporation", "radiation", "humidity"]
-
 
 VariableName = Literal[
     "daily_rain",
@@ -229,277 +264,346 @@ VariableName = Literal[
     "et_morton_actual",
     "et_morton_potential",
     "et_morton_wet",
+    # Met.no-only variables
+    "wind_speed",
+    "wind_speed_max",
+    "cloud_fraction",
+    "weather_symbol",
 ]
 
 # Union type for function parameters accepting variables
 VariableInput = Union[VariablePreset, VariableName, List[Union[VariablePreset, VariableName]]]
 
 
-def get_variable_metadata(identifier: str) -> Optional[VariableMetadata]:
+# ===========================
+# Variable Registry
+# ===========================
+
+
+class VariableRegistry:
+    """Registry providing variable lookups and conversions.
+
+    This class wraps SILO_VARIABLES dict and provides:
+    - Dict-like access to variable metadata
+    - Conversion between canonical names, SILO codes, and met.no names
+    - Preset expansion and validation
+
+    The registry is typically used via the singleton VARIABLES instance:
+
+        >>> from weather_tools.silo_variables import VARIABLES
+        >>> VARIABLES["daily_rain"].units
+        'mm'
+        >>> VARIABLES.silo_code_from_name("daily_rain")
+        'R'
+        >>> VARIABLES.name_from_silo_code("R")
+        'daily_rain'
     """
-    Get variable metadata by API code or NetCDF name.
 
-    Args:
-        identifier: API code (e.g., "R",) or NetCDF name (e.g., "daily_rain",)
+    def __init__(
+        self, variables: dict[str, VariableMetadata], presets: dict[str, list[str]]
+    ) -> None:
+        """Initialize registry with variable metadata.
 
-    Returns:
-        VariableMetadata or None if not found
-    """
-    # Try direct lookup
-    if identifier in SILO_VARIABLES:
-        return SILO_VARIABLES[identifier]
+        Args:
+            variables: Dict mapping canonical names to VariableMetadata
+            presets: Dict mapping preset names to lists of variable names
+        """
+        self._variables = variables
+        self._presets = presets
 
-    # Try reverse lookup by netcdf_name
-    for meta in SILO_VARIABLES.values():
-        if meta.netcdf_name == identifier:
-            return meta
+        # Build reverse lookup indexes (computed once)
+        self._by_silo_code: dict[str, str] = {}
+        self._by_netcdf_name: dict[str, str] = {}
+        self._by_metno_name: dict[str, str] = {}
 
-    return None
+        for name, meta in variables.items():
+            if meta.silo_code:
+                self._by_silo_code[meta.silo_code] = name
+            if meta.netcdf_name:
+                self._by_netcdf_name[meta.netcdf_name] = name
+            if meta.metno_name:
+                self._by_metno_name[meta.metno_name] = name
 
+    # -------------------------
+    # Dict-like interface
+    # -------------------------
 
-def expand_variable_preset(preset_or_vars: VariableInput) -> list[str]:
-    """
-    Expand preset names to NetCDF variable names.
+    def __getitem__(self, name: str) -> VariableMetadata:
+        """Get variable metadata by canonical name."""
+        return self._variables[name]
 
-    Args:
-        preset_or_vars: Variable preset name ("daily", "monthly", etc.),
-                       variable name ("daily_rain", "max_temp", etc.),
-                       or list of presets/variable names
+    def __contains__(self, name: str) -> bool:
+        """Check if canonical name exists in registry."""
+        return name in self._variables
 
-    Returns:
-        List of NetCDF variable names
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over canonical names."""
+        return iter(self._variables)
 
-    Example:
-        >>> expand_variable_preset("daily",)
-        ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
-        >>> expand_variable_preset(["daily_rain", "max_temp"])
-        ['daily_rain', 'max_temp']
-    """
-    if isinstance(preset_or_vars, str):
-        if preset_or_vars in VARIABLE_PRESETS:
-            return VARIABLE_PRESETS[preset_or_vars]
-        else:
-            return [preset_or_vars]
-    else:
-        # Expand any presets in the list
-        expanded = []
-        for item in preset_or_vars:
-            if item in VARIABLE_PRESETS:
-                expanded.extend(VARIABLE_PRESETS[item])
+    def __len__(self) -> int:
+        """Return number of variables in registry."""
+        return len(self._variables)
+
+    def keys(self) -> KeysView[str]:
+        """Return view of canonical variable names."""
+        return self._variables.keys()
+
+    def values(self) -> ValuesView[VariableMetadata]:
+        """Return view of variable metadata."""
+        return self._variables.values()
+
+    def items(self):
+        """Return view of (name, metadata) pairs."""
+        return self._variables.items()
+
+    def get(
+        self, name: str, default: Optional[VariableMetadata] = None
+    ) -> Optional[VariableMetadata]:
+        """Get variable metadata by canonical name, or default if not found."""
+        return self._variables.get(name, default)
+
+    # -------------------------
+    # Conversion methods
+    # -------------------------
+
+    def silo_code_from_name(self, name: str) -> Optional[str]:
+        """Convert canonical name to SILO API code.
+
+        Args:
+            name: Canonical variable name (e.g., "daily_rain")
+
+        Returns:
+            SILO API code (e.g., "R") or None if variable has no API code
+
+        Raises:
+            KeyError: If name is not a valid canonical name
+        """
+        return self._variables[name].silo_code
+
+    def name_from_silo_code(self, code: str) -> str:
+        """Convert SILO API code to canonical name.
+
+        Args:
+            code: SILO API code (e.g., "R")
+
+        Returns:
+            Canonical variable name (e.g., "daily_rain")
+
+        Raises:
+            KeyError: If code is not a valid SILO API code
+        """
+        return self._by_silo_code[code]
+
+    def name_from_netcdf(self, netcdf_name: str) -> str:
+        """Convert NetCDF filename to canonical name.
+
+        Args:
+            netcdf_name: NetCDF variable name (e.g., "daily_rain")
+
+        Returns:
+            Canonical variable name
+
+        Raises:
+            KeyError: If netcdf_name is not found
+        """
+        return self._by_netcdf_name[netcdf_name]
+
+    def name_from_metno(self, metno_name: str) -> str:
+        """Convert met.no variable name to canonical name.
+
+        Args:
+            metno_name: met.no variable name (e.g., "total_precipitation")
+
+        Returns:
+            Canonical variable name (e.g., "daily_rain")
+
+        Raises:
+            KeyError: If metno_name is not found
+        """
+        return self._by_metno_name[metno_name]
+
+    def get_by_any(self, identifier: str) -> Optional[VariableMetadata]:
+        """Get variable metadata by any identifier.
+
+        Tries canonical name, SILO code, NetCDF name, and met.no name.
+
+        Args:
+            identifier: Any variable identifier
+
+        Returns:
+            VariableMetadata or None if not found
+        """
+        # Try canonical name first
+        if identifier in self._variables:
+            return self._variables[identifier]
+
+        # Try SILO code
+        if identifier in self._by_silo_code:
+            return self._variables[self._by_silo_code[identifier]]
+
+        # Try NetCDF name
+        if identifier in self._by_netcdf_name:
+            return self._variables[self._by_netcdf_name[identifier]]
+
+        # Try met.no name
+        if identifier in self._by_metno_name:
+            return self._variables[self._by_metno_name[identifier]]
+
+        return None
+
+    # -------------------------
+    # Met.no conversion methods
+    # -------------------------
+
+    def variables_without_metno(self) -> list[str]:
+        """Return list of SILO variables that have no met.no equivalent.
+
+        These variables will be empty/NaN when using met.no forecast data.
+
+        Returns:
+            List of canonical variable names without met.no mapping
+        """
+        return [name for name, meta in self._variables.items() if meta.metno_name is None]
+
+    def has_metno_mapping(self, metno_name: str) -> bool:
+        """Check if a met.no variable name has a SILO mapping.
+
+        Args:
+            metno_name: met.no variable name
+
+        Returns:
+            True if mapping exists, False otherwise
+        """
+        return metno_name in self._by_metno_name
+
+    def metno_to_canonical_mapping(self) -> dict[str, str]:
+        """Return mapping from met.no variable names to canonical names.
+
+        Returns:
+            Dict mapping met.no names to canonical SILO names
+        """
+        return dict(self._by_metno_name)
+
+    # -------------------------
+    # Preset expansion and validation
+    # -------------------------
+
+    def expand_preset(self, preset_or_vars: VariableInput) -> list[str]:
+        """Expand preset names to canonical variable names.
+
+        Args:
+            preset_or_vars: Variable preset name ("daily", "monthly", etc.),
+                           variable name ("daily_rain", "max_temp", etc.),
+                           or list of presets/variable names
+
+        Returns:
+            List of canonical variable names
+
+        Example:
+            >>> VARIABLES.expand_preset("daily")
+            ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
+            >>> VARIABLES.expand_preset(["daily_rain", "max_temp"])
+            ['daily_rain', 'max_temp']
+        """
+        if isinstance(preset_or_vars, str):
+            if preset_or_vars in self._presets:
+                return list(self._presets[preset_or_vars])
             else:
-                expanded.append(item)
-        return expanded
+                return [preset_or_vars]
+        else:
+            expanded = []
+            for item in preset_or_vars:
+                if item in self._presets:
+                    expanded.extend(self._presets[item])
+                else:
+                    expanded.append(item)
+            return expanded
+
+    def validate(
+        self, variables: VariableInput, error_class: type[Exception] = ValueError
+    ) -> dict[str, VariableMetadata]:
+        """Validate and expand variables, returning metadata map.
+
+        Args:
+            variables: Variable preset name, variable name, or list of both
+            error_class: Exception class to raise for unknown variables
+
+        Returns:
+            Dict mapping canonical names to VariableMetadata
+
+        Raises:
+            error_class: If any variable is unknown
+
+        Example:
+            >>> metadata_map = VARIABLES.validate("daily")
+            >>> print(list(metadata_map.keys()))
+            ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
+        """
+        var_list = self.expand_preset(variables)
+
+        metadata_map: dict[str, VariableMetadata] = {}
+        for var_name in var_list:
+            if var_name not in self._variables:
+                raise error_class(f"Unknown variable: {var_name}")
+            metadata_map[var_name] = self._variables[var_name]
+
+        return metadata_map
+
+    def is_preset(self, name: str) -> bool:
+        """Check if name is a preset name."""
+        return name in self._presets
+
+    def preset_names(self) -> list[str]:
+        """Return list of available preset names."""
+        return list(self._presets.keys())
+
+    def metno_only_variables(self) -> list[str]:
+        """Return list of variables that are only available from met.no.
+
+        Returns:
+            List of canonical variable names that are met.no-only
+        """
+        return [name for name, meta in self._variables.items() if meta.metno_only]
+
+    def silo_variables(self) -> list[str]:
+        """Return list of variables available in SILO (not met.no-only).
+
+        Returns:
+            List of canonical variable names available in SILO
+        """
+        return [name for name, meta in self._variables.items() if not meta.metno_only]
 
 
-def validate_silo_s3_variables(
-    variables: VariableInput, error_class: type[Exception] = ValueError
-) -> dict[str, VariableMetadata]:
-    """
-    Validate and expand variables, returning metadata map.
-
-    This function combines variable expansion and validation, ensuring all
-    requested variables exist and returning their metadata for further processing.
-
-    Args:
-        variables: Variable preset name ("daily", "monthly", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
-        error_class: Exception class to raise for unknown variables (default: ValueError)
-
-    Returns:
-        Dict mapping variable names to their VariableMetadata
-
-    Raises:
-        error_class: If any variable is unknown
-
-    Example:
-        >>> from weather_tools.silo_variables import validate_silo_s3_variables, SiloGeoTiffError
-        >>> # Validate with default ValueError
-        >>> metadata_map = validate_silo_s3_variables("daily")
-        >>> print(list(metadata_map.keys()))
-        ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
-        >>> # Validate with custom exception
-        >>> metadata_map = validate_silo_s3_variables(["daily_rain", "max_temp"], SiloGeoTiffError)
-    """
-    var_list = expand_variable_preset(variables)
-
-    metadata_map: dict[str, VariableMetadata] = {}
-    for var_name in var_list:
-        metadata = get_variable_metadata(var_name)
-        if metadata is None:
-            raise error_class(f"Unknown variable: {var_name}")
-        metadata_map[var_name] = metadata
-
-    return metadata_map
-
-
-# ===========================
-# Met.no to SILO Variable Mapping
-# ===========================
-
-
-class MetNoVariableMapping(BaseModel):
-    """Mapping from met.no variable to SILO variable."""
-
-    metno_name: str
-    silo_name: str
-    conversion_func: Optional[str] = None  # Name of conversion function if needed
-    requires_other_vars: Optional[list[str]] = None  # Other variables needed for conversion
-
-
-# Mappings from met.no daily summary fields to SILO column names
-METNO_TO_SILO_MAPPING = {
-    # Direct mappings (same units, no conversion needed)
-    "min_temperature": MetNoVariableMapping(metno_name="min_temperature", silo_name="min_temp"),
-    "max_temperature": MetNoVariableMapping(metno_name="max_temperature", silo_name="max_temp"),
-    "total_precipitation": MetNoVariableMapping(
-        metno_name="total_precipitation", silo_name="daily_rain"
-    ),
-    "avg_pressure": MetNoVariableMapping(metno_name="avg_pressure", silo_name="mslp"),
-    # Approximate mappings (may need conversion)
-    "avg_relative_humidity": MetNoVariableMapping(
-        metno_name="avg_relative_humidity",
-        silo_name="vp",
-        conversion_func="rh_to_vapor_pressure",
-        requires_other_vars=["min_temperature", "max_temperature"],
-    ),
-    # Met.no only variables (no SILO equivalent)
-    "avg_wind_speed": MetNoVariableMapping(metno_name="avg_wind_speed", silo_name="wind_speed"),
-    "max_wind_speed": MetNoVariableMapping(metno_name="max_wind_speed", silo_name="wind_speed_max"),
-    "avg_cloud_fraction": MetNoVariableMapping(
-        metno_name="avg_cloud_fraction", silo_name="cloud_fraction"
-    ),
-    "dominant_weather_symbol": MetNoVariableMapping(
-        metno_name="dominant_weather_symbol", silo_name="weather_symbol"
-    ),
-}
-
-# SILO variables that have no met.no equivalent
-SILO_ONLY_VARIABLES = [
-    "evap_pan",  # E - Class A pan evaporation
-    "evap_syn",  # S - Synthetic evaporation
-    "evap_comb",  # C - Combination evaporation
-    "radiation",  # J - Solar radiation (met.no has UV, not global radiation)
-    "vp_deficit",  # D - Vapor pressure deficit
-    "rh_tmax",  # H - RH at time of max temp
-    "rh_tmin",  # G - RH at time of min temp
-    "et_short_crop",  # F - FAO56 ET
-    "et_tall_crop",  # T - ASCE tall crop ET
-    "et_morton_actual",  # A
-    "et_morton_potential",  # P
-    "et_morton_wet",  # W
-    "evap_morton_lake",  # L
-]
-
-
-def rh_to_vapor_pressure(relative_humidity: float, temperature: float) -> float:
-    """
-    Convert relative humidity to vapor pressure using August-Roche-Magnus approximation.
-
-    Args:
-        relative_humidity: Relative humidity (%)
-        temperature: Air temperature (°C)
-
-    Returns:
-        Vapor pressure (hPa)
-
-    Formula:
-        es = 6.1094 * exp(17.625 * T / (T + 243.04))  [saturation vapor pressure]
-        e = (RH / 100) * es                            [actual vapor pressure]
-    """
-    import math
-
-    # Saturation vapor pressure (hPa)
-    es = 6.1094 * math.exp((17.625 * temperature) / (temperature + 243.04))
-
-    # Actual vapor pressure (hPa)
-    e = (relative_humidity / 100.0) * es
-
-    return e
+# Singleton registry instance
+VARIABLES = VariableRegistry(SILO_VARIABLES, VARIABLE_PRESETS)
 
 
 def convert_metno_to_silo_columns(df, include_extra: bool = False) -> dict:
     """
-    Convert met.no DataFrame column names to SILO format.
+    Convert met.no DataFrame column names to canonical format.
+
+    Uses the unified VARIABLES registry for all variable mappings.
 
     Args:
         df: DataFrame with met.no daily summaries
         include_extra: If True, include met.no-only variables (wind, clouds)
 
     Returns:
-        Dictionary mapping met.no columns to SILO columns
+        Dictionary mapping met.no columns to canonical column names
     """
-
     column_mapping = {}
+    metno_only_vars = VARIABLES.metno_only_variables()
 
     for metno_col in df.columns:
         if metno_col == "date":
             column_mapping[metno_col] = "date"
-        elif metno_col in METNO_TO_SILO_MAPPING:
-            mapping = METNO_TO_SILO_MAPPING[metno_col]
+        elif VARIABLES.has_metno_mapping(metno_col):
+            canonical_name = VARIABLES.name_from_metno(metno_col)
 
             # Skip met.no-only variables unless requested
-            if not include_extra and mapping.silo_name in [
-                "wind_speed",
-                "wind_speed_max",
-                "cloud_fraction",
-                "weather_symbol",
-            ]:
+            if not include_extra and canonical_name in metno_only_vars:
                 continue
 
-            column_mapping[metno_col] = mapping.silo_name
+            column_mapping[metno_col] = canonical_name
 
     return column_mapping
-
-
-def get_silo_column_order() -> list[str]:
-    """
-    Return standard SILO CSV column order.
-
-    Returns:
-        List of column names in standard SILO order
-    """
-    return [
-        "date",
-        "day",
-        "year",
-        "daily_rain",
-        "max_temp",
-        "min_temp",
-        "vp",
-        "evap_pan",
-        "evap_syn",
-        "evap_comb",
-        "evap_morton_lake",
-        "radiation",
-        "rh_tmax",
-        "rh_tmin",
-        "et_short_crop",
-        "et_tall_crop",
-        "et_morton_actual",
-        "et_morton_potential",
-        "et_morton_wet",
-        "mslp",
-    ]
-
-
-def add_silo_date_columns(df):
-    """
-    Add SILO-specific date columns (day, year) from date column.
-
-    Args:
-        df: DataFrame with 'date' column
-
-    Returns:
-        DataFrame with added 'day' and 'year' columns
-    """
-    import pandas as pd
-
-    df = df.copy()
-
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"])
-        df["day"] = df["date"].dt.dayofyear
-        df["year"] = df["date"].dt.year
-
-    return df

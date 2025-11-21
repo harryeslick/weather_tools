@@ -15,7 +15,6 @@ from weather_tools.silo_geotiff import (
 )
 from weather_tools.silo_models import (
     AustralianCoordinates,
-    ClimateVariable,
     DataDrillQuery,
     PatchedPointQuery,
     SiloDataset,
@@ -26,15 +25,13 @@ from weather_tools.silo_models import (
 from weather_tools.silo_netcdf import download_netcdf
 from weather_tools.silo_variables import (
     API_TO_NETCDF,
-    NETCDF_TO_API,
     SILO_VARIABLES,
     VARIABLE_PRESETS,
+    VARIABLES,
     SiloDataError,
     SiloGeoTiffError,
     SiloNetCDFError,
-    expand_variable_preset,
-    get_variable_metadata,
-    validate_silo_s3_variables,
+    VariableRegistry,
 )
 
 __all__ = [
@@ -43,7 +40,6 @@ __all__ = [
     "SiloAPI",
     "SiloAPIError",
     "AustralianCoordinates",
-    "ClimateVariable",
     "DataDrillQuery",
     "PatchedPointQuery",
     "SiloDataset",
@@ -60,11 +56,9 @@ __all__ = [
     "SiloDataError",
     "SiloNetCDFError",
     "SiloGeoTiffError",
+    "VARIABLES",
+    "VariableRegistry",
     "SILO_VARIABLES",
-    "NETCDF_TO_API",
     "API_TO_NETCDF",
     "VARIABLE_PRESETS",
-    "get_variable_metadata",
-    "expand_variable_preset",
-    "validate_silo_s3_variables",
 ]

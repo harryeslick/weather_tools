@@ -7,7 +7,7 @@ import xarray as xr
 
 from weather_tools.config import get_silo_data_dir
 from weather_tools.read_silo_xarray import read_silo_xarray
-from weather_tools.silo_variables import expand_variable_preset
+from weather_tools.silo_variables import VARIABLES
 
 # Define the expected SILO data directory
 SILO_DIR = get_silo_data_dir()
@@ -24,7 +24,7 @@ def read_silo_test_safe(variables="daily", silo_dir=SILO_DIR, max_year=2024):
     Returns:
         xr.Dataset: Merged dataset with filtered years
     """
-    variables = expand_variable_preset(variables)
+    variables = VARIABLES.expand_preset(variables)
 
     dss = []
     for variable in variables:
