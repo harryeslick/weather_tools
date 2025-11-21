@@ -5,37 +5,22 @@ from pathlib import Path
 from typing import Annotated, List, Literal, Optional
 
 import typer
+from pydantic import ValidationError
 
 from weather_tools.silo_api import SiloAPI, SiloAPIError
-
-# from weather_tools.silo_variables import VariableKey
+from weather_tools.silo_models import (
+    AustralianCoordinates,
+    DataDrillQuery,
+    PatchedPointQuery,
+    SiloDateRange,
+    SiloFormat,
+)
+from weather_tools.silo_variables import VARIABLES
 
 logger = logging.getLogger(__name__)
 
-# Mapping from readable variable names to SILO API codes
-READABLE_TO_CODE = {
-    "rainfall": "R",
-    "max_temp": "X",
-    "min_temp": "N",
-    "evaporation": "E",
-    "radiation": "J",
-    "vapour_pressure": "V",
-    "max_rh": "H",
-    "min_rh": "G",
-    "pan_evaporation": "S",
-    "class_a_evaporation": "C",
-    "et_short_crop": "T",
-    "et_tall_crop": "A",
-    "et_morton_lake": "P",
-    "mslp": "M",
-    "rh_tmax": "D",
-    "rh_tmin": "L",
-    "dew_point": "F",
-    "vp_deficit": "W",
-}
-
-# Valid variable names for validation
-VALID_VARIABLES = list(READABLE_TO_CODE.keys())
+# Valid variable names for validation (SILO-only variables, not met.no-only)
+VALID_VARIABLES = VARIABLES.silo_variables()
 
 silo_app = typer.Typer(
     name="silo",
@@ -61,7 +46,7 @@ def silo_patched_point(
         Optional[List[str]],
         typer.Option(
             "--var",
-            help="Climate variables: rainfall, max_temp, min_temp, evaporation, radiation, vapour_pressure, etc.",
+            help=f"Climate variables: {', '.join(VALID_VARIABLES)}",
         ),
     ] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
@@ -103,14 +88,6 @@ def silo_patched_point(
             --start-date 20230101 --end-date 20230131 \\
             --format json --output data.json
     """
-    from pydantic import ValidationError
-
-    from weather_tools.silo_models import (
-        ClimateVariable,
-        PatchedPointQuery,
-        SiloDateRange,
-        SiloFormat,
-    )
 
     # Format detection and validation
     valid_formats = ["csv", "json", "apsim", "standard"]
@@ -159,10 +136,10 @@ def silo_patched_point(
     try:
         # Handle default variables
         if variables is None:
-            variables = list(READABLE_TO_CODE.keys())
+            variables = VALID_VARIABLES.copy()
 
         # Validate variable names
-        invalid_vars = [v for v in variables if v not in READABLE_TO_CODE]
+        invalid_vars = [v for v in variables if v not in VARIABLES]
         if invalid_vars:
             typer.echo(f"❌ Invalid variable names: {', '.join(invalid_vars)}", err=True)
             typer.echo(f"   Valid options: {', '.join(VALID_VARIABLES)}", err=True)
@@ -203,15 +180,16 @@ def silo_patched_point(
         else:
             # Use low-level Pydantic API for APSIM/standard formats
             # Convert readable names to SILO codes
-            variable_codes = [READABLE_TO_CODE[v] for v in variables]
-            variable_enums = [ClimateVariable(code) for code in variable_codes]
+            valid_variables = [v for v in variables if v in VALID_VARIABLES]
+
+            # variable_enums = [ClimateVariable(code) for code in variable_codes]
 
             # Build query using Pydantic model
             query = PatchedPointQuery(
                 format=SiloFormat(format),
                 station_code=station,
                 date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-                values=variable_enums,
+                values=valid_variables,
             )
 
             response = api.query_patched_point(query)
@@ -262,7 +240,7 @@ def silo_data_drill(
         Optional[List[str]],
         typer.Option(
             "--var",
-            help="Climate variables: rainfall, max_temp, min_temp, evaporation, radiation, vapour_pressure, etc.",
+            help=f"Climate variables: {', '.join(VALID_VARIABLES)}",
         ),
     ] = None,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
@@ -291,23 +269,14 @@ def silo_data_drill(
             --start-date 20230101 --end-date 20230131 \\
             --format alldata --output data.txt
     """
-    from pydantic import ValidationError
-
-    from weather_tools.silo_models import (
-        AustralianCoordinates,
-        ClimateVariable,
-        DataDrillQuery,
-        SiloDateRange,
-        SiloFormat,
-    )
 
     try:
         # Handle default variables
         if variables is None:
-            variables = list(READABLE_TO_CODE.keys())
+            variables = VALID_VARIABLES.copy()
 
         # Validate variable names
-        invalid_vars = [v for v in variables if v not in READABLE_TO_CODE]
+        invalid_vars = [v for v in variables if v not in VARIABLES]
         if invalid_vars:
             typer.echo(f"❌ Invalid variable names: {', '.join(invalid_vars)}", err=True)
             typer.echo(f"   Valid options: {', '.join(VALID_VARIABLES)}", err=True)
@@ -349,15 +318,14 @@ def silo_data_drill(
         else:
             # Use low-level Pydantic API for APSIM/alldata/standard formats
             # Convert readable names to SILO codes
-            variable_codes = [READABLE_TO_CODE[v] for v in variables]
-            variable_enums = [ClimateVariable(code) for code in variable_codes]
+            valid_variables = [v for v in variables if v in VALID_VARIABLES]
 
             # Build query using Pydantic model
             query = DataDrillQuery(
                 coordinates=AustralianCoordinates(latitude=latitude, longitude=longitude),
                 date_range=SiloDateRange(start_date=start_date, end_date=end_date),
                 format=SiloFormat(format),
-                values=variable_enums,
+                values=valid_variables,
             )
 
             response = api.query_data_drill(query)

@@ -309,17 +309,6 @@ class SiloAPI:
         Raises:
             SiloAPIError: If the API request fails
 
-        Example:
-            >>> from weather_tools.silo_models import (
-            ...     DataDrillQuery, AustralianCoordinates, SiloDateRange, ClimateVariable
-            ... )
-            >>> query = DataDrillQuery(
-            ...     coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
-            ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
-            ...     values=[ClimateVariable.RAINFALL]
-            ... )
-            >>> response = api.query_data_drill(query)
-            >>> print(response.to_csv())
         """
         url = self._get_endpoint(SiloDataset.DATA_DRILL)
         params = query.to_api_params(self.api_key)
