@@ -189,6 +189,35 @@ class TestReadCOG:
         # Check that data is masked
         assert isinstance(data, np.ma.MaskedArray)
 
+    def test_read_cog_geometry_masks_all_touched_pixels(self, tmp_path):
+        """Ensure geometry masking keeps edge pixels that are touched by the geometry."""
+        import rasterio
+        from rasterio.transform import from_origin
+
+        # Create a small on-disk raster
+        transform = from_origin(0, 3, 1, 1)
+        profile = {
+            "driver": "GTiff",
+            "height": 3,
+            "width": 3,
+            "count": 1,
+            "dtype": "int16",
+            "crs": "EPSG:4326",
+            "transform": transform,
+            "nodata": -999,
+        }
+        raster_path = tmp_path / "mask_test.tif"
+        with rasterio.open(raster_path, "w", **profile) as dst:
+            dst.write(np.arange(9, dtype=np.int16).reshape(3, 3), 1)
+
+        # Geometry that only partially overlaps the first column; all_touched=True should keep it
+        geometry = box(0.8, 0.5, 2.5, 2.5)
+
+        data, _ = read_cog(str(raster_path), geometry=geometry, use_mask=True)
+
+        assert isinstance(data, np.ma.MaskedArray)
+        assert data.mask.sum() == 0  # No columns fully masked along the edges
+
     def test_read_cog_invalid_crs_raises_error(self):
         """Test that non-EPSG:4326 CRS raises error."""
         mock_src = MagicMock()

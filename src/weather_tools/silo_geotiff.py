@@ -222,7 +222,11 @@ def read_cog(
                     # Use geometry_mask to identify pixels outside the geometry
                     # geometry_mask returns True for pixels OUTSIDE the geometry
                     geom_mask = geometry_mask(
-                        [geometry], out_shape=data.shape, transform=transform, invert=False
+                        [geometry],
+                        out_shape=data.shape,
+                        transform=transform,
+                        invert=False,
+                        all_touched=True,
                     )
                     mask |= geom_mask
 
