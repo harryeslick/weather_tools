@@ -52,7 +52,7 @@ weather-tools silo patched-point --station 30043 \
   --start-date 2023-01-01 --end-date 2023-01-31 --output data.csv
 
 # Query gridded data (DataDrill)
-weather-tools silo data-drill --lat -27.5 --lon 151.0 \
+weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
   --start-date 2023-01-01 --end-date 2023-01-31 --output gridded_data.csv
 
 # Search for stations
@@ -109,15 +109,15 @@ weather-tools silo patched-point [OPTIONS]
 | Option | Type | Description |
 |--------|------|-------------|
 | `--station` | TEXT | Station code (e.g., 30043) |
-| `--start-date` | TEXT | Start date in YYYYMMDD format |
-| `--end-date` | TEXT | End date in YYYYMMDD format |
+| `--start-date` | TEXT | Start date (YYYY-MM-DD) |
+| `--end-date` | TEXT | End date (YYYY-MM-DD) |
 
 #### Optional Parameters
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--format` | TEXT | Output format: 'csv', 'json', 'apsim', 'standard' | Auto-detected from output filename |
-| `--variables` | TEXT | Weather variables (e.g. daily_rain, max_temp) (can be used multiple times) | All available |
+| `--var` | TEXT | Weather variables (e.g. daily_rain, max_temp) (can be used multiple times) | All available |
 | `--output` | PATH | Output filename | Required |
 | `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
 
@@ -126,18 +126,18 @@ weather-tools silo patched-point [OPTIONS]
 ```bash
 # Basic station data query
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --output data.csv
 
 # Query with specific variables
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
-    --variables daily_rain --variables max_temp --variables min_temp \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
+    --var daily_rain --var max_temp --var min_temp \
     --output station_data.csv
 
 # Auto-detect format from extension
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --output data.json  # Automatically uses JSON format
 ```
 
@@ -153,17 +153,17 @@ weather-tools silo data-drill [OPTIONS]
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `--lat` | FLOAT | Latitude coordinate |
-| `--lon` | FLOAT | Longitude coordinate |
-| `--start-date` | TEXT | Start date in YYYYMMDD format |
-| `--end-date` | TEXT | End date in YYYYMMDD format |
+| `--latitude` | FLOAT | Latitude coordinate |
+| `--longitude` | FLOAT | Longitude coordinate |
+| `--start-date` | TEXT | Start date (YYYY-MM-DD) |
+| `--end-date` | TEXT | End date (YYYY-MM-DD) |
 
 #### Optional Parameters
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--format` | TEXT | Output format: 'csv', 'json', 'apsim', 'standard' | Auto-detected from output filename |
-| `--variables` | TEXT | Weather variables (can be used multiple times) | All available |
+| `--var` | TEXT | Weather variables (can be used multiple times) | All available |
 | `--output` | PATH | Output filename | Required |
 | `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
 
@@ -171,13 +171,13 @@ weather-tools silo data-drill [OPTIONS]
 
 ```bash
 # Query gridded data for Brisbane
-weather-tools silo data-drill --lat -27.5 --lon 153.0 \
-    --start-date 20230101 --end-date 20230131 \
+weather-tools silo data-drill --latitude -27.5 --longitude 153.0 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --output brisbane_weather.csv
 
 # Query with APSIM format
-weather-tools silo data-drill --lat -27.5 --lon 153.0 \
-    --start-date 20230101 --end-date 20230131 \
+weather-tools silo data-drill --latitude -27.5 --longitude 153.0 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --output weather.apsim  # Auto-detects APSIM format
 ```
 

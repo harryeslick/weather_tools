@@ -68,7 +68,7 @@ uv run weather-tools --help
 
 # Query SILO API (requires SILO_API_KEY environment variable)
 export SILO_API_KEY="your.email@example.com"
-uv run weather-tools silo patched-point --station 30043 --start-date 20230101 --end-date 20230131 --var rainfall --var max_temp
+uv run weather-tools silo patched-point --station 30043 --start-date 2023-01-01 --end-date 2023-01-31 --var rainfall --var max_temp
 
 # Work with local NetCDF files
 uv run weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2020-12-31
@@ -213,7 +213,7 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 - API key is an email address, set via `SILO_API_KEY` environment variable or passed to `SiloAPI(api_key="...")`
 - PatchedPoint and DataDrill use different endpoints but share parameter structure
 - Some formats (NEAR, NAME, ID) only work with PatchedPoint dataset
-- Date format is always YYYYMMDD (no dashes or slashes)
+- Python SILO API date format is YYYYMMDD (no dashes); the CLI accepts ISO dates (YYYY-MM-DD) and converts
 - **CLI variables**: Use readable names (`rainfall`, `max_temp`, `min_temp`, `evaporation`, `radiation`, `vapour_pressure`, etc.)
 - **Low-level API variables**: SILO codes are single letters (R=rainfall, X=max_temp, N=min_temp, etc.)
 

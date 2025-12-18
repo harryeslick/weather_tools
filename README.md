@@ -35,7 +35,7 @@ export SILO_DATA_DIR="/path/to/your/silo_data"
 
 # Query station data
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --var rainfall --var max_temp --output weather.csv
 
 # Search for stations

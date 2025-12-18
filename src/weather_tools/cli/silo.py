@@ -7,6 +7,7 @@ from typing import Annotated, List, Literal, Optional
 import typer
 from pydantic import ValidationError
 
+from weather_tools.cli.date_utils import iso_to_silo_yyyymmdd_option, silo_yyyymmdd_to_iso
 from weather_tools.silo_api import SiloAPI, SiloAPIError
 from weather_tools.silo_models import (
     AustralianCoordinates,
@@ -34,8 +35,14 @@ def silo_patched_point(
     station: Annotated[
         str, typer.Option(help="BOM station code (e.g., '30043' for Brisbane Aero)")
     ],
-    start_date: Annotated[str, typer.Option(help="Start date in YYYYMMDD format")],
-    end_date: Annotated[str, typer.Option(help="End date in YYYYMMDD format")],
+    start_date: Annotated[
+        str,
+        typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
+    ],
+    end_date: Annotated[
+        str,
+        typer.Option(help="End date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
+    ],
     format: Annotated[
         Optional[str],
         typer.Option(
@@ -75,17 +82,17 @@ def silo_patched_point(
     Examples:
         # Get rainfall and temperature for Brisbane Aero (format auto-detected)
         weather-tools silo patched-point --station 30043 \\
-            --start-date 20230101 --end-date 20230131 \\
+            --start-date 2023-01-01 --end-date 2023-01-31 \\
             --var rainfall --var max_temp --var min_temp --output data.csv
         
         # Get all variables in APSIM format
         weather-tools silo patched-point --station 30043 \\
-            --start-date 20230101 --end-date 20230131 \\
+            --start-date 2023-01-01 --end-date 2023-01-31 \\
             --output data.apsim
             
         # Force specific format (extension will be corrected)
         weather-tools silo patched-point --station 30043 \\
-            --start-date 20230101 --end-date 20230131 \\
+            --start-date 2023-01-01 --end-date 2023-01-31 \\
             --format json --output data.json
     """
 
@@ -153,7 +160,9 @@ def silo_patched_point(
 
         typer.echo("🌐 Querying SILO PatchedPoint dataset...")
         typer.echo(f"   Station: {station}")
-        typer.echo(f"   Date Range: {start_date} to {end_date}")
+        typer.echo(
+            f"   Date Range: {silo_yyyymmdd_to_iso(start_date)} to {silo_yyyymmdd_to_iso(end_date)}"
+        )
         typer.echo(f"   Format: {format}")
 
         # Branch: CSV/JSON use convenience methods, APSIM/standard use low-level API
@@ -231,8 +240,14 @@ def silo_patched_point(
 def silo_data_drill(
     latitude: Annotated[float, typer.Option(help="Latitude in decimal degrees (-44 to -10)")],
     longitude: Annotated[float, typer.Option(help="Longitude in decimal degrees (113 to 154)")],
-    start_date: Annotated[str, typer.Option(help="Start date in YYYYMMDD format")],
-    end_date: Annotated[str, typer.Option(help="End date in YYYYMMDD format")],
+    start_date: Annotated[
+        str,
+        typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
+    ],
+    end_date: Annotated[
+        str,
+        typer.Option(help="End date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
+    ],
     format: Annotated[
         str, typer.Option(help="Output format: csv, json, apsim, alldata, standard")
     ] = "csv",
@@ -261,12 +276,12 @@ def silo_data_drill(
     Examples:
         # Get rainfall for a specific location
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\
-            --start-date 20230101 --end-date 20230131 \\
+            --start-date 2023-01-01 --end-date 2023-01-31 \\
             --var rainfall --output data.csv
         
         # Get all variables for a location
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\
-            --start-date 20230101 --end-date 20230131 \\
+            --start-date 2023-01-01 --end-date 2023-01-31 \\
             --format alldata --output data.txt
     """
 
@@ -290,7 +305,9 @@ def silo_data_drill(
 
         typer.echo("🌐 Querying SILO DataDrill dataset...")
         typer.echo(f"   Location: {latitude}°S, {longitude}°E")
-        typer.echo(f"   Date Range: {start_date} to {end_date}")
+        typer.echo(
+            f"   Date Range: {silo_yyyymmdd_to_iso(start_date)} to {silo_yyyymmdd_to_iso(end_date)}"
+        )
         typer.echo(f"   Format: {format}")
 
         # Branch: CSV/JSON use convenience methods, APSIM/alldata/standard use low-level API

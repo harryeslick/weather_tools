@@ -395,17 +395,17 @@ The SILO API functionality is also available via the command-line interface:
 
 ```bash
 # Query PatchedPoint data
-weather-tools silo query --dataset PatchedPoint --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
-    --variables rain,maxtemp,mintemp --output silo_data.csv
+weather-tools silo patched-point --station 30043 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
+    --var rainfall --var max_temp --var min_temp --output silo_data.csv
 
 # Query DataDrill data
-weather-tools silo query --dataset DataDrill --lat -27.5 --lon 151.0 \
-    --start-date 20230101 --end-date 20230131 \
-    --variables rain,maxtemp --output silo_data.csv
+weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
+    --var rainfall --var max_temp --output silo_data.csv
 
 # Find nearby stations
-weather-tools silo nearby --station 30043 --radius 50
+weather-tools silo search --station 30043 --radius 50
 ```
 
 See the [CLI Reference](cli.md) for more details.

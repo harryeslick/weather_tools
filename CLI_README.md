@@ -47,12 +47,12 @@ export SILO_API_KEY="your_email@example.com"
 
 # Query station data
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --var daily_rain --var max_temp --output weather.csv
 
 # Query gridded data
 weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --var daily_rain --output weather.csv
 
 # Search for stations
@@ -90,8 +90,8 @@ weather-tools silo patched-point [OPTIONS]
 
 **Required Options:**
 - `--station TEXT` - BOM station code (e.g., '30043' for Brisbane Aero)
-- `--start-date TEXT` - Start date in YYYYMMDD format
-- `--end-date TEXT` - End date in YYYYMMDD format
+- `--start-date TEXT` - Start date (YYYY-MM-DD)
+- `--end-date TEXT` - End date (YYYY-MM-DD)
 
 **Optional Options:**
 - `--format TEXT` - Output format: csv, json, apsim, standard (auto-detected from filename if not specified)
@@ -113,17 +113,17 @@ File extensions automatically determine output format:
 ```bash
 # Get rainfall and temperature for Brisbane Aero (format auto-detected from .csv)
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --var daily_rain --var max_temp --var min_temp --output data.csv
 
 # Get all variables in APSIM format (auto-detected from .apsim extension)
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --output data.apsim
 
 # Force JSON format (filename will be corrected to data.json)
 weather-tools silo patched-point --station 30043 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --format json --output data.csv
 ```
 
@@ -138,8 +138,8 @@ weather-tools silo data-drill [OPTIONS]
 **Required Options:**
 - `--latitude FLOAT` - Latitude in decimal degrees (-44 to -10)
 - `--longitude FLOAT` - Longitude in decimal degrees (113 to 154)
-- `--start-date TEXT` - Start date in YYYYMMDD format
-- `--end-date TEXT` - End date in YYYYMMDD format
+- `--start-date TEXT` - Start date (YYYY-MM-DD)
+- `--end-date TEXT` - End date (YYYY-MM-DD)
 
 **Optional Options:**
 - `--format TEXT` - Output format: csv, json, apsim, alldata, standard (default: csv)
@@ -154,12 +154,12 @@ weather-tools silo data-drill [OPTIONS]
 ```bash
 # Get rainfall for a specific location
 weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --var daily_rain --output data.csv
 
 # Get all variables for a location
 weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
-    --start-date 20230101 --end-date 20230131 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
     --format alldata --output data.txt
 ```
 

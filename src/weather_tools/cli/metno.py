@@ -6,6 +6,7 @@ from typing import Annotated, Optional
 import pandas as pd
 import typer
 
+from weather_tools.cli.date_utils import iso_date_option, parse_iso_date_strict
 from weather_tools.merge_weather_data import (
     MergeValidationError,
     get_merge_summary,
@@ -130,8 +131,12 @@ def forecast(
 def merge(
     lat: Annotated[float, typer.Option(help="Latitude coordinate (-9 to -44 for Australia)")],
     lon: Annotated[float, typer.Option(help="Longitude coordinate (113 to 154 for Australia)")],
-    start_date: Annotated[str, typer.Option(help="Historical data start date (YYYY-MM-DD)")],
-    end_date: Annotated[str, typer.Option(help="Historical data end date (YYYY-MM-DD)")],
+    start_date: Annotated[
+        str, typer.Option(help="Historical data start date (YYYY-MM-DD)", callback=iso_date_option)
+    ],
+    end_date: Annotated[
+        str, typer.Option(help="Historical data end date (YYYY-MM-DD)", callback=iso_date_option)
+    ],
     output: Annotated[str, typer.Option(help="Output CSV filename")],
     forecast_days: Annotated[int, typer.Option(help="Number of forecast days to append (1-9)")] = 7,
     api_key: Annotated[
@@ -178,9 +183,9 @@ def merge(
             f"[cyan]📡 Querying SILO DataDrill API from {start_date} to {end_date}...[/cyan]"
         )
 
-        # Convert dates from YYYY-MM-DD to YYYYMMDD format for SILO API
-        silo_start = pd.to_datetime(start_date).strftime("%Y%m%d")
-        silo_end = pd.to_datetime(end_date).strftime("%Y%m%d")
+        # Convert dates from ISO YYYY-MM-DD to YYYYMMDD format for SILO API
+        silo_start = parse_iso_date_strict(start_date).strftime("%Y%m%d")
+        silo_end = parse_iso_date_strict(end_date).strftime("%Y%m%d")
 
         # Initialize SILO API client
         if api_key:

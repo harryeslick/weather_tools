@@ -1,6 +1,5 @@
 """SILO GeoTIFF CLI commands."""
 
-import datetime
 import logging
 from pathlib import Path
 from typing import Annotated, Optional
@@ -9,6 +8,7 @@ import typer
 from shapely.geometry import box
 from typing_extensions import List
 
+from weather_tools.cli.date_utils import iso_date_option, parse_iso_date_strict
 from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
 from weather_tools.silo_geotiff import download_geotiff
@@ -25,8 +25,8 @@ geotiff_app = typer.Typer(
 
 @geotiff_app.command(name="download")
 def geotiff_download(
-    start_date: Annotated[str, typer.Option(help="Start date (YYYY-MM-DD format)")],
-    end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD format)")],
+    start_date: Annotated[str, typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_date_option)],
+    end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD)", callback=iso_date_option)],
     variables: Annotated[
         Optional[List[str]],
         typer.Option(
@@ -105,14 +105,9 @@ def geotiff_download(
             )
             raise typer.Exit(1)
 
-    # Parse dates
-    try:
-        start = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-    except ValueError as e:
-        logger.error(f"[red]Error parsing dates: {e}[/red]")
-        logger.warning("[yellow]Expected format: YYYY-MM-DD[/yellow]")
-        raise typer.Exit(1)
+    # Parse dates (validated by option callbacks)
+    start = parse_iso_date_strict(start_date)
+    end = parse_iso_date_strict(end_date)
 
     # Load geometry from file if provided
     geom_obj = None

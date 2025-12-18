@@ -4,10 +4,10 @@ import logging
 from pathlib import Path
 from typing import Annotated, Optional, Union
 
-import pandas as pd
 import typer
 from typing_extensions import List
 
+from weather_tools.cli.date_utils import iso_date_option
 from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
 from weather_tools.read_silo_xarray import read_silo_xarray
@@ -27,8 +27,8 @@ local_app = typer.Typer(
 def extract(
     lat: Annotated[float, typer.Option(help="Latitude coordinate")],
     lon: Annotated[float, typer.Option(help="Longitude coordinate")],
-    start_date: Annotated[str, typer.Option(help="Start date (YYYY-MM-DD format)")],
-    end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD format)")],
+    start_date: Annotated[str, typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_date_option)],
+    end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD)", callback=iso_date_option)],
     output: Annotated[str, typer.Option(help="Output CSV filename")] = "weather_data.csv",
     variables: Annotated[
         Optional[List[str]],
@@ -63,10 +63,6 @@ def extract(
         silo_dir = get_silo_data_dir()
 
     try:
-        # Validate date formats
-        pd.to_datetime(start_date)
-        pd.to_datetime(end_date)
-
         typer.echo(f"Loading SILO data from: {silo_dir}")
         typer.echo(f"Variables: {variables_to_use}")
 
