@@ -1,0 +1,2034 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="personal collection of functions for common weather data operations">
+      
+      
+        <meta name="author" content="harryeslick">
+      
+      
+      
+        <link rel="prev" href="../CHANGELOG/">
+      
+      
+        <link rel="next" href="../metno_api/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.21">
+    
+    
+      
+        <title>SILO API - weather tools</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.2a3383ac.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../style.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#silo-api-module" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="weather tools" class="md-header__button md-logo" aria-label="weather tools" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            weather tools
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              SILO API
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://harryeslick.github.io/weather_tools/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Harryeslick
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../cli/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  CLI Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../CHANGELOG/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../notebooks/map_patchedPoint_sites/" class="md-tabs__link">
+          
+  
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="weather tools" class="md-nav__button md-logo" aria-label="weather tools" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    weather tools
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://harryeslick.github.io/weather_tools/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Harryeslick
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CLI Reference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHANGELOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    SILO API
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    SILO API
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Features
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick Start
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick Start">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basic Usage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datadrill-gridded-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataDrill (Gridded Data)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Options
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#initialize-with-custom-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      Initialize with Custom Settings
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      API Methods
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query" class="md-nav__link">
+    <span class="md-ellipsis">
+      query()
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cache Management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datasets-and-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      Datasets and Formats
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Datasets and Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#patchedpoint-dataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      PatchedPoint Dataset
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datadrill-dataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataDrill Dataset
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#weather-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Weather Variables
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Handling
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error Handling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exception-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exception Types
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Advanced Features
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#response-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      Response Caching
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automatic-retries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automatic Retries
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logging-and-debugging" class="md-nav__link">
+    <span class="md-ellipsis">
+      Logging and Debugging
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#production-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Production Configuration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI Usage
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-your-api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      Getting Your API Key
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      Best Practices
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Models
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#patchedpointquery" class="md-nav__link">
+    <span class="md-ellipsis">
+      PatchedPointQuery
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datadrillquery" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataDrillQuery
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other Models
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      See Also
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metno_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Met.no API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metno_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Met.no Models
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../merge_weather_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Merge Weather Data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api_docs/read_silo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Local NetCDF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/map_patchedPoint_sites/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Map of SILO stations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Local NetCDF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/example_plots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Plotting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/silo_api_examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SILO API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/metno_forecast_example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Forecast data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/geotiff_download_demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Download COG Geotiff from S3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Features
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installation
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick Start
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quick Start">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      Basic Usage
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datadrill-gridded-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataDrill (Gridded Data)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Options
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration Options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#initialize-with-custom-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      Initialize with Custom Settings
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration Parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      API Methods
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="API Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query" class="md-nav__link">
+    <span class="md-ellipsis">
+      query()
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cache-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cache Management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datasets-and-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      Datasets and Formats
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Datasets and Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#patchedpoint-dataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      PatchedPoint Dataset
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datadrill-dataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataDrill Dataset
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#weather-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Weather Variables
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error Handling
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error Handling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exception-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exception Types
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Advanced Features
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#response-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      Response Caching
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automatic-retries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automatic Retries
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logging-and-debugging" class="md-nav__link">
+    <span class="md-ellipsis">
+      Logging and Debugging
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#production-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Production Configuration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      CLI Usage
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-your-api-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      Getting Your API Key
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      Best Practices
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Models
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#patchedpointquery" class="md-nav__link">
+    <span class="md-ellipsis">
+      PatchedPointQuery
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datadrillquery" class="md-nav__link">
+    <span class="md-ellipsis">
+      DataDrillQuery
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other Models
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      See Also
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="silo-api-module">SILO API Module<a class="headerlink" href="#silo-api-module" title="Permanent link">&para;</a></h1>
+<p>The <code>silo_api</code> module provides a Python interface for querying the <a href="https://www.longpaddock.qld.gov.au/silo/">SILO (Scientific Information for Land Owners)</a> API directly, allowing you to fetch weather data without downloading large netCDF files.</p>
+<h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
+<ul>
+<li>✅ <strong>Two dataset types</strong>: PatchedPoint (station-based) and DataDrill (gridded)</li>
+<li>✅ <strong>Multiple formats</strong>: CSV, APSIM, and near-station search</li>
+<li>✅ <strong>Automatic retry logic</strong> with exponential backoff</li>
+<li>✅ <strong>Response caching</strong> to reduce redundant API calls</li>
+<li>✅ <strong>Date validation</strong> ensures correct YYYYMMDD format</li>
+<li>✅ <strong>Configurable timeouts</strong> and retry behavior</li>
+<li>✅ <strong>Comprehensive logging</strong> for debugging and monitoring</li>
+</ul>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<p>The SILO API module is included with the weather_tools package:</p>
+<pre><code class="language-bash">pip install weather-tools
+</code></pre>
+<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<h3 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">from weather_tools.silo_api import SiloAPI, SiloAPIError
+
+# Initialize the API client
+api = SiloAPI(api_key=&quot;your_silo_api_key&quot;)
+
+try:
+    # Query PatchedPoint data for a station
+    result = api.query(
+        dataset=&quot;PatchedPoint&quot;,
+        format=&quot;csv&quot;,
+        station_code=&quot;30043&quot;,
+        start_date=&quot;20230101&quot;,
+        end_date=&quot;20230131&quot;,
+        values=[&quot;rain&quot;, &quot;maxtemp&quot;, &quot;mintemp&quot;]
+    )
+    print(result)
+except SiloAPIError as e:
+    print(f&quot;API Error: {e}&quot;)
+</code></pre>
+<h3 id="datadrill-gridded-data">DataDrill (Gridded Data)<a class="headerlink" href="#datadrill-gridded-data" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python"># Query DataDrill data for specific coordinates
+result = api.query(
+    dataset=&quot;DataDrill&quot;,
+    format=&quot;csv&quot;,
+    longitude=151.0,
+    latitude=-27.5,
+    start_date=&quot;20230101&quot;,
+    end_date=&quot;20230131&quot;,
+    values=[&quot;rain&quot;, &quot;maxtemp&quot;, &quot;mintemp&quot;]
+)
+</code></pre>
+<h2 id="configuration-options">Configuration Options<a class="headerlink" href="#configuration-options" title="Permanent link">&para;</a></h2>
+<h3 id="initialize-with-custom-settings">Initialize with Custom Settings<a class="headerlink" href="#initialize-with-custom-settings" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">from weather_tools.silo_api import SiloAPI
+
+api = SiloAPI(
+    api_key=&quot;your_api_key&quot;,
+    timeout=60,              # Request timeout in seconds (default: 30)
+    max_retries=5,           # Maximum retry attempts (default: 3)
+    retry_delay=2.0,         # Base delay between retries (default: 1.0)
+    enable_cache=True        # Enable response caching (default: False)
+)
+</code></pre>
+<h3 id="configuration-parameters">Configuration Parameters<a class="headerlink" href="#configuration-parameters" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>api_key</code></td>
+<td>str</td>
+<td>Required</td>
+<td>Your SILO API key</td>
+</tr>
+<tr>
+<td><code>timeout</code></td>
+<td>float</td>
+<td>30</td>
+<td>Request timeout in seconds</td>
+</tr>
+<tr>
+<td><code>max_retries</code></td>
+<td>int</td>
+<td>3</td>
+<td>Maximum number of retry attempts</td>
+</tr>
+<tr>
+<td><code>retry_delay</code></td>
+<td>float</td>
+<td>1.0</td>
+<td>Base delay between retries (exponential backoff)</td>
+</tr>
+<tr>
+<td><code>enable_cache</code></td>
+<td>bool</td>
+<td>False</td>
+<td>Enable response caching</td>
+</tr>
+</tbody>
+</table>
+<h2 id="api-methods">API Methods<a class="headerlink" href="#api-methods" title="Permanent link">&para;</a></h2>
+<h3 id="query">query()<a class="headerlink" href="#query" title="Permanent link">&para;</a></h3>
+<p>Main method for querying the SILO API.</p>
+<pre><code class="language-python">result = api.query(
+    dataset: str,
+    format: str = &quot;csv&quot;,
+    station_code: Optional[str] = None,
+    longitude: Optional[float] = None,
+    latitude: Optional[float] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    values: Optional[List[str]] = None,
+    radius: Optional[float] = None
+) -&gt; Union[str, Dict[str, Any]]
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>dataset</code>: 'PatchedPoint' or 'DataDrill'</li>
+<li><code>format</code>: 'csv', 'apsim', or 'near'</li>
+<li><code>station_code</code>: SILO station code (required for PatchedPoint)</li>
+<li><code>longitude</code>, <code>latitude</code>: Location coordinates (required for DataDrill)</li>
+<li><code>start_date</code>, <code>end_date</code>: Date range in YYYYMMDD format</li>
+<li><code>values</code>: List of weather variables to request</li>
+<li><code>radius</code>: Search radius for 'near' format</li>
+</ul>
+<p><strong>Returns:</strong>
+- CSV/APSIM data as string
+- JSON data as dictionary (for non-standard formats)</p>
+<p><strong>Raises:</strong>
+- <code>ValueError</code>: For invalid parameters
+- <code>SiloAPIError</code>: For API request failures</p>
+<h3 id="cache-management">Cache Management<a class="headerlink" href="#cache-management" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python"># Get number of cached responses
+cache_size = api.get_cache_size()
+
+# Clear the cache
+api.clear_cache()
+</code></pre>
+<h2 id="datasets-and-formats">Datasets and Formats<a class="headerlink" href="#datasets-and-formats" title="Permanent link">&para;</a></h2>
+<h3 id="patchedpoint-dataset">PatchedPoint Dataset<a class="headerlink" href="#patchedpoint-dataset" title="Permanent link">&para;</a></h3>
+<p>Station-based data with quality-controlled observations.</p>
+<p><strong>Supported Formats:</strong>
+- <code>csv</code>: Comma-separated values
+- <code>apsim</code>: APSIM format
+- <code>near</code>: Find nearby stations</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python"># CSV format
+result = api.query(
+    dataset=&quot;PatchedPoint&quot;,
+    format=&quot;csv&quot;,
+    station_code=&quot;30043&quot;,
+    start_date=&quot;20230101&quot;,
+    end_date=&quot;20230131&quot;,
+    values=[&quot;rain&quot;, &quot;maxtemp&quot;, &quot;mintemp&quot;]
+)
+
+# APSIM format
+result = api.query(
+    dataset=&quot;PatchedPoint&quot;,
+    format=&quot;apsim&quot;,
+    station_code=&quot;30043&quot;,
+    start_date=&quot;20230101&quot;,
+    end_date=&quot;20230131&quot;
+)
+
+# Find nearby stations
+result = api.query(
+    dataset=&quot;PatchedPoint&quot;,
+    format=&quot;near&quot;,
+    station_code=&quot;30043&quot;,
+    radius=50.0  # Search radius in km
+)
+</code></pre>
+<h3 id="datadrill-dataset">DataDrill Dataset<a class="headerlink" href="#datadrill-dataset" title="Permanent link">&para;</a></h3>
+<p>Gridded data interpolated to specific coordinates.</p>
+<p><strong>Supported Formats:</strong>
+- <code>csv</code>: Comma-separated values
+- <code>apsim</code>: APSIM format</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python">result = api.query(
+    dataset=&quot;DataDrill&quot;,
+    format=&quot;csv&quot;,
+    longitude=151.0,
+    latitude=-27.5,
+    start_date=&quot;20230101&quot;,
+    end_date=&quot;20230131&quot;,
+    values=[&quot;rain&quot;, &quot;maxtemp&quot;, &quot;mintemp&quot;]
+)
+</code></pre>
+<h2 id="weather-variables">Weather Variables<a class="headerlink" href="#weather-variables" title="Permanent link">&para;</a></h2>
+<p>Common weather variables available from SILO:</p>
+<ul>
+<li><code>rain</code>: Daily rainfall (mm)</li>
+<li><code>maxtemp</code>: Maximum temperature (°C)</li>
+<li><code>mintemp</code>: Minimum temperature (°C)</li>
+<li><code>vp</code>: Vapor pressure (hPa)</li>
+<li><code>evap_pan</code>: Class A pan evaporation (mm)</li>
+<li><code>evap_syn</code>: Synthetic estimate of evaporation (mm)</li>
+<li><code>evap_comb</code>: Combination of measured and synthetic evaporation (mm)</li>
+<li><code>radiation</code>: Solar radiation (MJ/m²)</li>
+<li><code>rh_tmax</code>: Relative humidity at time of maximum temperature (%)</li>
+<li><code>rh_tmin</code>: Relative humidity at time of minimum temperature (%)</li>
+</ul>
+<h2 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h2>
+<h3 id="exception-types">Exception Types<a class="headerlink" href="#exception-types" title="Permanent link">&para;</a></h3>
+<p><strong>SiloAPIError</strong>: Raised for API-related errors</p>
+<pre><code class="language-python">from weather_tools.silo_api import SiloAPI, SiloAPIError
+
+try:
+    result = api.query(...)
+except SiloAPIError as e:
+    print(f&quot;API Error: {e}&quot;)
+</code></pre>
+<p><strong>ValueError</strong>: Raised for invalid input parameters</p>
+<pre><code class="language-python">try:
+    result = api.query(
+        dataset=&quot;InvalidDataset&quot;,
+        format=&quot;csv&quot;
+    )
+except ValueError as e:
+    print(f&quot;Invalid parameter: {e}&quot;)
+</code></pre>
+<h3 id="common-errors">Common Errors<a class="headerlink" href="#common-errors" title="Permanent link">&para;</a></h3>
+<p><strong>HTTP Errors (4xx, 5xx):</strong></p>
+<pre><code>SiloAPIError: HTTP 404: Not Found
+</code></pre>
+<p><strong>SILO-Specific Errors:</strong></p>
+<pre><code>SiloAPIError: Sorry, your request was rejected
+</code></pre>
+<p><strong>Timeout Errors (after retries):</strong></p>
+<pre><code>SiloAPIError: Request failed after 3 attempts: Connection timeout
+</code></pre>
+<p><strong>Invalid Dataset:</strong></p>
+<pre><code>ValueError: Unknown dataset: InvalidDataset. Valid datasets: ['PatchedPoint', 'DataDrill']
+</code></pre>
+<p><strong>Invalid Date Format:</strong></p>
+<pre><code>ValueError: start_date must be in YYYYMMDD format (e.g., '20230101'), got: 2023-01-01
+</code></pre>
+<p><strong>Missing Required Parameters:</strong></p>
+<pre><code>ValueError: station_code is required for PatchedPoint queries
+ValueError: longitude and latitude are required for DataDrill queries
+</code></pre>
+<h2 id="advanced-features">Advanced Features<a class="headerlink" href="#advanced-features" title="Permanent link">&para;</a></h2>
+<h3 id="response-caching">Response Caching<a class="headerlink" href="#response-caching" title="Permanent link">&para;</a></h3>
+<p>Enable caching to avoid redundant API calls:</p>
+<pre><code class="language-python">import logging
+
+# Configure logging to see cache activity
+logging.basicConfig(level=logging.INFO)
+
+# Create API with caching enabled
+api = SiloAPI(api_key=&quot;your_key&quot;, enable_cache=True)
+
+# First query - hits the API
+result1 = api.query(
+    dataset=&quot;PatchedPoint&quot;,
+    station_code=&quot;30043&quot;,
+    start_date=&quot;20230101&quot;,
+    end_date=&quot;20230131&quot;,
+    values=[&quot;rain&quot;]
+)
+
+# Second identical query - uses cache
+result2 = api.query(
+    dataset=&quot;PatchedPoint&quot;,
+    station_code=&quot;30043&quot;,
+    start_date=&quot;20230101&quot;,
+    end_date=&quot;20230131&quot;,
+    values=[&quot;rain&quot;]
+)
+
+print(f&quot;Cache size: {api.get_cache_size()}&quot;)  # Output: 1
+print(f&quot;Results identical: {result1 == result2}&quot;)  # Output: True
+
+# Clear cache when done
+api.clear_cache()
+</code></pre>
+<h3 id="automatic-retries">Automatic Retries<a class="headerlink" href="#automatic-retries" title="Permanent link">&para;</a></h3>
+<p>The API automatically retries on transient failures:</p>
+<pre><code class="language-python">api = SiloAPI(
+    api_key=&quot;your_key&quot;,
+    max_retries=5,      # Retry up to 5 times
+    retry_delay=2.0     # 2 second base delay (with exponential backoff)
+)
+
+# API will automatically retry on:
+# - Connection timeouts
+# - Connection errors
+# But NOT on:
+# - HTTP 4xx/5xx errors
+# - SILO-specific rejection messages
+</code></pre>
+<h3 id="logging-and-debugging">Logging and Debugging<a class="headerlink" href="#logging-and-debugging" title="Permanent link">&para;</a></h3>
+<p>Enable detailed logging to monitor API activity:</p>
+<pre><code class="language-python">import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,  # Show all logs
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+api = SiloAPI(api_key=&quot;your_key&quot;)
+
+# You'll see detailed logs:
+# - Request attempts
+# - Cache hits/misses
+# - Retry attempts
+# - Success/failure messages
+</code></pre>
+<h3 id="production-configuration">Production Configuration<a class="headerlink" href="#production-configuration" title="Permanent link">&para;</a></h3>
+<p>Recommended settings for production use:</p>
+<pre><code class="language-python">import os
+import logging
+
+# Configure logging for production
+logging.basicConfig(
+    level=logging.INFO,  # Only info and above
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# Load API key from environment variable
+api_key = os.getenv(&quot;SILO_API_KEY&quot;)
+
+if not api_key:
+    raise ValueError(&quot;SILO_API_KEY environment variable not set&quot;)
+
+# Create production-ready API client
+api = SiloAPI(
+    api_key=api_key,
+    timeout=60,              # Generous timeout
+    max_retries=5,           # More retries for reliability
+    retry_delay=2.0,         # Longer delays between retries
+    enable_cache=True        # Enable caching
+)
+
+try:
+    result = api.query(...)
+    logging.info(f&quot;Query successful, cache size: {api.get_cache_size()}&quot;)
+except SiloAPIError as e:
+    logging.error(f&quot;API error: {e}&quot;)
+    # Handle error appropriately
+</code></pre>
+<h2 id="cli-usage">CLI Usage<a class="headerlink" href="#cli-usage" title="Permanent link">&para;</a></h2>
+<p>The SILO API functionality is also available via the command-line interface:</p>
+<pre><code class="language-bash"># Query PatchedPoint data
+weather-tools silo patched-point --station 30043 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
+    --var rainfall --var max_temp --var min_temp --output silo_data.csv
+
+# Query DataDrill data
+weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
+    --start-date 2023-01-01 --end-date 2023-01-31 \
+    --var rainfall --var max_temp --output silo_data.csv
+
+# Find nearby stations
+weather-tools silo search --station 30043 --radius 50
+</code></pre>
+<p>See the <a href="../cli/">CLI Reference</a> for more details.</p>
+<h2 id="getting-your-api-key">Getting Your API Key<a class="headerlink" href="#getting-your-api-key" title="Permanent link">&para;</a></h2>
+<p>To use the SILO API, you need to obtain an API key:</p>
+<ol>
+<li>Visit the <a href="https://www.longpaddock.qld.gov.au/silo/">SILO website</a></li>
+<li>Register for API access</li>
+<li>Store your API key securely (use environment variables)</li>
+</ol>
+<p><strong>Security Note:</strong> Never hardcode your API key in your source code. Use environment variables or secure configuration files:</p>
+<pre><code class="language-python">import os
+
+# Load from environment variable
+api_key = os.getenv(&quot;SILO_API_KEY&quot;)
+
+# Or use python-dotenv
+from dotenv import load_dotenv
+load_dotenv()
+api_key = os.getenv(&quot;SILO_API_KEY&quot;)
+</code></pre>
+<h2 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>Use environment variables for API keys</strong>
+   <code>python
+   api_key = os.getenv("SILO_API_KEY")</code></p>
+</li>
+<li>
+<p><strong>Enable caching for repeated queries</strong>
+   <code>python
+   api = SiloAPI(api_key=key, enable_cache=True)</code></p>
+</li>
+<li>
+<p><strong>Set appropriate timeouts</strong>
+   ```python
+   # Short timeout for quick checks
+   api = SiloAPI(api_key=key, timeout=10)</p>
+</li>
+</ol>
+<p># Longer timeout for large data downloads
+   api = SiloAPI(api_key=key, timeout=120)
+   ```</p>
+<ol>
+<li>
+<p><strong>Handle exceptions appropriately</strong>
+   <code>python
+   try:
+       result = api.query(...)
+   except ValueError as e:
+       # Handle input validation errors
+       logger.error(f"Invalid input: {e}")
+   except SiloAPIError as e:
+       # Handle API errors
+       logger.error(f"API error: {e}")</code></p>
+</li>
+<li>
+<p><strong>Use logging in production</strong>
+   <code>python
+   import logging
+   logging.basicConfig(
+       level=logging.WARNING,  # Only warnings and errors
+       format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+   )</code></p>
+</li>
+</ol>
+<h2 id="data-models">Data Models<a class="headerlink" href="#data-models" title="Permanent link">&para;</a></h2>
+<p>The weather_tools package provides Pydantic models for structured API queries:</p>
+<h3 id="patchedpointquery">PatchedPointQuery<a class="headerlink" href="#patchedpointquery" title="Permanent link">&para;</a></h3>
+<p>Model for PatchedPoint dataset queries:</p>
+<pre><code class="language-python">from weather_tools import PatchedPointQuery
+
+query = PatchedPointQuery(
+    station=&quot;30043&quot;,
+    start_date=&quot;20230101&quot;,
+    end_date=&quot;20230131&quot;,
+    variables=[&quot;R&quot;, &quot;X&quot;, &quot;N&quot;],  # Rain, Max temp, Min temp
+    format=&quot;csv&quot;
+)
+</code></pre>
+<h3 id="datadrillquery">DataDrillQuery<a class="headerlink" href="#datadrillquery" title="Permanent link">&para;</a></h3>
+<p>Model for DataDrill dataset queries:</p>
+<pre><code class="language-python">from weather_tools import DataDrillQuery
+
+query = DataDrillQuery(
+    lat=-27.5,
+    lon=153.0,
+    start_date=&quot;20230101&quot;, 
+    end_date=&quot;20230131&quot;,
+    variables=[&quot;R&quot;, &quot;X&quot;, &quot;N&quot;],
+    format=&quot;csv&quot;
+)
+</code></pre>
+<h3 id="other-models">Other Models<a class="headerlink" href="#other-models" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>ClimateVariable</code></strong>: Enum for valid climate variable codes</li>
+<li><strong><code>SiloFormat</code></strong>: Enum for output formats (csv, json, apsim, standard)</li>
+<li><strong><code>SiloDataset</code></strong>: Enum for dataset types (PatchedPoint, DataDrill)</li>
+<li><strong><code>AustralianCoordinates</code></strong>: Validator for Australian lat/lon coordinates</li>
+<li><strong><code>SiloDateRange</code></strong>: Validator for SILO date format (YYYYMMDD)</li>
+<li><strong><code>SiloResponse</code></strong>: Response wrapper with metadata</li>
+</ul>
+<p>These models provide validation, type hints, and automatic parameter generation for SILO API requests.</p>
+<h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../cli/">CLI Reference</a> - Command-line interface documentation</li>
+<li><a href="../api_docs/read_silo/">API Reference</a> - Local netCDF file reading</li>
+<li><a href="../notebooks/example/">Examples</a> - Jupyter notebook examples</li>
+</ul>
+
+
+
+
+
+
+
+  
+    
+  
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    2025-12-18
+  </span>
+
+    
+    
+    
+    
+  </aside>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.top", "search.highlight", "search.share"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+        <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+      
+    
+  </body>
+</html>
