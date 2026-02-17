@@ -82,6 +82,10 @@ def extract(
             .reset_index()
         )
 
+        # Rename 'time' → 'date' to match the standard point-data column name
+        if "time" in df.columns and "date" not in df.columns:
+            df = df.rename(columns={"time": "date"})
+
         # Drop location columns by default unless --keep-location is specified
         if not keep_location:
             columns_to_drop = [col for col in ["crs", "lat", "lon"] if col in df.columns]
