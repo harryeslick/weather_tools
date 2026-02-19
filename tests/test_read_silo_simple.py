@@ -128,7 +128,7 @@ def test_extract_single_point():
 
     # Extract nearest point for a short time period
     point_ds = ds.sel(lat=lat, lon=lon, method="nearest", tolerance=0.1).sel(
-        time=slice("2020-01-01", "2020-01-07")
+        time=slice("2024-01-01", "2024-01-07")
     )
 
     assert point_ds is not None
@@ -145,7 +145,7 @@ def test_to_dataframe_conversion():
 
     # Extract a small subset for testing
     subset = ds.sel(lat=-27.5, lon=153.0, method="nearest", tolerance=0.1).sel(
-        time=slice("2020-01-01", "2020-01-03")
+        time=slice("2024-01-01", "2024-01-03")
     )
 
     # Convert to DataFrame
@@ -201,7 +201,7 @@ def test_data_has_values():
 
     # Extract a specific point and time
     point_ds = ds.sel(lat=-27.5, lon=153.0, method="nearest", tolerance=0.1).sel(
-        time=slice("2020-01-01", "2020-01-03")
+        time=slice("2024-01-01", "2024-01-03")
     )
 
     # Check that we have some non-NaN values

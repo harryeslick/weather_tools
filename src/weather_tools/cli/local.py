@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Annotated, Optional, Union, cast
+from typing import Annotated, Optional, Union
 
 import typer
 from typing_extensions import List
@@ -158,10 +158,10 @@ def download(
     start_year: Annotated[int, typer.Option(help="First year to download (inclusive)")],
     end_year: Annotated[int, typer.Option(help="Last year to download (inclusive)")],
     variables: Annotated[
-        Optional[List[VariableName]],
+        Optional[VariableName],
         typer.Option(
             "--var",
-            help="Variable names (daily_rain, max_temp, etc.). Can specify multiple. or leave blank to download all daily data.",
+            help="Variable names (daily_rain, max_temp, etc.) or leave blank to download all daily data.",
         ),
     ] = None,
     silo_dir: Annotated[

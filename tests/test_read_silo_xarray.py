@@ -138,7 +138,7 @@ class TestReadSiloXarray:
         ds = read_silo_test_safe(variables=["max_temp"], silo_dir=silo_data_available)
 
         # Work with a small time slice to avoid memory issues
-        subset = ds.sel(time=slice("2020-01-01", "2020-01-07"))
+        subset = ds.sel(time=slice("2024-01-01", "2024-01-07"))
 
         # Check that data is not all NaN
         assert not subset["max_temp"].isnull().all(), "All max_temp values are NaN"
@@ -245,8 +245,8 @@ class TestReadSiloXarrayIntegration:
         """Test extracting a time slice."""
         ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
 
-        # Extract January 2020
-        time_slice = ds.sel(time=slice("2020-01-01", "2020-01-31"))
+        # Extract January 2024
+        time_slice = ds.sel(time=slice("2024-01-01", "2024-01-31"))
 
         assert time_slice is not None
         assert len(time_slice.time) > 0
@@ -258,7 +258,7 @@ class TestReadSiloXarrayIntegration:
 
         # Extract a small subset for testing
         subset = ds.sel(lat=-27.5, lon=153.0, method="nearest", tolerance=0.1).sel(
-            time=slice("2020-01-01", "2020-01-03")
+            time=slice("2024-01-01", "2024-01-03")
         )
 
         # Convert to DataFrame
