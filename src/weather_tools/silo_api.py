@@ -358,8 +358,7 @@ class SiloAPI:
         end_date: str,
         variables: Optional[List[str]] = None,
         format: str = "csv",
-        return_metadata: bool = False,
-    ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, dict]]:
+    ) -> Tuple[pd.DataFrame, dict]:
         """
         Get PatchedPoint data (weather station data with infilled gaps) using simple string arguments.
 
@@ -373,19 +372,14 @@ class SiloAPI:
             variables: List of canonical variable names from SILO registry (e.g., "daily_rain", "max_temp").
                       If None, gets common variables: daily_rain, max_temp, min_temp, evap_pan, radiation, vp
             format: Response format, default "csv"
-            return_metadata: If True, returns tuple of (DataFrame, metadata dict)
 
         Returns:
-            pandas.DataFrame with climate data, or tuple of (DataFrame, metadata) if return_metadata=True
+            Tuple of (DataFrame, metadata dict). The DataFrame has no embedded ``metadata`` column.
 
         Example:
             >>> api = SiloAPI()
-            >>> df = api.get_patched_point("30043", "20230101", "20230131", ["daily_rain", "max_temp"])
+            >>> df, meta = api.get_patched_point("30043", "20230101", "20230131", ["daily_rain", "max_temp"])
             >>> print(df.head())
-            >>>
-            >>> # With metadata
-            >>> df, metadata = api.get_patched_point("30043", "20230101", "20230131",
-            ...                                       return_metadata=True)
         """
         from weather_tools.silo_models import (
             PatchedPointQuery,
@@ -425,17 +419,14 @@ class SiloAPI:
         # Parse to DataFrame
         df = self._response_to_dataframe(response)
 
-        if return_metadata:
-            metadata = {
-                "station_code": station_code,
-                "date_range": {"start": start_date, "end": end_date},
-                "variables": variables,
-                "format": format,
-                "dataset": "PatchedPoint",
-            }
-            return df, metadata
-
-        return df
+        metadata = {
+            "station_code": station_code,
+            "date_range": {"start": start_date, "end": end_date},
+            "variables": variables,
+            "format": format,
+            "dataset": "PatchedPoint",
+        }
+        return df.drop(columns=["metadata"], errors="ignore"), metadata
 
     def get_data_drill(
         self,
@@ -445,8 +436,7 @@ class SiloAPI:
         end_date: str,
         variables: Optional[List[str]] = None,
         format: str = "csv",
-        return_metadata: bool = False,
-    ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, dict]]:
+    ) -> Tuple[pd.DataFrame, dict]:
         """
         Get DataDrill data (interpolated gridded data) for any coordinates using simple arguments.
 
@@ -462,14 +452,13 @@ class SiloAPI:
             variables: List of canonical variable names from SILO registry (e.g., "daily_rain", "max_temp").
                       If None, gets common variables: daily_rain, max_temp, min_temp, evap_pan, radiation, vp
             format: Response format, default "csv"
-            return_metadata: If True, returns tuple of (DataFrame, metadata dict)
 
         Returns:
-            pandas.DataFrame with climate data, or tuple of (DataFrame, metadata) if return_metadata=True
+            Tuple of (DataFrame, metadata dict). The DataFrame has no embedded ``metadata`` column.
 
         Example:
             >>> api = SiloAPI()
-            >>> df = api.get_data_drill(-27.5, 151.0, "20230101", "20230131", ["daily_rain"])
+            >>> df, meta = api.get_data_drill(-27.5, 151.0, "20230101", "20230131", ["daily_rain"])
             >>> print(df.head())
         """
         from weather_tools.silo_models import (
@@ -521,12 +510,7 @@ class SiloAPI:
                 "dataset": "DataDrill",
             }
         )
-        df.loc[0, "metadata"] = json.dumps(metadata)
-
-        if return_metadata:
-            return df, metadata
-
-        return df
+        return df.drop(columns=["metadata"], errors="ignore"), metadata
 
     def search_stations(
         self,
@@ -647,9 +631,11 @@ class SiloAPI:
         end_str = end_date.strftime("%Y%m%d")
 
         if station_code:
-            return self.get_patched_point(station_code, start_str, end_str, variables)
+            df, _ = self.get_patched_point(station_code, start_str, end_str, variables)
+            return df
         elif latitude is not None and longitude is not None:
-            return self.get_data_drill(latitude, longitude, start_str, end_str, variables)
+            df, _ = self.get_data_drill(latitude, longitude, start_str, end_str, variables)
+            return df
         else:
             raise ValueError("Either station_code or both latitude/longitude must be provided")
 
@@ -679,6 +665,7 @@ class SiloAPI:
                 df = df.drop(columns=["metadata", "YYYY-MM-DD"], errors="ignore")
                 df.loc[0, "metadata"] = json.dumps(metadata)
                 df.dropna(subset=["date"], inplace=True)
+                df = df.reset_index(drop=True)
 
                 return df
             else:

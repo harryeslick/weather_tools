@@ -63,7 +63,7 @@ def _prepare_silo_df(df: pd.DataFrame) -> pd.DataFrame:
     non_schema = [
         c
         for c in df.columns
-        if c.endswith("_source") or c in ("metadata", "station", "latitude", "longitude")
+        if c.endswith("_source") or c in ("station", "latitude", "longitude")
     ]
     return df.drop(columns=non_schema, errors="ignore")
 
@@ -94,24 +94,26 @@ def metno_api():
 @pytest.fixture(scope="module")
 def raw_patched_point(silo_api):
     """Fetch a small PatchedPoint window; cached for the module."""
-    return silo_api.get_patched_point(
+    df, _ = silo_api.get_patched_point(
         station_code=_STATION_CODE,
         start_date=_SILO_START,
         end_date=_SILO_END,
         variables=_VARIABLES,
     )
+    return df
 
 
 @pytest.fixture(scope="module")
 def raw_data_drill(silo_api):
     """Fetch a small DataDrill window; cached for the module."""
-    return silo_api.get_data_drill(
+    df, _ = silo_api.get_data_drill(
         latitude=_LAT,
         longitude=_LON,
         start_date=_SILO_START,
         end_date=_SILO_END,
         variables=_VARIABLES,
     )
+    return df
 
 
 @pytest.fixture(scope="module")
@@ -132,7 +134,7 @@ def raw_merged(silo_api, raw_forecast):
     history_end = forecast_start - pd.Timedelta(days=1)
     history_start = history_end - pd.Timedelta(days=6)
 
-    silo_history = silo_api.get_data_drill(
+    silo_history, _ = silo_api.get_data_drill(
         latitude=_LAT,
         longitude=_LON,
         start_date=history_start.strftime("%Y%m%d"),
@@ -215,14 +217,6 @@ class TestSiloPointSchema:
     def test_data_drill_row_count(self, raw_data_drill):
         """DataDrill returns the expected number of rows for the date window."""
         assert len(raw_data_drill) == 7
-
-    def test_schema_flags_embedded_metadata_column(self, raw_patched_point):
-        """SiloPointSchema.validate_dataframe() flags a 'metadata' column as a violation."""
-        issues = SiloPointSchema.validate_dataframe(raw_patched_point)
-        assert any("metadata" in issue for issue in issues), (
-            "Expected a violation about the 'metadata' column; got: " + str(issues)
-        )
-
 
 @pytest.mark.integration
 class TestMetNoForecastSchema:
