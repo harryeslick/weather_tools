@@ -109,7 +109,7 @@ class SiloAPI:
             timeout: Request timeout in seconds (default: 30)
             max_retries: Maximum number of retry attempts for failed requests (default: 3)
             retry_delay: Base delay between retries in seconds (default: 1.0)
-            enable_cache: Whether to cache API responses (default: False)
+            enable_cache: Whether to cache API responses (default: True)
             log_level: Logging level for API diagnostics (default: ``INFO``)
 
         Raises:
@@ -589,6 +589,79 @@ class SiloAPI:
                 ascending=False,
             )
         return df
+
+    def search_stations_by_location(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_km: float = 50.0,
+        name_fragment: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """
+        Search for weather stations within a radius of given coordinates.
+
+        Fetches all station metadata from the SILO API, converts to a
+        GeoDataFrame, and performs a spatial query to find stations within
+        the specified radius. Results are sorted by ascending distance.
+
+        Args:
+            latitude: Query point latitude (e.g., -27.5)
+            longitude: Query point longitude (e.g., 153.0)
+            radius_km: Search radius in kilometres (default 50)
+            name_fragment: Optional name filter applied after spatial filtering
+
+        Returns:
+            pandas.DataFrame with station information and a ``distance_km`` column,
+            sorted by ascending distance from the query point.
+
+        Example:
+            >>> api = SiloAPI()
+            >>> nearby = api.search_stations_by_location(-27.47, 153.03, radius_km=20)
+            >>> print(nearby[['name', 'station_code', 'distance_km']].head())
+        """
+        import geopandas as gpd
+        from pyproj import Transformer
+        from shapely.geometry import Point
+
+        # 1. Pull all station metadata
+        all_stations = self.search_stations(name_fragment="__")
+
+        if all_stations.empty:
+            return all_stations
+
+        # 2. Convert to GeoDataFrame
+        gdf = gpd.GeoDataFrame(
+            all_stations,
+            geometry=gpd.points_from_xy(all_stations["longitude"], all_stations["latitude"]),
+            crs="EPSG:4326",
+        )
+
+        # 3. Spatial query — project to a metric CRS for distance calculation
+        # Use UTM-like projected CRS for accurate local distances.
+        _query_point = gpd.GeoDataFrame(geometry=[Point(longitude, latitude)], crs="EPSG:4326")
+        # Use UTM-like equal-area projection for accurate distances
+        metric_crs = _query_point.estimate_utm_crs()
+
+        gdf_m = gdf.to_crs(metric_crs)
+        # using Transformer to remove warning revieved from transforming _query_point in geopandas
+        transformer = Transformer.from_crs("EPSG:4326", metric_crs, always_xy=True)
+        query_x, query_y = transformer.transform(float(longitude), float(latitude))
+        query_point_m = Point(query_x, query_y)
+
+        gdf_m["distance_km"] = gdf_m.distance(query_point_m) / 1000.0
+
+        # 4. Filter by radius and sort
+        mask = gdf_m["distance_km"] <= radius_km
+        result = gdf_m.loc[mask].sort_values("distance_km").copy()
+
+        # 4b. Optional name filtering
+        if name_fragment:
+            fragment = name_fragment.replace("_", " ").strip().lower()
+            result = result[result["name"].str.lower().str.contains(fragment, na=False)]
+
+        # Drop geometry column, return plain DataFrame
+        result = pd.DataFrame(result.drop(columns=["geometry"]))
+        return result.reset_index(drop=True)
 
     def get_recent_data(
         self,
