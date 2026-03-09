@@ -12,7 +12,7 @@ from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_netcdf import download_netcdf
-from weather_tools.silo_variables import SiloNetCDFError, VariableName
+from weather_tools.silo_variables import SiloNetCDFError, VariableInput, VariableName
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,10 @@ def extract(
             .to_dataframe()
             .reset_index()
         )
+
+        # Rename 'time' → 'date' to match the standard point-data column name
+        if "time" in df.columns and "date" not in df.columns:
+            df = df.rename(columns={"time": "date"})
 
         # Drop location columns by default unless --keep-location is specified
         if not keep_location:
@@ -157,7 +161,7 @@ def download(
         Optional[VariableName],
         typer.Option(
             "--var",
-            help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.",
+            help="Variable names (daily_rain, max_temp, etc.) or leave blank to download all daily data.",
         ),
     ] = None,
     silo_dir: Annotated[
@@ -198,8 +202,7 @@ def download(
             --start-year 2023 --end-year 2023 --force
     """
     # Set defaults
-    if variables is None:
-        variables = ["daily"]
+    var_input: VariableInput = variables if variables is not None else "daily"
 
     if silo_dir is None:
         silo_dir = get_silo_data_dir()
@@ -208,7 +211,7 @@ def download(
 
     try:
         download_netcdf(
-            variables=variables,
+            variables=var_input,
             start_year=start_year,
             end_year=end_year,
             output_dir=silo_dir,

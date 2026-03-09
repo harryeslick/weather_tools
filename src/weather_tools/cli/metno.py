@@ -194,7 +194,7 @@ def merge(
             silo_api = SiloAPI(enable_cache=enable_cache, log_level=log_level)
 
         # Query DataDrill API for common variables (rainfall, max_temp, min_temp, etc.)
-        silo_df = silo_api.get_data_drill(
+        silo_df, _ = silo_api.get_data_drill(
             latitude=coords.latitude,
             longitude=coords.longitude,
             start_date=silo_start,

@@ -167,22 +167,18 @@ def silo_patched_point(
 
         # Branch: CSV/JSON use convenience methods, APSIM/standard use low-level API
         if format in ["csv", "json"]:
-            # Use convenience method - returns DataFrame (return_metadata=False by default)
-            df = api.get_patched_point(
+            df, _ = api.get_patched_point(
                 station_code=station,
                 start_date=start_date,
                 end_date=end_date,
                 variables=variables,
                 format=format,
-                return_metadata=False,
             )
 
             typer.echo("✅ Query successful!")
 
             # Convert DataFrame to output format
             if format == "csv":
-                # Drop metadata column for cleaner CSV output
-                df = df.drop(columns=["metadata"], errors="ignore")
                 result_text = df.to_csv(index=False)
             else:  # json
                 result_text = df.to_json(orient="records", date_format="iso")
@@ -312,23 +308,19 @@ def silo_data_drill(
 
         # Branch: CSV/JSON use convenience methods, APSIM/alldata/standard use low-level API
         if format in ["csv", "json"]:
-            # Use convenience method - returns DataFrame (return_metadata=False by default)
-            df = api.get_data_drill(
+            df, _ = api.get_data_drill(
                 latitude=latitude,
                 longitude=longitude,
                 start_date=start_date,
                 end_date=end_date,
                 variables=variables,
                 format=format,
-                return_metadata=False,
             )
 
             typer.echo("✅ Query successful!")
 
             # Convert DataFrame to output format
             if format == "csv":
-                # Drop metadata column for cleaner CSV output
-                df = df.drop(columns=["metadata"], errors="ignore")
                 result_text = df.to_csv(index=False)
             else:  # json
                 result_text = df.to_json(orient="records", date_format="iso")
