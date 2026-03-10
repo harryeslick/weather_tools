@@ -55,8 +55,11 @@ weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
     --start-date 2023-01-01 --end-date 2023-01-31 \
     --var daily_rain --output weather.csv
 
-# Search for stations
+# Search for stations by name
 weather-tools silo search --name Brisbane
+
+# Search for stations near coordinates
+weather-tools silo search --lat -27.47 --lon 153.03
 ```
 
 ### Using Local Files (Offline)
@@ -165,7 +168,7 @@ weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
 
 ### `silo search`
 
-Search for SILO stations by name or find nearby stations.
+Search for SILO stations by name, coordinates, or find nearby stations.
 
 ```bash
 weather-tools silo search [OPTIONS]
@@ -174,7 +177,10 @@ weather-tools silo search [OPTIONS]
 **Options:**
 - `--name TEXT` - Search for stations by name fragment (e.g., 'Brisbane')
 - `--station TEXT` - Station code for nearby search or details lookup
-- `--radius FLOAT` - Search radius in km (for nearby search, default: 50.0)
+- `--lat FLOAT` - Latitude for location-based search (e.g., -27.47)
+- `--lon FLOAT` - Longitude for location-based search (e.g., 153.03)
+- `--radius INTEGER` - Search radius in km (default: 50)
+- `--state TEXT` - Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT)
 - `--details` - Get detailed info for a specific station
 - `--api-key TEXT` - SILO API key (or set SILO_API_KEY env var)
 - `--output, -o TEXT` - Output filename
@@ -186,7 +192,16 @@ weather-tools silo search [OPTIONS]
 # Search by name
 weather-tools silo search --name Brisbane
 
-# Find nearby stations
+# Search by name filtered by state
+weather-tools silo search --name Brisbane --state QLD
+
+# Search by coordinates (default 50km radius)
+weather-tools silo search --lat -27.47 --lon 153.03
+
+# Search by coordinates with custom radius and name filter
+weather-tools silo search --lat -27.47 --lon 153.03 --radius 20 --name Airport
+
+# Find nearby stations by station code
 weather-tools silo search --station 30043 --radius 50
 
 # Get station details

@@ -380,8 +380,14 @@ def silo_search(
     station: Annotated[
         Optional[str], typer.Option(help="Station code for nearby search or details lookup")
     ] = None,
+    lat: Annotated[
+        Optional[float], typer.Option(help="Latitude for location-based search (e.g., -27.47)")
+    ] = None,
+    lon: Annotated[
+        Optional[float], typer.Option(help="Longitude for location-based search (e.g., 153.03)")
+    ] = None,
     radius: Annotated[
-        Optional[int], typer.Option(help="Search radius in km (for nearby search)")
+        Optional[int], typer.Option(help="Search radius in km (default 50)")
     ] = None,
     state: Annotated[
         Optional[Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"]],
@@ -400,7 +406,7 @@ def silo_search(
     ] = "INFO",
 ) -> None:
     """
-    Search for SILO stations by name or find nearby stations.
+    Search for SILO stations by name, location, or find nearby stations.
 
     Examples:
         # Search by name
@@ -409,7 +415,13 @@ def silo_search(
         # Search by name and filter by state
         weather-tools silo search --name Brisbane --state QLD
 
-        # Find nearby stations
+        # Search by coordinates (default 50km radius)
+        weather-tools silo search --lat -27.47 --lon 153.03
+
+        # Search by coordinates with custom radius and name filter
+        weather-tools silo search --lat -27.47 --lon 153.03 --radius 20 --name Airport
+
+        # Find nearby stations by station code
         weather-tools silo search --station 30043 --radius 50
 
         # Get station details
@@ -441,6 +453,34 @@ def silo_search(
             else:
                 typer.echo("\n📍 Results:")
                 typer.echo(response.to_csv())
+
+        elif lat is not None and lon is not None:
+            # Search by coordinates using search_stations_by_location
+            search_radius = radius if radius is not None else 50
+            typer.echo(f"🔍 Searching for stations within {search_radius}km of ({lat}, {lon})...")
+            if name:
+                typer.echo(f"   Filtering by name: '{name}'")
+
+            df = api.search_stations_by_location(
+                latitude=lat,
+                longitude=lon,
+                radius_km=search_radius,
+                name_fragment=name,
+            )
+
+            typer.echo(f"✅ Found {len(df)} station(s)!")
+
+            if output:
+                output_path = Path(output)
+                df.to_csv(output_path, index=False)
+                typer.echo(f"💾 Saved to: {output_path.absolute()}")
+            else:
+                typer.echo("\n📍 Results:")
+                typer.echo(df.to_string(index=False))
+
+        elif lat is not None or lon is not None:
+            typer.echo("❌ Error: Both --lat and --lon are required for location search", err=True)
+            raise typer.Exit(1)
 
         elif name:
             # Search by name using the search_stations method
@@ -478,7 +518,7 @@ def silo_search(
 
         else:
             typer.echo(
-                "❌ Error: Provide --name for name search, --station --radius for nearby search, or --station --details for info",
+                "❌ Error: Provide --name for name search, --lat --lon for location search, --station --radius for nearby search, or --station --details for info",
                 err=True,
             )
             raise typer.Exit(1)

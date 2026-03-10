@@ -76,6 +76,9 @@ uv run weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-
 # Download SILO data from AWS S3
 uv run weather-tools local download --var daily --start-year 2020 --end-year 2023
 
+# Search for stations near coordinates
+uv run weather-tools silo search --lat -27.47 --lon 153.03 --radius 20
+
 # Download GeoTIFF files with spatial clipping
 uv run weather-tools geotiff download --var daily_rain \
     --start-date 2023-01-01 --end-date 2023-01-31 \
@@ -156,7 +159,7 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 
 **`cli/`** - Modular Typer-based command-line interface
 - **`cli/__init__.py`** - Main app orchestrator that registers subapps and provides entry point
-- **`cli/silo.py`** - SILO API commands: `patched-point`, `data-drill`, `search`
+- **`cli/silo.py`** - SILO API commands: `patched-point`, `data-drill`, `search` (by name, station code, or lat/lon coordinates)
 - **`cli/local.py`** - Local NetCDF commands: `extract`, `info`, `download`
 - **`cli/metno.py`** - Met.no API commands: `forecast`, `merge`, `info`
 - **`cli/geotiff.py`** - GeoTIFF commands: `download` (with optional --bbox or --geometry clipping)
