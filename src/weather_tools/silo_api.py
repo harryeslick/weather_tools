@@ -419,13 +419,17 @@ class SiloAPI:
         # Parse to DataFrame
         df = self._response_to_dataframe(response)
 
-        metadata = {
-            "station_code": station_code,
-            "date_range": {"start": start_date, "end": end_date},
-            "variables": variables,
-            "format": format,
-            "dataset": "PatchedPoint",
-        }
+        metadata = json.loads(df.loc[0, "metadata"])
+        metadata.update(
+            {
+                "station_code": station_code,
+                "date_range": {"start": start_date, "end": end_date},
+                "variables": variables,
+                "format": format,
+                "dataset": "PatchedPoint",
+            }
+        )
+
         return df.drop(columns=["metadata"], errors="ignore"), metadata
 
     def get_data_drill(
