@@ -8,6 +8,7 @@ import typer
 from pydantic import ValidationError
 
 from weather_tools.cli.date_utils import iso_to_silo_yyyymmdd_option, silo_yyyymmdd_to_iso
+from weather_tools.config import get_cache_dir
 from weather_tools.silo_api import SiloAPI, SiloAPIError
 from weather_tools.silo_models import (
     AustralianCoordinates,
@@ -61,6 +62,12 @@ def silo_patched_point(
         Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
     ] = None,
     enable_cache: Annotated[bool, typer.Option(help="Enable response caching")] = False,
+    cache_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--cache-dir", help="Cache directory (default: ~/.cache/weather_tools/silo_api)"
+        ),
+    ] = None,
     log_level: Annotated[
         str,
         typer.Option(
@@ -70,7 +77,7 @@ def silo_patched_point(
 ) -> None:
     """
     Query SILO PatchedPoint dataset (station-based data).
-    
+
     Format is auto-detected from output filename extension:
     - .csv → csv format
     - .json → json format  
@@ -153,10 +160,13 @@ def silo_patched_point(
             raise typer.Exit(1)
 
         # Initialize API
+        cache_kwargs = {"enable_cache": enable_cache}
+        if cache_dir:
+            cache_kwargs["cache_dir"] = cache_dir
         if api_key:
-            api = SiloAPI(api_key=api_key, enable_cache=enable_cache, log_level=log_level)
+            api = SiloAPI(api_key=api_key, log_level=log_level, **cache_kwargs)
         else:
-            api = SiloAPI(enable_cache=enable_cache, log_level=log_level)
+            api = SiloAPI(log_level=log_level, **cache_kwargs)
 
         typer.echo("🌐 Querying SILO PatchedPoint dataset...")
         typer.echo(f"   Station: {station}")
@@ -217,7 +227,12 @@ def silo_patched_point(
                 typer.echo(result_text)
 
         if enable_cache:
-            typer.echo(f"📦 Cache size: {api.get_cache_size()}")
+            disk_usage = api.get_cache_disk_usage()
+            typer.echo(
+                f"📦 Cache: {api.get_cache_size()} entries"
+                f"{f', {disk_usage / 1024:.1f} KB on disk' if disk_usage else ''}. "
+                "Clear with: weather-tools silo cache --clear"
+            )
 
     except ValidationError as e:
         typer.echo("❌ Validation error:", err=True)
@@ -259,6 +274,12 @@ def silo_data_drill(
         Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
     ] = None,
     enable_cache: Annotated[bool, typer.Option(help="Enable response caching")] = False,
+    cache_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--cache-dir", help="Cache directory (default: ~/.cache/weather_tools/silo_api)"
+        ),
+    ] = None,
     log_level: Annotated[
         str,
         typer.Option(
@@ -294,10 +315,13 @@ def silo_data_drill(
             raise typer.Exit(1)
 
         # Initialize API
+        cache_kwargs = {"enable_cache": enable_cache}
+        if cache_dir:
+            cache_kwargs["cache_dir"] = cache_dir
         if api_key:
-            api = SiloAPI(api_key=api_key, enable_cache=enable_cache, log_level=log_level)
+            api = SiloAPI(api_key=api_key, log_level=log_level, **cache_kwargs)
         else:
-            api = SiloAPI(enable_cache=enable_cache, log_level=log_level)
+            api = SiloAPI(log_level=log_level, **cache_kwargs)
 
         typer.echo("🌐 Querying SILO DataDrill dataset...")
         typer.echo(f"   Location: {latitude}°S, {longitude}°E")
@@ -357,7 +381,12 @@ def silo_data_drill(
                 typer.echo(result_text)
 
         if enable_cache:
-            typer.echo(f"📦 Cache size: {api.get_cache_size()}")
+            disk_usage = api.get_cache_disk_usage()
+            typer.echo(
+                f"📦 Cache: {api.get_cache_size()} entries"
+                f"{f', {disk_usage / 1024:.1f} KB on disk' if disk_usage else ''}. "
+                "Clear with: weather-tools silo cache --clear"
+            )
 
     except ValidationError as e:
         typer.echo("❌ Validation error:", err=True)
@@ -386,9 +415,7 @@ def silo_search(
     lon: Annotated[
         Optional[float], typer.Option(help="Longitude for location-based search (e.g., 153.03)")
     ] = None,
-    radius: Annotated[
-        Optional[int], typer.Option(help="Search radius in km (default 50)")
-    ] = None,
+    radius: Annotated[Optional[int], typer.Option(help="Search radius in km (default 50)")] = None,
     state: Annotated[
         Optional[Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"]],
         typer.Option(help="Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT)"),
@@ -534,3 +561,46 @@ def silo_search(
     except Exception as e:
         typer.echo(f"❌ Error: {e}", err=True)
         raise typer.Exit(1)
+
+
+@silo_app.command(name="cache")
+def silo_cache(
+    clear: Annotated[bool, typer.Option("--clear", help="Clear all cached API responses")] = False,
+    cache_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--cache-dir", help="Cache directory (default: ~/.cache/weather_tools/silo_api)"
+        ),
+    ] = None,
+) -> None:
+    """
+    View or manage the SILO API response cache.
+
+    Examples:
+        # Show cache info
+        weather-tools silo cache
+
+        # Clear the cache
+        weather-tools silo cache --clear
+    """
+    import diskcache
+
+    cache_path = Path(cache_dir) if cache_dir else get_cache_dir() / "silo_api"
+
+    if not cache_path.exists():
+        typer.echo(f"📦 Cache directory: {cache_path}")
+        typer.echo("   No cache found (directory does not exist)")
+        return
+
+    cache = diskcache.Cache(str(cache_path))
+
+    if clear:
+        count = len(cache)
+        cache.clear()
+        cache.close()
+        typer.echo(f"🗑️  Cleared {count} cached entries from {cache_path}")
+    else:
+        typer.echo(f"📦 Cache directory: {cache_path}")
+        typer.echo(f"   Entries: {len(cache)}")
+        typer.echo(f"   Disk usage: {cache.volume() / 1024:.1f} KB")
+        cache.close()

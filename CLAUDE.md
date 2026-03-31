@@ -115,7 +115,10 @@ weather-tools local download --var monthly \
 **`silo_api.py`** - HTTP client for SILO API
 - `SiloAPI` class handles all API communication
 - Retry logic with exponential backoff for transient errors
-- Optional response caching (disabled by default)
+- Persistent disk cache via `diskcache` (SQLite-backed, process-safe, shared across instances)
+  - Default location: `~/.cache/weather_tools/silo_api/` (override with `WEATHER_TOOLS_CACHE_DIR` env var or `cache_dir` param)
+  - Constructor params: `cache_dir` (path), `cache_size_limit` (bytes, default 2 GB), `cache_ttl` (seconds, default no expiry)
+  - CLI management: `weather-tools silo cache --info` / `--clear`
 - `log_level` controls constructed URL emission (set to `DEBUG` for request details)
 - Two query methods: `query_patched_point()` and `query_data_drill()` accept Pydantic models
 - Convenience methods (`get_patched_point()`, `get_data_drill()`, `search_stations()`) accept simple string arguments
@@ -159,7 +162,7 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 
 **`cli/`** - Modular Typer-based command-line interface
 - **`cli/__init__.py`** - Main app orchestrator that registers subapps and provides entry point
-- **`cli/silo.py`** - SILO API commands: `patched-point`, `data-drill`, `search` (by name, station code, or lat/lon coordinates)
+- **`cli/silo.py`** - SILO API commands: `patched-point`, `data-drill`, `search` (by name, station code, or lat/lon coordinates), `cache` (view/clear disk cache)
 - **`cli/local.py`** - Local NetCDF commands: `extract`, `info`, `download`
 - **`cli/metno.py`** - Met.no API commands: `forecast`, `merge`, `info`
 - **`cli/geotiff.py`** - GeoTIFF commands: `download` (with optional --bbox or --geometry clipping)

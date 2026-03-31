@@ -13,12 +13,15 @@ import os
 import re
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
+import diskcache
 import pandas as pd
 import requests
 from rapidfuzz import fuzz
 
+from weather_tools.config import get_cache_dir
 from weather_tools.logging_utils import (
     configure_logging,
     get_package_logger,
@@ -99,6 +102,9 @@ class SiloAPI:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         enable_cache: bool = True,
+        cache_dir: Optional[Union[str, Path]] = None,
+        cache_size_limit: int = 2 * 2**30,
+        cache_ttl: Optional[float] = None,
         log_level: int | str = logging.INFO,
     ):
         """
@@ -110,6 +116,10 @@ class SiloAPI:
             max_retries: Maximum number of retry attempts for failed requests (default: 3)
             retry_delay: Base delay between retries in seconds (default: 1.0)
             enable_cache: Whether to cache API responses (default: True)
+            cache_dir: Directory for persistent disk cache.
+                Defaults to ``~/.cache/weather_tools/silo_api``.
+            cache_size_limit: Maximum disk cache size in bytes (default: 2 GB)
+            cache_ttl: Time-to-live for cache entries in seconds. ``None`` means no expiry.
             log_level: Logging level for API diagnostics (default: ``INFO``)
 
         Raises:
@@ -122,8 +132,11 @@ class SiloAPI:
             >>> # Using environment variable SILO_API_KEY
             >>> api = SiloAPI()
             >>>
-            >>> # With additional options
+            >>> # With persistent disk cache (default)
             >>> api = SiloAPI(enable_cache=True, timeout=60, log_level="DEBUG")
+            >>>
+            >>> # With custom cache directory
+            >>> api = SiloAPI(enable_cache=True, cache_dir="/tmp/my_cache")
         """
         # Get API key from parameter or environment variable
         if api_key is None:
@@ -139,7 +152,13 @@ class SiloAPI:
         self.retry_delay = retry_delay
         self.enable_cache = enable_cache
         self.log_level = resolve_log_level(log_level)
-        self._cache: Optional[Dict[str, Any]] = {} if enable_cache else None
+        self._cache_ttl = cache_ttl
+        self._disk_cache: Optional[diskcache.Cache] = None
+
+        if enable_cache:
+            cache_path = Path(cache_dir) if cache_dir else get_cache_dir() / "silo_api"
+            cache_path.mkdir(parents=True, exist_ok=True)
+            self._disk_cache = diskcache.Cache(str(cache_path), size_limit=cache_size_limit)
 
         # Ensure logging is configured with a basic setup if not already done.
         # This is a fallback for library usage outside of CLI context.
@@ -181,6 +200,23 @@ class SiloAPI:
         combined = f"{url}:{param_str}"
         return hashlib.md5(combined.encode(), usedforsecurity=False).hexdigest()
 
+    def _cache_get(self, key: str) -> Optional[requests.Response]:
+        """Retrieve a cached response by key."""
+        if self._disk_cache is not None:
+            try:
+                return self._disk_cache.get(key)
+            except Exception:
+                logger.debug("Cache read error for key %s, treating as miss", key)
+        return None
+
+    def _cache_set(self, key: str, value: requests.Response) -> None:
+        """Store a response in the active cache backend."""
+        if self._disk_cache is not None:
+            try:
+                self._disk_cache.set(key, value, expire=self._cache_ttl)
+            except Exception:
+                logger.debug("Cache write error for key %s", key, exc_info=True)
+
     def _make_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Make the HTTP request with retry logic and caching."""
         # Emit constructed URL when debug logging is enabled
@@ -190,11 +226,15 @@ class SiloAPI:
             logger.debug("🌐 Constructed URL: %s", full_url)
 
         # Check cache first
-        if self.enable_cache and self._cache is not None:
+        if self.enable_cache:
             cache_key = self._get_cache_key(url, params)
-            if cache_key in self._cache:
-                logger.debug("Cache hit for request: %s", cache_key)
-                return self._cache[cache_key]
+            cached = self._cache_get(cache_key)
+            if cached is not None:
+                logger.info(
+                    "Using cached response. Clear cache with: weather-tools silo cache --clear"
+                )
+                logger.debug("Cache key: %s", cache_key)
+                return cached
 
         last_exception = None
         for attempt in range(self.max_retries):
@@ -215,9 +255,9 @@ class SiloAPI:
                     raise SiloAPIError(response.text)
 
                 # Cache successful response
-                if self.enable_cache and self._cache is not None:
+                if self.enable_cache:
                     cache_key = self._get_cache_key(url, params)
-                    self._cache[cache_key] = response
+                    self._cache_set(cache_key, response)
                     logger.debug("Cached response for: %s", cache_key)
 
                 logger.debug("Request successful on attempt %d", attempt + 1)
@@ -319,7 +359,7 @@ class SiloAPI:
         """
         Clear all cached API responses.
 
-        Use this method when you want to force fresh API requests or to free memory.
+        Use this method when you want to force fresh API requests or to free memory/disk.
         Has no effect if caching is not enabled.
 
         Example:
@@ -328,8 +368,8 @@ class SiloAPI:
             >>> api.clear_cache()
             >>> data = api.query_patched_point(query)  # Fresh request
         """
-        if self._cache is not None:
-            self._cache.clear()
+        if self._disk_cache is not None:
+            self._disk_cache.clear()
             logger.info("Cache cleared")
 
     def get_cache_size(self) -> int:
@@ -347,9 +387,20 @@ class SiloAPI:
             >>> api.get_cache_size()
             1
         """
-        if self._cache is not None:
-            return len(self._cache)
+        if self._disk_cache is not None:
+            return len(self._disk_cache)
         return 0
+
+    def get_cache_disk_usage(self) -> Optional[int]:
+        """
+        Get disk usage of the cache in bytes.
+
+        Returns:
+            Disk usage in bytes, or ``None`` if not using disk cache.
+        """
+        if self._disk_cache is not None:
+            return self._disk_cache.volume()
+        return None
 
     def get_patched_point(
         self,
