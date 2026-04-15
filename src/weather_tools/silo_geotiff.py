@@ -210,7 +210,14 @@ def read_cog(
                 )
 
             profile.update(
-                {"height": data.shape[0], "width": data.shape[1], "transform": transform}
+                {
+                    "height": data.shape[0],
+                    "width": data.shape[1],
+                    "transform": transform,
+                    "TILED": "YES",
+                    "BLOCKXSIZE": 128,
+                    "BLOCKYSIZE": 128,
+                }
             )
 
             # Apply masking if requested
