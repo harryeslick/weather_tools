@@ -584,6 +584,11 @@ def read_geotiff_stack(
         if arrays and profile is not None:
             # Update profile to reflect stacked data
             profile.update({"count": len(arrays)})
+            shapes = [arr.shape for arr in arrays]
+            if len(set(shapes)) != 1:
+                raise ValueError(
+                    f"all input arrays must have the same shape; got shapes {shapes}, for files {file_list}"
+                )
             stacked_array = np.stack(arrays, axis=0)
             results[var_name] = (stacked_array, profile)
             logger.info(f"[green]Loaded {var_name}: {stacked_array.shape}[/green]")

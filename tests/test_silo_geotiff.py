@@ -553,6 +553,29 @@ class TestNewRefactoredFunctions:
         assert data.shape[0] == 2  # 2 time steps
         assert profile["count"] == 2
 
+    def test_read_geotiff_stack_reports_mismatched_shapes(self, tmp_path):
+        """Test read_geotiff_stack includes shapes when stacking fails."""
+        file_paths = {
+            "daily_rain": [
+                tmp_path / "20230101.daily_rain.tif",
+                tmp_path / "20230102.daily_rain.tif",
+            ]
+        }
+
+        for path in file_paths["daily_rain"]:
+            path.touch()
+
+        mock_data_1 = np.array([[1, 2], [3, 4]])
+        mock_data_2 = np.array([[5, 6, 7], [8, 9, 10]])
+        mock_profile = {"crs": "EPSG:4326", "transform": None}
+
+        with patch(
+            "weather_tools.silo_geotiff.read_cog",
+            side_effect=[(mock_data_1, mock_profile), (mock_data_2, mock_profile)],
+        ):
+            with pytest.raises(ValueError, match=r"got shapes \[\(2, 2\), \(2, 3\)\]"):
+                read_geotiff_stack(file_paths, filter_incomplete_dates=False)
+
     def test_download_and_read_geotiffs_wrapper(self, tmp_path):
         """Test download_and_read_geotiffs convenience wrapper."""
         point = Point(153.0, -27.5)
