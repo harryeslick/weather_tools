@@ -78,7 +78,7 @@ class MetNoAPI:
         >>> response = api.query_forecast(query)
 
         >>> # Get daily forecast summaries
-        >>> daily_forecasts = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=7)
+        >>> daily_forecasts = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=9)
     """
 
     DEFAULT_TIMEOUT = 30
@@ -300,7 +300,7 @@ class MetNoAPI:
         Args:
             latitude: Latitude in decimal degrees
             longitude: Longitude in decimal degrees
-            days: Number of forecast days (1-9, default: 7)
+            days: Number of forecast days (1-9, default: 9)
             altitude: Optional elevation in meters
 
         Returns:
@@ -311,7 +311,7 @@ class MetNoAPI:
 
         Example:
             >>> api = MetNoAPI()
-            >>> df = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=7)
+            >>> df = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=9)
             >>> print(df[['date', 'min_temperature', 'max_temperature', 'total_precipitation']])
         """
         if days < 1 or days > 9:
@@ -386,7 +386,7 @@ class MetNoAPI:
 
         Args:
             df: DataFrame with time index
-            freq: Pandas frequency string ('D' for daily, 'W' for weekly, 'M' for monthly)
+            freq: Pandas frequency string ('D' for daily, 'W' for weekly, 'ME' for monthly)
 
         Returns:
             Aggregated DataFrame with renamed columns matching SILO conventions
@@ -478,7 +478,6 @@ class MetNoAPI:
         self,
         response: MetNoResponse,
         frequency: str = "daily",
-        aggregate_to_daily: Optional[bool] = None,
     ) -> pd.DataFrame:
         """
         Convert met.no response to pandas DataFrame with flexible aggregation.
@@ -486,9 +485,7 @@ class MetNoAPI:
         Args:
             response: MetNoResponse from API
             frequency: Aggregation frequency: 'hourly', 'daily' (default), 'weekly', 'monthly'
-                      Pandas frequency codes also accepted: 'D', 'W', 'M'
-            aggregate_to_daily: Deprecated. Use frequency='daily' or frequency='hourly' instead.
-                               For backwards compatibility, if set to False, uses frequency='hourly'
+                      Pandas frequency codes also accepted: 'D', 'W', 'ME'
 
         Returns:
             DataFrame with weather data at the specified frequency
@@ -502,13 +499,6 @@ class MetNoAPI:
             >>> # Weekly aggregation
             >>> weekly_df = api.to_dataframe(response, frequency='weekly')
         """
-        # Handle deprecated aggregate_to_daily parameter
-        if aggregate_to_daily is not None:
-            logger.warning(
-                "aggregate_to_daily parameter is deprecated. Use frequency='daily' or frequency='hourly' instead."
-            )
-            frequency = "daily" if aggregate_to_daily else "hourly"
-
         # Convert to DataFrame first (always)
         timeseries = response.get_timeseries()
         df = self._timeseries_to_dataframe(timeseries)
@@ -518,10 +508,11 @@ class MetNoAPI:
             "hourly": None,  # No aggregation
             "daily": "D",
             "weekly": "W",
-            "monthly": "M",
+            "monthly": "ME",
             "D": "D",
             "W": "W",
-            "M": "M",
+            "ME": "ME",
+            "M": "ME",  # legacy alias: map old "M" to "ME"
         }
 
         freq = freq_map.get(frequency.lower() if isinstance(frequency, str) else frequency)

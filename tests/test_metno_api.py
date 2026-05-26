@@ -363,7 +363,7 @@ class TestMetNoAPIConvenience:
             raw_data=mock_metno_response, format=MetNoFormat.COMPACT, coordinates=sample_coords
         )
 
-        df = api.to_dataframe(response, aggregate_to_daily=True)
+        df = api.to_dataframe(response, frequency="daily")
 
         assert not df.empty
         assert "date" in df.columns
@@ -381,7 +381,7 @@ class TestMetNoAPIConvenience:
             raw_data=mock_metno_response, format=MetNoFormat.COMPACT, coordinates=sample_coords
         )
 
-        df = api.to_dataframe(response, aggregate_to_daily=False)
+        df = api.to_dataframe(response, frequency="hourly")
 
         assert not df.empty
         assert "time" in df.columns
