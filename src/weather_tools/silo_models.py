@@ -112,7 +112,7 @@ class BaseSiloQuery(BaseModel):
     (e.g., "daily_rain", "max_temp"). These are converted to SILO API codes internally.
     """
 
-    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True, extra="forbid")
 
     dataset: SiloDataset
     format: SiloFormat = Field(default=SiloFormat.CSV)
@@ -208,6 +208,12 @@ class PatchedPointQuery(BaseSiloQuery):
         elif format_val == SiloFormat.NEAR:
             if not self.station_code:
                 raise ValueError("station_code is required for 'near' format")
+        else:
+            # Data formats (csv, json, apsim, standard, alldata) require station_code and date_range
+            if not self.station_code:
+                raise ValueError(f"station_code is required for '{format_val}' format")
+            if not self.date_range:
+                raise ValueError(f"date_range is required for '{format_val}' format")
 
         return self
 
@@ -363,9 +369,11 @@ class SiloResponse(BaseModel):
 
 class StationInfo(BaseModel):
     """
-    Station information from VARIABLES.
+    Weather station metadata returned by PatchedPoint 'id' format queries.
 
-    Returned by 'id' format queries.
+    Contains the station identifier, human-readable name, geographic position
+    (latitude, longitude, elevation), and the date range over which observations
+    are available for that station.
     """
 
     model_config = ConfigDict(populate_by_name=True)

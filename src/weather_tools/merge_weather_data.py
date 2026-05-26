@@ -36,7 +36,7 @@ class ColumnMismatchError(MergeValidationError):
 def merge_historical_and_forecast(
     silo_data: pd.DataFrame,
     metno_data: pd.DataFrame,
-    overlap_strategy: Literal["prefer_silo", "prefer_metno"] = "prefer_silo",
+    overlap_strategy: Literal["prefer_silo", "prefer_metno", "error"] = "prefer_silo",
     return_cols: Literal["all", "silo_only", "metno_only"] = "all",
 ) -> pd.DataFrame:
     """
@@ -45,11 +45,14 @@ def merge_historical_and_forecast(
     Args:
         silo_data: Historical data from SILO (API or local files)
         metno_data: Forecast data from met.no (daily summaries)
-        validate: Perform validation checks (default: True)
         overlap_strategy: How to handle overlapping dates:
                          - "prefer_silo": Use SILO data for overlaps (default)
                          - "prefer_metno": Use met.no data for overlaps
-                         - "error": Raise error on overlap
+                         - "error": Raise MergeValidationError if any overlap exists
+        return_cols: Which columns to include in the result:
+                    - "all": All columns from both datasets (default)
+                    - "silo_only": Only columns present in the SILO DataFrame
+                    - "metno_only": Only columns present in the met.no DataFrame
 
     Returns:
         Merged DataFrame with 'data_source' column indicating origin
@@ -100,9 +103,18 @@ def merge_historical_and_forecast(
     elif overlap_strategy == "prefer_metno":
         # Remove overlapping dates from SILO data
         silo_df = silo_df[~silo_df["date"].isin(metno_df["date"])]
+    elif overlap_strategy == "error":
+        overlapping = silo_df["date"].isin(metno_df["date"])
+        if overlapping.any():
+            overlap_dates = silo_df.loc[overlapping, "date"].dt.date.tolist()
+            raise MergeValidationError(
+                f"overlap_strategy='error': {len(overlap_dates)} overlapping date(s) found "
+                f"between SILO and met.no data: {overlap_dates}"
+            )
     else:
         raise ValueError(
-            f"Invalid overlap_strategy: {overlap_strategy}. Must be 'prefer_silo', 'prefer_metno', "
+            f"Invalid overlap_strategy: {overlap_strategy!r}. "
+            f"Must be 'prefer_silo', 'prefer_metno', or 'error'."
         )
 
     # Convert met.no columns to SILO format if needed
@@ -198,10 +210,10 @@ def validate_merge_compatibility(
         # There's an overlap between datasets
         overlap_days = abs(gap_days) + 1
         # Only report as issue if overlap_strategy is not set to handle it
-        if overlap_strategy not in ["prefer_silo", "prefer_metno"]:
+        if overlap_strategy not in ["prefer_silo", "prefer_metno", "error"]:
             issues.append(
                 f"Date overlap detected: {overlap_days} days overlap. "
-                f"Set overlap_strategy to 'prefer_silo' or 'prefer_metno'"
+                f"Set overlap_strategy to 'prefer_silo', 'prefer_metno', or 'error'"
             )
 
     # Check for critical columns in both datasets

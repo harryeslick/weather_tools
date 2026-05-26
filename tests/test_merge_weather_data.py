@@ -239,6 +239,72 @@ class TestOverlapHandling:
 
         assert "overlap_strategy" in str(exc_info.value).lower()
 
+    def test_overlap_error_strategy_raises_on_overlap(self, sample_silo_data):
+        """Test that overlap_strategy='error' raises MergeValidationError when overlap exists."""
+        metno_overlap = pd.DataFrame(
+            {
+                "date": pd.date_range("2023-01-08", "2023-01-15"),  # overlaps last 3 SILO days
+                "min_temp": [20.0] * 8,
+                "max_temp": [30.0] * 8,
+                "daily_rain": [5.0] * 8,
+            }
+        )
+
+        with pytest.raises(MergeValidationError) as exc_info:
+            merge_historical_and_forecast(sample_silo_data, metno_overlap, overlap_strategy="error")
+
+        msg = str(exc_info.value)
+        assert "overlap" in msg.lower()
+        # Message should mention the overlapping dates count
+        assert "3" in msg
+
+    def test_overlap_error_strategy_succeeds_without_overlap(
+        self, sample_silo_data, sample_metno_data_silo_format
+    ):
+        """Test that overlap_strategy='error' merges successfully when there is no overlap."""
+        merged = merge_historical_and_forecast(
+            sample_silo_data, sample_metno_data_silo_format, overlap_strategy="error"
+        )
+
+        assert len(merged) == len(sample_silo_data) + len(sample_metno_data_silo_format)
+        assert (merged["data_source"] == "silo").sum() == len(sample_silo_data)
+        assert (merged["data_source"] == "metno").sum() == len(sample_metno_data_silo_format)
+
+    def test_prefer_silo_deduplicates_overlap(self, sample_silo_data):
+        """Test prefer_silo leaves exactly one row per overlapping date (SILO wins)."""
+        metno_overlap = pd.DataFrame(
+            {
+                "date": pd.date_range("2023-01-08", "2023-01-15"),
+                "min_temp": [20.0] * 8,
+                "max_temp": [30.0] * 8,
+                "daily_rain": [5.0] * 8,
+            }
+        )
+
+        merged = merge_historical_and_forecast(
+            sample_silo_data, metno_overlap, overlap_strategy="prefer_silo"
+        )
+
+        # Each date should appear exactly once
+        assert merged["date"].duplicated().sum() == 0
+
+    def test_prefer_metno_deduplicates_overlap(self, sample_silo_data):
+        """Test prefer_metno leaves exactly one row per overlapping date (met.no wins)."""
+        metno_overlap = pd.DataFrame(
+            {
+                "date": pd.date_range("2023-01-08", "2023-01-15"),
+                "min_temp": [20.0] * 8,
+                "max_temp": [30.0] * 8,
+                "daily_rain": [5.0] * 8,
+            }
+        )
+
+        merged = merge_historical_and_forecast(
+            sample_silo_data, metno_overlap, overlap_strategy="prefer_metno"
+        )
+
+        assert merged["date"].duplicated().sum() == 0
+
 
 class TestMetNoPreparation:
     """Test preparation of met.no data."""

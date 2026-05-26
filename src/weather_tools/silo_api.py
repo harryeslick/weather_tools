@@ -71,22 +71,22 @@ class SiloAPI:
 
     Examples:
         >>> # Query station data (using environment variable SILO_API_KEY)
-        >>> from weather_tools.silo_models import PatchedPointQuery, SiloDateRange, ClimateVariable
+        >>> from weather_tools.silo_models import PatchedPointQuery, SiloDateRange
         >>> api = SiloAPI()  # Uses SILO_API_KEY environment variable
         >>> query = PatchedPointQuery(
         ...     station_code="30043",
         ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
-        ...     values=[ClimateVariable.RAINFALL, ClimateVariable.MAX_TEMP]
+        ...     variables=["daily_rain", "max_temp"]
         ... )
         >>> response = api.query_patched_point(query)
 
         >>> # Query gridded data (with explicit API key)
-        >>> from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates
+        >>> from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates, SiloDateRange
         >>> api = SiloAPI(api_key="user@example.com")  # Explicit API key
         >>> query = DataDrillQuery(
         ...     coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
         ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
-        ...     values=[ClimateVariable.RAINFALL]
+        ...     variables=["daily_rain"]
         ... )
         >>> response = api.query_data_drill(query)
     """
@@ -320,13 +320,13 @@ class SiloAPI:
 
         Example:
             >>> from weather_tools.silo_models import (
-            ...     PatchedPointQuery, SiloDateRange, ClimateVariable, SiloFormat
+            ...     PatchedPointQuery, SiloDateRange, SiloFormat
             ... )
             >>> query = PatchedPointQuery(
             ...     format=SiloFormat.CSV,
             ...     station_code="30043",
             ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
-            ...     values=[ClimateVariable.RAINFALL, ClimateVariable.MAX_TEMP]
+            ...     variables=["daily_rain", "max_temp"]
             ... )
             >>> response = api.query_patched_point(query)
             >>> print(response.to_csv())
@@ -570,7 +570,7 @@ class SiloAPI:
     def search_stations(
         self,
         name_fragment: Optional[str] = None,
-        state: Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"] = None,
+        state: Optional[Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"]] = None,
         station_code: Optional[str] = None,
         radius_km: Optional[int] = None,
     ) -> pd.DataFrame:
@@ -579,11 +579,12 @@ class SiloAPI:
 
         Args:
             name_fragment: Partial station name to search for (e.g., "Brisbane"). Underscores can be used for wildcard searching (e.g., "Bri_ne")
-            state: State abbreviation (e.g., "QLD", "NSW", "VIC")
-            return_metadata: If True, returns tuple of (DataFrame, metadata dict)
+            state: Optional state abbreviation to filter results (e.g., "QLD", "NSW", "VIC")
+            station_code: Bureau of Meteorology station code used as the centre point when searching by radius (e.g., "30043")
+            radius_km: Search radius in kilometres. When provided, searches for stations within this radius of ``station_code``.
 
         Returns:
-            pandas.DataFrame with station information, or tuple of (DataFrame, metadata)
+            pandas.DataFrame with station information
 
         Example:
             >>> api = SiloAPI()
