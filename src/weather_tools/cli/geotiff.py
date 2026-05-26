@@ -11,7 +11,7 @@ from typing_extensions import List
 from weather_tools.cli.date_utils import iso_date_option, parse_iso_date_strict
 from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
-from weather_tools.silo_geotiff import download_geotiff
+from weather_tools.silo_geotiff import download_geotiffs
 from weather_tools.silo_variables import SiloGeoTiffError
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,9 @@ geotiff_app = typer.Typer(
 
 @geotiff_app.command(name="download")
 def geotiff_download(
-    start_date: Annotated[str, typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_date_option)],
+    start_date: Annotated[
+        str, typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_date_option)
+    ],
     end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD)", callback=iso_date_option)],
     variables: Annotated[
         Optional[List[str]],
@@ -137,12 +139,13 @@ def geotiff_download(
         logger.info(f"[cyan]Bounding box: {bbox} → Polygon[/cyan]")
 
     try:
-        download_geotiff(
+        download_geotiffs(
             variables=variables,
             start_date=start,
             end_date=end,
-            output_dir=output_dir,
             geometry=geom_obj,
+            output_dir=output_dir,
+            save_to_disk=True,
             force=force,
             console=console,
         )

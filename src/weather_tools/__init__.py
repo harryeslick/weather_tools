@@ -4,11 +4,11 @@ __version__ = "0.0.3"
 
 from weather_tools.cli import main as cli_main
 from weather_tools.output_schemas import (
-    DATE_COLUMN,
     DATA_SOURCE_COLUMN,
+    DATE_COLUMN,
     IS_FORECAST_COLUMN,
-    MetNoForecastSchema,
     MergedPointSchema,
+    MetNoForecastSchema,
     PointMetadata,
     SiloPointSchema,
     validate_point_dataframe,
@@ -78,6 +78,5 @@ __all__ = [
     "VARIABLES",
     "VariableRegistry",
     "SILO_VARIABLES",
-    "API_TO_NETCDF",
     "VARIABLE_PRESETS",
 ]

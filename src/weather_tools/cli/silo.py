@@ -204,7 +204,7 @@ def silo_patched_point(
                 format=SiloFormat(format),
                 station_code=station,
                 date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-                values=valid_variables,
+                variables=valid_variables,
             )
 
             response = api.query_patched_point(query)
@@ -358,7 +358,7 @@ def silo_data_drill(
                 coordinates=AustralianCoordinates(latitude=latitude, longitude=longitude),
                 date_range=SiloDateRange(start_date=start_date, end_date=end_date),
                 format=SiloFormat(format),
-                values=valid_variables,
+                variables=valid_variables,
             )
 
             response = api.query_data_drill(query)
