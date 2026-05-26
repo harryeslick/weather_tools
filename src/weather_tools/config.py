@@ -50,7 +50,3 @@ def get_cache_dir() -> Path:
     if env_dir:
         return Path(env_dir).expanduser()
     return Path.home() / ".cache" / "weather_tools"
-
-
-# Default SILO data directory - uses environment variable if set
-DEFAULT_SILO_DIR = get_silo_data_dir()

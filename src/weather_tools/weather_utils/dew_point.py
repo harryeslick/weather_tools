@@ -1,7 +1,4 @@
-"""
-function under active development and untested. 
-USE WITH CAUTION
-"""
+"""Dew-point and vapour-pressure utility functions."""
 
 import math
 
@@ -12,10 +9,13 @@ def dewpoint_from_vp(vp_hpa):
     """
     Calculate daily mean dew-point temperature from actual vapour pressure.
 
+    .. warning::
+        Function is under active development and untested. USE WITH CAUTION.
+
     Parameters
     ----------
     vp_hpa : float or array-like
-        Actual vapour pressure in hectopascals (hPa). 
+        Actual vapour pressure in hectopascals (hPa).
         This is typically the daily mean vapour pressure computed
         from humidity measurements.
 
@@ -50,6 +50,9 @@ def dewpoint_from_vp(vp_hpa):
 def dewpoint_from_T_RH(T_degC, RH_pct):
     """
     Calculate dew-point temperature from air temperature and relative humidity.
+
+    .. warning::
+        Function is under active development and untested. USE WITH CAUTION.
 
     Parameters
     ----------
