@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 
 
 class SiloDataset(str, Enum):

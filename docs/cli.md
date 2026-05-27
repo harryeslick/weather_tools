@@ -312,7 +312,7 @@ weather-tools local extract [OPTIONS]
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--output` | TEXT | Output CSV filename | `weather_data.csv` |
-| `--variables` | TEXT | Weather variables to extract (see below) | `daily` |
+| `--var` | TEXT | Weather variables to extract (see below) | `daily_rain`, `max_temp`, `min_temp`, `evap_syn` (if omitted) |
 | `--silo-dir` | PATH | Path to SILO data directory | `~/DATA/silo_grids` |
 | `--tolerance` | FLOAT | Maximum distance (in degrees) for nearest neighbor selection | `0.1` |
 | `--keep-location` | BOOLEAN | Keep location columns (crs, lat, lon) in output CSV | `False` (columns are dropped by default) |
@@ -320,13 +320,17 @@ weather-tools local extract [OPTIONS]
 
 #### Variable Options
 
-The `--variables` option accepts the following values:
+The `--var` option accepts individual variable names:
 
-| Value | Variables Included | Description |
-|-------|-------------------|-------------|
-| `daily` | max_temp, min_temp, daily_rain, evap_syn | Daily weather variables (default) |
-| `monthly` | monthly_rain | Monthly rainfall data |
-| Individual variables | Any combination of: `max_temp`, `min_temp`, `daily_rain`, `evap_syn`, `monthly_rain` | Specify individual variables |
+| Value | Description |
+|-------|-------------|
+| `daily_rain` | Daily rainfall |
+| `max_temp` | Maximum temperature |
+| `min_temp` | Minimum temperature |
+| `evap_syn` | Synthetic evaporation |
+| `monthly_rain` | Monthly rainfall |
+
+If `--var` is omitted, the default is: `daily_rain`, `max_temp`, `min_temp`, `evap_syn`
 
 #### Example Usage
 
@@ -344,7 +348,7 @@ weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --en
 weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
-  --variables monthly \
+  --var monthly_rain \
   --output monthly_rainfall.csv
 ```
 
@@ -355,7 +359,7 @@ weather-tools local extract \
 weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
-  --variables max_temp --variables min_temp \
+  --var max_temp --var min_temp \
   --output temperatures.csv
 ```
 
@@ -403,7 +407,6 @@ weather-tools local extract \
 
 ```
 Loading SILO data from: /Users/user/Developer/DATA/silo_grids
-Variables: daily
 Loading SILO dataset...  [####################################]  100%
 Extracting data for location: lat=-27.5, lon=153.0
 Date range: 2020-01-01 to 2020-12-31

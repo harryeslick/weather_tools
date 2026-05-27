@@ -35,7 +35,7 @@ from weather_tools.silo_models import (
     SiloFormat,
     SiloResponse,
 )
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 
 SILO_BASE_URL = "https://www.longpaddock.qld.gov.au/cgi-bin/silo/"
 

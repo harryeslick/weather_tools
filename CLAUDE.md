@@ -73,8 +73,8 @@ uv run weather-tools silo patched-point --station 30043 --start-date 2023-01-01 
 # Work with local NetCDF files
 uv run weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2020-12-31
 
-# Download SILO data from AWS S3
-uv run weather-tools local download --var daily --start-year 2020 --end-year 2023
+# Download SILO data from AWS S3 (omit --var to use default daily set)
+uv run weather-tools local download --start-year 2020 --end-year 2023
 
 # Search for stations near coordinates
 uv run weather-tools silo search --lat -27.47 --lon 153.03 --radius 20
@@ -87,15 +87,15 @@ uv run weather-tools geotiff download --var daily_rain \
 
 ### Download SILO Data
 ```bash
-# Download daily variables for 2020-2023
-weather-tools local download --var daily --start-year 2020 --end-year 2023
+# Download daily variables for 2020-2023 (default: daily_rain, max_temp, min_temp, evap_syn)
+weather-tools local download --start-year 2020 --end-year 2023
 
 # Download specific variables
 weather-tools local download --var daily_rain --var max_temp \
     --start-year 2022 --end-year 2023
 
-# Download to custom directory with force overwrite
-weather-tools local download --var monthly \
+# Download monthly rainfall
+weather-tools local download --var monthly_rain \
     --start-year 2020 --end-year 2023 \
     --silo-dir /data/silo_grids --force
 ```
@@ -125,10 +125,12 @@ weather-tools local download --var monthly \
 - `_response_to_dataframe()` converts API responses to pandas DataFrames
 - Error handling via `SiloAPIError` exception
 
-**`silo_variables.py`** - Central registry for climate variables
+**`variable_register.py`** - Central registry for climate variables
 - Maps between API codes (R, X, N) and NetCDF names (daily_rain, max_temp)
 - Variable metadata including units, start years, descriptions
-- Preset groups for common variable collections ("daily", "monthly", etc.)
+- Public symbols: `VARIABLES`, `VariableRegistry`, `SILO_VARIABLES`, `VariableMetadata`, `SiloDataError`, `SiloNetCDFError`, `SiloGeoTiffError`
+- Valid variable name lists come from the registry at runtime: `VARIABLES.silo_variables()` (SILO-only) and `VARIABLES.metno_only_variables()`; function signatures accept `str | list[str]`
+- Validation entry point via `validate()` function
 - Used by both API client and download module for consistency
 
 **`download_silo.py`** - NetCDF file downloader
@@ -141,8 +143,8 @@ weather-tools local download --var monthly \
 
 **`read_silo_xarray.py`** - Local NetCDF file loader
 - `read_silo_xarray()` loads local SILO gridded data into xarray datasets
-- Supports variable presets: "daily", "monthly", or explicit variable lists
-- Uses centralized preset definitions from `silo_variables.py`
+- Variables specified explicitly by canonical name (e.g., `daily_rain`, `max_temp`, `monthly_rain`)
+- If no variables specified, defaults to: daily_rain, max_temp, min_temp, evap_syn
 - Default data directory: `~/DATA/silo_grids/`
 - Expected structure: `{variable_name}/{year}.{variable_name}.nc`
 
@@ -236,9 +238,9 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 - `cli/metno.py` imports `metno_api`, `silo_api`, and `merge_weather_data`
 - `cli/geotiff.py` imports `silo_geotiff`
 - `silo_api` imports `silo_models` for all type definitions
-- `read_silo_xarray` imports `silo_variables` for preset expansion
-- `silo_netcdf` imports `silo_variables` for variable metadata
-- `silo_geotiff` imports `silo_variables` for variable metadata and preset expansion
+- `read_silo_xarray` imports `variable_register` for variable validation
+- `silo_netcdf` imports `variable_register` for variable metadata
+- `silo_geotiff` imports `variable_register` for variable metadata and validation
 - `silo_geotiff` uses `rasterio` for COG reading and `shapely` for geometry handling
 - No circular dependencies
 

@@ -7,13 +7,16 @@ import xarray as xr
 
 from weather_tools.config import get_silo_data_dir
 from weather_tools.read_silo_xarray import read_silo_xarray
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 
 # Define the expected SILO data directory
 SILO_DIR = get_silo_data_dir()
 
+# Core daily variables (formerly the "daily" preset)
+DAILY_VARIABLES = ["daily_rain", "max_temp", "min_temp", "evap_syn"]
 
-def read_silo_test_safe(variables="daily", silo_dir=SILO_DIR, max_year=2024):
+
+def read_silo_test_safe(variables=None, silo_dir=SILO_DIR, max_year=2024):
     """Read SILO data excluding years that may be incomplete or corrupted.
 
     Args:
@@ -24,7 +27,9 @@ def read_silo_test_safe(variables="daily", silo_dir=SILO_DIR, max_year=2024):
     Returns:
         xr.Dataset: Merged dataset with filtered years
     """
-    variables = VARIABLES.expand_preset(variables)
+    if variables is None:
+        variables = DAILY_VARIABLES
+    variables = list(VARIABLES.validate(variables).keys())
 
     dss = []
     for variable in variables:
@@ -70,7 +75,7 @@ class TestReadSiloXarray:
 
     def test_read_daily_variables(self, silo_data_available):
         """Test reading daily variables with default settings."""
-        ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=silo_data_available)
 
         # Check that dataset is returned
         assert isinstance(ds, xr.Dataset)
@@ -90,7 +95,7 @@ class TestReadSiloXarray:
 
     def test_read_monthly_variables(self, silo_data_available):
         """Test reading monthly variables."""
-        ds = read_silo_test_safe(variables="monthly", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=["monthly_rain"], silo_dir=silo_data_available)
 
         # Check that dataset is returned
         assert isinstance(ds, xr.Dataset)
@@ -127,7 +132,7 @@ class TestReadSiloXarray:
 
     def test_time_coordinate_sorted(self, silo_data_available):
         """Test that time coordinate is sorted in ascending order."""
-        ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=silo_data_available)
 
         # Check that time is monotonically increasing
         time_diff = ds.time.diff(dim="time")
@@ -155,7 +160,7 @@ class TestReadSiloXarray:
 
     def test_coordinate_ranges(self, silo_data_available):
         """Test that coordinate ranges are reasonable for Australian data."""
-        ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=silo_data_available)
 
         # Check latitude range (Australia is roughly -44 to -10)
         lat_min = float(ds.lat.min())
@@ -171,7 +176,7 @@ class TestReadSiloXarray:
 
     def test_dataset_attributes(self, silo_data_available):
         """Test that dataset has proper attributes and metadata."""
-        ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=silo_data_available)
 
         # Check that coordinates have attributes
         assert hasattr(ds.lat, "attrs")
@@ -180,7 +185,7 @@ class TestReadSiloXarray:
 
     def test_chunking(self, silo_data_available):
         """Test that data is properly chunked for time dimension."""
-        ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=silo_data_available)
 
         # Check if data is chunked (dask arrays)
         # This depends on how the data was loaded
@@ -218,7 +223,7 @@ class TestReadSiloXarrayEdgeCases:
         fake_dir = Path("/nonexistent/path/to/silo")
 
         with pytest.raises((FileNotFoundError, ValueError, OSError)):
-            read_silo_xarray(variables="daily", silo_dir=fake_dir)
+            read_silo_xarray(variables=DAILY_VARIABLES, silo_dir=fake_dir)
 
 
 @pytest.mark.integration
@@ -227,7 +232,7 @@ class TestReadSiloXarrayIntegration:
 
     def test_extract_location_data(self, silo_data_available):
         """Test extracting data for a specific location (Brisbane)."""
-        ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=silo_data_available)
 
         # Brisbane coordinates
         lat, lon = -27.5, 153.0
@@ -243,7 +248,7 @@ class TestReadSiloXarrayIntegration:
 
     def test_extract_time_slice(self, silo_data_available):
         """Test extracting a time slice."""
-        ds = read_silo_test_safe(variables="daily", silo_dir=silo_data_available)
+        ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=silo_data_available)
 
         # Extract January 2024
         time_slice = ds.sel(time=slice("2024-01-01", "2024-01-31"))

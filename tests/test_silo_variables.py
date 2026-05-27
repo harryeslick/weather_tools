@@ -1,13 +1,13 @@
 """Tests for silo_variables module.
 
-These tests document how to use the variable registry and preset system.
+These tests document how to use the variable registry. Variables must be
+specified explicitly by canonical name; there are no presets.
 """
 
 import pytest
 
-from weather_tools.silo_variables import (
+from weather_tools.variable_register import (
     SILO_VARIABLES,
-    VARIABLE_PRESETS,
     VARIABLES,
 )
 
@@ -99,68 +99,32 @@ class TestSiloRegistry:
         assert meta is None
 
 
-class TestPresetExpansion:
-    """Test variable preset expansion."""
+class TestVariableValidation:
+    """Test variable validation and normalisation (no presets)."""
 
-    def test_expand_daily_preset(self):
-        """Test that 'daily' preset expands to the four daily variables."""
-        variables = VARIABLES.expand_preset("daily")
+    def test_validate_single_variable_string(self):
+        """Test that a single variable name is accepted and validated."""
+        metadata_map = VARIABLES.validate("daily_rain")
 
-        assert variables == ["daily_rain", "max_temp", "min_temp", "evap_syn"]
-
-    def test_expand_monthly_preset(self):
-        """Test that 'monthly' preset expands to monthly rainfall."""
-        variables = VARIABLES.expand_preset("monthly")
-
-        assert variables == ["monthly_rain"]
-
-    def test_expand_temperature_preset(self):
-        """Test that 'temperature' preset expands to min and max temp."""
-        variables = VARIABLES.expand_preset("temperature")
-
-        assert variables == ["max_temp", "min_temp"]
-
-    def test_expand_evaporation_preset(self):
-        """Test that 'evaporation' preset expands to evaporation variables."""
-        variables = VARIABLES.expand_preset("evaporation")
-
-        assert "evap_pan" in variables
-        assert "evap_syn" in variables
-        assert "evap_comb" in variables
-
-    def test_expand_single_variable_string(self):
-        """Test that a single variable name is wrapped in a list."""
-        variables = VARIABLES.expand_preset("daily_rain")
-
-        assert variables == ["daily_rain"]
-
-    def test_expand_list_of_variables(self):
-        """Test that a list of variables is returned as-is."""
-        input_vars = ["daily_rain", "max_temp"]
-        variables = VARIABLES.expand_preset(input_vars)
-
-        assert variables == ["daily_rain", "max_temp"]
-
-    def test_expand_list_with_presets(self):
-        """Test that presets within a list are expanded."""
-        # Mix of preset and explicit variable
-        input_vars = ["temperature", "daily_rain"]
-        variables = VARIABLES.expand_preset(input_vars)
-
-        # Should expand 'temperature' to ['max_temp', 'min_temp']
-        assert "max_temp" in variables
-        assert "min_temp" in variables
-        assert "daily_rain" in variables
-
-    def test_registry_validate(self):
-        """Test variable validation via SILO registry."""
-        metadata_map = VARIABLES.validate("daily")
-        assert "daily_rain" in metadata_map
+        assert list(metadata_map.keys()) == ["daily_rain"]
         assert metadata_map["daily_rain"].silo_code == "R"
 
-        # Invalid variable should raise
+    def test_validate_list_of_variables(self):
+        """Test that a list of variables is validated and preserved in order."""
+        metadata_map = VARIABLES.validate(["daily_rain", "max_temp"])
+
+        assert list(metadata_map.keys()) == ["daily_rain", "max_temp"]
+        assert metadata_map["max_temp"].silo_code == "X"
+
+    def test_validate_unknown_variable_raises(self):
+        """Test that an unknown variable raises the configured error class."""
         with pytest.raises(ValueError, match="Unknown variable"):
             VARIABLES.validate(["invalid_var"])
+
+    def test_former_preset_name_is_not_a_variable(self):
+        """Test that old preset names like 'daily' are no longer accepted."""
+        with pytest.raises(ValueError, match="Unknown variable"):
+            VARIABLES.validate("daily")
 
 
 class TestVariableRegistry:
@@ -175,14 +139,6 @@ class TestVariableRegistry:
 
             # Canonical name should match dict key
             assert key == meta.netcdf_name or meta.netcdf_name is None
-
-    def test_all_presets_have_valid_variables(self):
-        """Test that all preset groups contain valid variable names."""
-        for preset_name, var_list in VARIABLE_PRESETS.items():
-            for var in var_list:
-                # Each variable in a preset should be resolvable
-                meta = VARIABLES.get_by_any(var)
-                assert meta is not None, f"Invalid variable '{var}' in preset '{preset_name}'"
 
     def test_expected_variable_count(self):
         """Test that we have the expected number of variables registered."""

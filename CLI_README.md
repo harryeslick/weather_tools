@@ -65,8 +65,8 @@ weather-tools silo search --lat -27.47 --lon 153.03
 ### Using Local Files (Offline)
 
 ```bash
-# Download SILO data from AWS S3
-weather-tools local download --var daily --start-year 2020 --end-year 2023
+# Download SILO data from AWS S3 (default: daily_rain, max_temp, min_temp, evap_syn)
+weather-tools local download --start-year 2020 --end-year 2023
 
 # View available data
 weather-tools local info
@@ -242,16 +242,11 @@ Individual variables:
 - `vp` - Vapour pressure (~410MB per year)
 - `mslp` - Mean sea level pressure (~410MB per year, 1957+)
 
-Preset groups:
-- `daily` - Expands to: daily_rain, max_temp, min_temp, evap_syn (~1.6GB per year)
-- `monthly` - Expands to: monthly_rain (~14MB per year)
-- `temperature` - Expands to: max_temp, min_temp (~820MB per year)
-
 **Examples:**
 
 ```bash
-# Download daily variables for recent years (~6.4GB)
-weather-tools local download --var daily --start-year 2020 --end-year 2023
+# Download default daily variables for recent years (~6.4GB)
+weather-tools local download --start-year 2020 --end-year 2023
 
 # Download specific variables
 weather-tools local download --var daily_rain --var max_temp \
@@ -261,12 +256,8 @@ weather-tools local download --var daily_rain --var max_temp \
 weather-tools local download --var monthly_rain \
     --start-year 2020 --end-year 2023
 
-# Use preset for temperature data
-weather-tools local download --var temperature \
-    --start-year 2020 --end-year 2023
-
 # Download to custom directory
-weather-tools local download --var daily \
+weather-tools local download --var daily_rain --var max_temp --var min_temp --var evap_syn \
     --start-year 2020 --end-year 2023 \
     --silo-dir /data/silo_grids
 
@@ -316,10 +307,9 @@ weather-tools local extract [OPTIONS]
 
 **Optional Options:**
 - `--output TEXT` - Output CSV filename (default: "weather_data.csv")
-- `--variables TEXT` - Weather variables to extract (can be used multiple times):
-  - `daily` (default) - Extracts max_temp, min_temp, daily_rain, evap_syn
-  - `monthly` - Extracts monthly_rain
+- `--var TEXT` - Weather variables to extract (can be used multiple times):
   - Individual variables: `max_temp`, `min_temp`, `daily_rain`, `evap_syn`, `monthly_rain`
+  - If omitted, defaults to: daily_rain, max_temp, min_temp, evap_syn
 - `--silo-dir PATH` - Path to SILO data directory (default: ~/DATA/silo_grids)
 - `--tolerance FLOAT` - Maximum distance (in degrees) for nearest neighbor selection (default: 0.1)
 - `--keep-location` - Keep location columns (crs, lat, lon) in output CSV
@@ -327,19 +317,19 @@ weather-tools local extract [OPTIONS]
 **Examples:**
 
 ```bash
-# Basic extraction with default settings
+# Basic extraction with default variables (daily_rain, max_temp, min_temp, evap_syn)
 weather-tools local extract --lat -27.5 --lon 153.0 \
     --start-date 2020-01-01 --end-date 2025-01-01
-
-# Extract monthly data
-weather-tools local extract --lat -27.5 --lon 153.0 \
-    --start-date 2020-01-01 --end-date 2025-01-01 \
-    --variables monthly --output monthly_data.csv
 
 # Extract specific variables
 weather-tools local extract --lat -27.5 --lon 153.0 \
     --start-date 2020-01-01 --end-date 2025-01-01 \
-    --variables max_temp --variables min_temp
+    --var monthly_rain --output monthly_data.csv
+
+# Extract multiple specific variables
+weather-tools local extract --lat -27.5 --lon 153.0 \
+    --start-date 2020-01-01 --end-date 2025-01-01 \
+    --var max_temp --var min_temp
 
 # Use custom SILO directory
 weather-tools local extract --lat -27.5 --lon 153.0 \
@@ -420,8 +410,8 @@ To use `local extract` and `local info` commands, you need SILO netCDF files.
 Use the `local download` command to automatically download files from AWS S3:
 
 ```bash
-# Download daily variables for 2020-2023
-weather-tools local download --var daily --start-year 2020 --end-year 2023
+# Download the default daily variables for 2020-2023 (omit --var for the default set)
+weather-tools local download --start-year 2020 --end-year 2023
 
 # Download monthly rainfall (smaller files)
 weather-tools local download --var monthly_rain --start-year 2020 --end-year 2023

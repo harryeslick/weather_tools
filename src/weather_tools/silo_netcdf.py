@@ -16,12 +16,11 @@ from rich.console import Console
 from rich.progress import Progress, TaskID
 
 from weather_tools.logging_utils import create_download_progress, get_console
-from weather_tools.silo_variables import (
+from weather_tools.variable_register import (
     DEFAULT_NETCDF_TIMEOUT,
     SILO_NETCDF_BASE_URL,
     VARIABLES,
     SiloNetCDFError,
-    VariableInput,
 )
 
 # SILO NetCDF data availability start years
@@ -155,7 +154,7 @@ def download_file(
 
 
 def download_netcdf(
-    variables: VariableInput,
+    variables: str | list[str],
     start_year: int,
     end_year: int,
     output_dir: Path,
@@ -167,9 +166,8 @@ def download_netcdf(
     Download SILO NetCDF files from AWS S3.
 
     Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
+        variables: Canonical variable name ("daily_rain", "max_temp", etc.) or a
+                  list of canonical names. Each variable must be specified explicitly.
         start_year: First year to download (inclusive)
         end_year: Last year to download (inclusive)
         output_dir: Directory to save files (will create subdirs per variable)
@@ -187,7 +185,7 @@ def download_netcdf(
     Example:
         >>> from pathlib import Path
         >>> downloaded = download_netcdf(
-        ...     variables="daily",
+        ...     variables=["daily_rain", "max_temp", "min_temp", "evap_syn"],
         ...     start_year=2020,
         ...     end_year=2023,
         ...     output_dir=Path.home() / "DATA/silo_grids"

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
 logger = logging.getLogger(__name__)

@@ -45,8 +45,8 @@ uvx git+https://github.com/harryeslick/weather_tools.git local extract \
 ```python
 from weather_tools import read_silo_xarray
 
-# Load daily weather variables
-ds = read_silo_xarray(variables="daily")
+# Load default daily weather variables
+ds = read_silo_xarray(variables=None)
 
 # Extract data for a specific location and date range
 df = ds.sel(lat=-27.5, lon=153.0, method="nearest").sel(

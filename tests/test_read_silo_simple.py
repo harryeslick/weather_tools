@@ -11,13 +11,16 @@ import xarray as xr
 
 from weather_tools.config import get_silo_data_dir
 from weather_tools.read_silo_xarray import read_silo_xarray
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 
 # Define the expected SILO data directory
 SILO_DIR = get_silo_data_dir()
 
+# Core daily variables (formerly the "daily" preset)
+DAILY_VARIABLES = ["daily_rain", "max_temp", "min_temp", "evap_syn"]
 
-def read_silo_test_safe(variables="daily", silo_dir=SILO_DIR, max_year=2024):
+
+def read_silo_test_safe(variables=None, silo_dir=SILO_DIR, max_year=2024):
     """Read SILO data excluding years that may be incomplete or corrupted.
 
     Args:
@@ -28,7 +31,9 @@ def read_silo_test_safe(variables="daily", silo_dir=SILO_DIR, max_year=2024):
     Returns:
         xr.Dataset: Merged dataset with filtered years
     """
-    variables = VARIABLES.expand_preset(variables)
+    if variables is None:
+        variables = DAILY_VARIABLES
+    variables = list(VARIABLES.validate(variables).keys())
 
     dss = []
     for variable in variables:
@@ -85,7 +90,7 @@ def test_silo_subdirectories_exist(silo_data_available):
 
 def test_read_daily_variables_structure():
     """Test reading daily variables returns proper structure."""
-    ds = read_silo_test_safe(variables="daily", silo_dir=SILO_DIR)
+    ds = read_silo_test_safe(variables=DAILY_VARIABLES, silo_dir=SILO_DIR)
 
     # Check that dataset is returned
     assert isinstance(ds, xr.Dataset)
@@ -221,5 +226,5 @@ def test_data_has_values():
 def test_nonexistent_directory_fails():
     """Test that non-existent directory raises an error."""
     fake_dir = Path("/nonexistent/path/to/silo")
-    ds = read_silo_xarray(variables="daily", silo_dir=fake_dir)
+    ds = read_silo_xarray(variables=DAILY_VARIABLES, silo_dir=fake_dir)
     ds.close()

@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Annotated, Optional, Union
+from typing import Annotated, Optional
 
 import typer
 from typing_extensions import List
@@ -12,9 +12,12 @@ from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_netcdf import download_netcdf
-from weather_tools.silo_variables import SiloNetCDFError, VariableInput, VariableName
+from weather_tools.variable_register import VARIABLES, SiloNetCDFError
 
 logger = logging.getLogger(__name__)
+
+# Valid variable names for help text (SILO-only variables, not met.no-only)
+VALID_VARIABLES = VARIABLES.silo_variables()
 
 local_app = typer.Typer(
     name="local",
@@ -35,7 +38,11 @@ def extract(
     variables: Annotated[
         Optional[List[str]],
         typer.Option(
-            help="Weather variables to extract. Use 'daily' or 'monthly' for presets, or specify individual variables"
+            "--var",
+            help=(
+                f"Climate variables: {', '.join(VALID_VARIABLES)}. "
+                "Repeat the option for multiple; leave blank for the default daily variables."
+            ),
         ),
     ] = None,
     silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
@@ -52,21 +59,15 @@ def extract(
     Example:
         weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2025-01-01 --output weather.csv
     """
-    # Set default values and process variables
-    variables_to_use: Union[str, List[str]]
-    if variables is None:
-        variables_to_use = "daily"
-    elif len(variables) == 1 and variables[0].lower() in ["daily", "monthly"]:
-        variables_to_use = variables[0].lower()
-    else:
-        variables_to_use = variables
+    # When no variables are given, fall back to read_silo_xarray's default set.
+    variables_to_use: Optional[List[str]] = variables if variables else None
 
     if silo_dir is None:
         silo_dir = get_silo_data_dir()
 
     try:
         typer.echo(f"Loading SILO data from: {silo_dir}")
-        typer.echo(f"Variables: {variables_to_use}")
+        typer.echo(f"Variables: {variables_to_use or 'default daily set'}")
 
         # Load the dataset
         with typer.progressbar(length=1, label="Loading SILO dataset...") as progress:
@@ -160,12 +161,15 @@ def download(
     start_year: Annotated[int, typer.Option(help="First year to download (inclusive)")],
     end_year: Annotated[int, typer.Option(help="Last year to download (inclusive)")],
     variables: Annotated[
-        Optional[VariableName],
+        Optional[List[str]],
         typer.Option(
             "--var",
-            help="Variable names (daily_rain, max_temp, etc.) or leave blank to download all daily data.",
+            help=(
+                f"Climate variables: {', '.join(VALID_VARIABLES)}. "
+                "Repeat the option for multiple; leave blank for the default daily variables."
+            ),
         ),
-    ] = None,
+    ] = ["daily_rain", "max_temp", "min_temp", "evap_syn"],
     silo_dir: Annotated[
         Optional[Path], typer.Option(help="Output directory for downloaded files")
     ] = None,
@@ -187,15 +191,15 @@ def download(
     By default, existing files are skipped. Use --force to re-download.
 
     Examples:
-        # Download daily variables for 2020-2023
-        weather-tools local download --var daily --start-year 2020 --end-year 2023
+        # Download the default daily variables for 2020-2023
+        weather-tools local download --start-year 2020 --end-year 2023
 
         # Download specific variables
         weather-tools local download --var daily_rain --var max_temp \\
             --start-year 2022 --end-year 2023
 
         # Download to custom directory
-        weather-tools local download --var monthly \\
+        weather-tools local download --var monthly_rain \\
             --start-year 2020 --end-year 2023 \\
             --silo-dir /data/silo_grids
 
@@ -203,8 +207,10 @@ def download(
         weather-tools local download --var daily_rain \\
             --start-year 2023 --end-year 2023 --force
     """
-    # Set defaults
-    var_input: VariableInput = variables if variables is not None else "daily"
+    # When no variable is given, fall back to the core daily variable set.
+    var_input: list[str] = (
+        variables if variables else ["daily_rain", "max_temp", "min_temp", "evap_syn"]
+    )
 
     if silo_dir is None:
         silo_dir = get_silo_data_dir()

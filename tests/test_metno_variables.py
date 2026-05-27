@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from weather_tools.cli.metno import add_silo_date_columns
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
 

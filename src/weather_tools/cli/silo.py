@@ -17,7 +17,7 @@ from weather_tools.silo_models import (
     SiloDateRange,
     SiloFormat,
 )
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +51,12 @@ def silo_patched_point(
         ),
     ] = None,
     variables: Annotated[
-        Optional[List[str]],
+        List[str],
         typer.Option(
             "--var",
             help=f"Climate variables: {', '.join(VALID_VARIABLES)}",
         ),
-    ] = None,
+    ] = VALID_VARIABLES,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[
         Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
@@ -148,9 +148,6 @@ def silo_patched_point(
                 output = str(output_path) + expected_ext
 
     try:
-        # Handle default variables
-        if variables is None:
-            variables = VALID_VARIABLES.copy()
 
         # Validate variable names
         invalid_vars = [v for v in variables if v not in VARIABLES]
@@ -263,12 +260,12 @@ def silo_data_drill(
         str, typer.Option(help="Output format: csv, json, apsim, alldata, standard")
     ] = "csv",
     variables: Annotated[
-        Optional[List[str]],
+        List[str],
         typer.Option(
             "--var",
             help=f"Climate variables: {', '.join(VALID_VARIABLES)}",
         ),
-    ] = None,
+    ] = VALID_VARIABLES,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[
         Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
@@ -303,10 +300,6 @@ def silo_data_drill(
     """
 
     try:
-        # Handle default variables
-        if variables is None:
-            variables = VALID_VARIABLES.copy()
-
         # Validate variable names
         invalid_vars = [v for v in variables if v not in VARIABLES]
         if invalid_vars:

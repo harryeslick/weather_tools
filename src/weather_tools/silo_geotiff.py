@@ -26,12 +26,11 @@ from shapely.geometry import Point, Polygon
 
 from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import configure_logging, create_download_progress, get_console
-from weather_tools.silo_variables import (
+from weather_tools.variable_register import (
     DEFAULT_GEOTIFF_TIMEOUT,
     SILO_GEOTIFF_BASE_URL,
     VARIABLES,
     SiloGeoTiffError,
-    VariableInput,
 )
 
 logger = logging.getLogger(__name__)
@@ -359,7 +358,7 @@ def download_geotiff_with_subset(
 
 
 def download_geotiffs(
-    variables: VariableInput,
+    variables: str | list[str],
     start_date: datetime.date,
     end_date: datetime.date,
     geometry: Union[Point, Polygon],
@@ -378,9 +377,8 @@ def download_geotiffs(
     enable efficient reuse, with temporary storage available for one-off queries.
 
     Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
+        variables: Canonical variable name ("daily_rain", "max_temp", etc.) or a
+                  list of canonical names. Each variable must be specified explicitly.
         start_date: First date (inclusive)
         end_date: Last date (inclusive)
         geometry: Shapely geometry (Point or Polygon) for spatial subsetting.
@@ -636,7 +634,7 @@ def read_geotiff_stack(
 
 
 def download_and_read_geotiffs(
-    variables: VariableInput,
+    variables: str | list[str],
     start_date: datetime.date,
     end_date: datetime.date,
     geometry: Union[Point, Polygon],
@@ -656,9 +654,8 @@ def download_and_read_geotiffs(
     Use `download_geotiffs()` and `read_geotiff_stack()` separately for more control.
 
     Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
+        variables: Canonical variable name ("daily_rain", "max_temp", etc.) or a
+                  list of canonical names. Each variable must be specified explicitly.
         start_date: First date (inclusive)
         end_date: Last date (inclusive)
         geometry: Shapely geometry (Point or Polygon) for spatial subsetting.

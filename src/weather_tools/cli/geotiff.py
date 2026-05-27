@@ -12,7 +12,7 @@ from weather_tools.cli.date_utils import iso_date_option, parse_iso_date_strict
 from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import get_console
 from weather_tools.silo_geotiff import download_geotiffs
-from weather_tools.silo_variables import SiloGeoTiffError
+from weather_tools.variable_register import SiloGeoTiffError
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +30,12 @@ def geotiff_download(
     ],
     end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD)", callback=iso_date_option)],
     variables: Annotated[
-        Optional[List[str]],
+        List[str],
         typer.Option(
             "--var",
-            help="Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.",
+            help="Variable names (daily_rain, max_temp, etc.). Specify each variable explicitly; repeat the option for multiple.",
         ),
-    ] = None,
+    ] = ["daily_rain"],
     output_dir: Annotated[
         Optional[Path], typer.Option(help="Output directory for downloaded GeoTIFF files")
     ] = None,
@@ -88,9 +88,6 @@ def geotiff_download(
             --geometry region.geojson
     """
     # Set defaults
-    if variables is None:
-        variables = ["daily_rain"]
-
     if output_dir is None:
         output_dir = get_silo_data_dir() / "geotiff"
 

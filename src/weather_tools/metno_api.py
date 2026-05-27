@@ -42,7 +42,7 @@ from weather_tools.metno_models import (
     MetNoResponse,
     MetNoUserAgentError,
 )
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 
 # Get package version for User-Agent
 try:

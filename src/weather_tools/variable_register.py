@@ -6,11 +6,12 @@ Maps between:
 - NetCDF filenames (used for gridded data downloads)
 - Full variable names and metadata
 - DataFrame column names (canonical names = SILO_VARIABLES.keys())
+- SILO variables and metno aggregated forecast variables. 
 
 SILO variable reference: https://www.longpaddock.qld.gov.au/silo/about/climate-variables/
 """
 
-from typing import Iterator, KeysView, List, Literal, Optional, Union, ValuesView
+from typing import Iterator, KeysView, Literal, Optional, ValuesView
 
 from pydantic import BaseModel
 
@@ -259,51 +260,6 @@ SILO_VARIABLES: dict[str, VariableMetadata] = {
     ),
 }
 
-# Preset groups for common variable combinations
-VARIABLE_PRESETS: dict[str, list[str]] = {
-    "daily": ["daily_rain", "max_temp", "min_temp", "evap_syn"],
-    "monthly": ["monthly_rain"],
-    "temperature": ["max_temp", "min_temp"],
-    "evaporation": ["evap_pan", "evap_syn", "evap_comb"],
-    "radiation": ["radiation"],
-    "humidity": ["vp", "vp_deficit", "rh_tmax", "rh_tmin"],
-}
-
-# Type hints for valid variable inputs
-VariablePreset = Literal["daily", "monthly", "temperature", "evaporation", "radiation", "humidity"]
-
-VariableName = Literal[
-    "daily_rain",
-    "monthly_rain",
-    "max_temp",
-    "min_temp",
-    "vp",
-    "vp_deficit",
-    "rh_tmax",
-    "rh_tmin",
-    "mslp",
-    "evap_pan",
-    "evap_syn",
-    "evap_comb",
-    "evap_morton_lake",
-    "radiation",
-    "et_short_crop",
-    "et_tall_crop",
-    "et_morton_actual",
-    "et_morton_potential",
-    "et_morton_wet",
-    # Met.no-only variables
-    "relative_humidity",
-    "wind_speed",
-    "wind_speed_max",
-    "cloud_fraction",
-    "weather_symbol",
-]
-
-# Union type for function parameters accepting variables
-VariableInput = Union[VariablePreset, VariableName, List[Union[VariablePreset, VariableName]]]
-
-
 # ===========================
 # Variable Registry
 # ===========================
@@ -315,7 +271,7 @@ class VariableRegistry:
     This class wraps SILO_VARIABLES dict and provides:
     - Dict-like access to variable metadata
     - Conversion between canonical names, SILO codes, and met.no names
-    - Preset expansion and validation
+    - Validation of requested variables
 
     The registry is typically used via the singleton VARIABLES instance:
 
@@ -328,17 +284,13 @@ class VariableRegistry:
         'daily_rain'
     """
 
-    def __init__(
-        self, variables: dict[str, VariableMetadata], presets: dict[str, list[str]]
-    ) -> None:
+    def __init__(self, variables: dict[str, VariableMetadata]) -> None:
         """Initialize registry with variable metadata.
 
         Args:
             variables: Dict mapping canonical names to VariableMetadata
-            presets: Dict mapping preset names to lists of variable names
         """
         self._variables = variables
-        self._presets = presets
 
         # Build reverse lookup indexes (computed once).
         # Note: there is intentionally no reverse index for met.no names. A raw
@@ -487,47 +439,19 @@ class VariableRegistry:
         }
 
     # -------------------------
-    # Preset expansion and validation
+    # Validation
     # -------------------------
 
-    def expand_preset(self, preset_or_vars: VariableInput) -> list[str]:
-        """Expand preset names to canonical variable names.
-
-        Args:
-            preset_or_vars: Variable preset name ("daily", "monthly", etc.),
-                           variable name ("daily_rain", "max_temp", etc.),
-                           or list of presets/variable names
-
-        Returns:
-            List of canonical variable names
-
-        Example:
-            >>> VARIABLES.expand_preset("daily")
-            ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
-            >>> VARIABLES.expand_preset(["daily_rain", "max_temp"])
-            ['daily_rain', 'max_temp']
-        """
-        if isinstance(preset_or_vars, str):
-            if preset_or_vars in self._presets:
-                return list(self._presets[preset_or_vars])
-            else:
-                return [preset_or_vars]
-        else:
-            expanded = []
-            for item in preset_or_vars:
-                if item in self._presets:
-                    expanded.extend(self._presets[item])
-                else:
-                    expanded.append(item)
-            return expanded
-
     def validate(
-        self, variables: VariableInput, error_class: type[Exception] = ValueError
+        self, variables: str | list[str], error_class: type[Exception] = ValueError
     ) -> dict[str, VariableMetadata]:
-        """Validate and expand variables, returning metadata map.
+        """Validate requested variables, returning a metadata map.
+
+        Accepts a single canonical variable name or a list of names. Every name
+        must be specified explicitly; there are no presets.
 
         Args:
-            variables: Variable preset name, variable name, or list of both
+            variables: Canonical variable name, or list of canonical names
             error_class: Exception class to raise for unknown variables
 
         Returns:
@@ -537,11 +461,11 @@ class VariableRegistry:
             error_class: If any variable is unknown
 
         Example:
-            >>> metadata_map = VARIABLES.validate("daily")
+            >>> metadata_map = VARIABLES.validate(["daily_rain", "max_temp"])
             >>> print(list(metadata_map.keys()))
-            ['daily_rain', 'max_temp', 'min_temp', 'evap_syn']
+            ['daily_rain', 'max_temp']
         """
-        var_list = self.expand_preset(variables)
+        var_list = [variables] if isinstance(variables, str) else list(variables)
 
         metadata_map: dict[str, VariableMetadata] = {}
         for var_name in var_list:
@@ -550,14 +474,6 @@ class VariableRegistry:
             metadata_map[var_name] = self._variables[var_name]
 
         return metadata_map
-
-    def is_preset(self, name: str) -> bool:
-        """Check if name is a preset name."""
-        return name in self._presets
-
-    def preset_names(self) -> list[str]:
-        """Return list of available preset names."""
-        return list(self._presets.keys())
 
     def metno_only_variables(self) -> list[str]:
         """Return list of variables that are only available from met.no.
@@ -577,4 +493,4 @@ class VariableRegistry:
 
 
 # Singleton registry instance
-VARIABLES = VariableRegistry(SILO_VARIABLES, VARIABLE_PRESETS)
+VARIABLES = VariableRegistry(SILO_VARIABLES)

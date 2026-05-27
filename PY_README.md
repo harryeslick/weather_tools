@@ -323,9 +323,9 @@ from pathlib import Path
 from weather_tools.download_silo import download_silo_gridded
 from weather_tools.logging_utils import get_console
 
-# Download daily variables for recent years
+# Download default daily variables (daily_rain, max_temp, min_temp, evap_syn)
 download_silo_gridded(
-    variables=["daily"],  # Preset: daily_rain, max_temp, min_temp, evap_syn
+    variables=None,  # Omit to use default daily set
     start_year=2020,
     end_year=2023,
     output_dir=Path.home() / "Developer/DATA/silo_grids",
@@ -343,12 +343,7 @@ download_silo_gridded(
 )
 ```
 
-**Variable Presets:**
-- `"daily"` - daily_rain, max_temp, min_temp, evap_syn (~1.6GB/year)
-- `"monthly"` - monthly_rain (~14MB/year)
-- `"temperature"` - max_temp, min_temp (~820MB/year)
-
-**Individual Variables:**
+**Available Variables:**
 - `"daily_rain"`, `"monthly_rain"`
 - `"max_temp"`, `"min_temp"`
 - `"evap_syn"`, `"evap_pan"` (1970+)
@@ -363,9 +358,9 @@ Load local NetCDF files into xarray datasets:
 from weather_tools import read_silo_xarray
 from pathlib import Path
 
-# Load daily variables (default preset)
+# Load default daily variables (daily_rain, max_temp, min_temp, evap_syn)
 ds = read_silo_xarray(
-    variables="daily",
+    variables=None,  # Omit to use default daily set
     silo_dir=Path.home() / "Developer/DATA/silo_grids"
 )
 
@@ -390,7 +385,7 @@ ds = read_silo_xarray(
 
 # Load monthly data
 ds_monthly = read_silo_xarray(
-    variables="monthly",
+    variables=["monthly_rain"],
     silo_dir=Path.home() / "Developer/DATA/silo_grids"
 )
 ```
@@ -453,7 +448,7 @@ combined_df = pd.concat(dfs, ignore_index=True)
 
 ```python
 # Use dask for lazy loading (doesn't load all data into memory)
-ds = read_silo_xarray(variables="daily")
+ds = read_silo_xarray(variables=None)  # Uses default daily set
 
 # Compute only what you need
 point_data = ds.sel(
@@ -466,7 +461,7 @@ point_data = ds.sel(
 ds.close()
 
 # Or use context manager
-with read_silo_xarray(variables="daily") as ds:
+with read_silo_xarray(variables=None) as ds:  # Uses default daily set
     df = ds.sel(lat=-27.5, lon=153.0, method="nearest").to_dataframe()
 # Dataset automatically closed
 ```
@@ -515,7 +510,7 @@ brisbane = Point(153.0, -27.5)  # (longitude, latitude)
 
 # Extract daily data
 data = read_geotiff_timeseries(
-    variables="daily",  # Uses preset: daily_rain, max_temp, min_temp, evap_syn
+    variables=["daily_rain", "max_temp", "min_temp", "evap_syn"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 1, 7),
     geometry=brisbane,
@@ -678,7 +673,7 @@ print(df.columns)
 #  'avg_pressure', 'avg_relative_humidity', 'avg_wind_speed', ...]
 
 # Format to match SILO column names
-from weather_tools.silo_variables import convert_metno_to_silo_columns
+from weather_tools.variable_register import convert_metno_to_silo_columns
 
 column_mapping = convert_metno_to_silo_columns(df)
 df_silo = df.rename(columns=column_mapping)
@@ -698,7 +693,7 @@ from pathlib import Path
 
 # 1. Get SILO historical data
 ds = read_silo_xarray(
-    variables="daily",
+    variables=None,  # Uses default daily set
     silo_dir=Path.home() / "Developer/DATA/silo_grids"
 )
 
@@ -795,7 +790,7 @@ combined.to_csv("australia_weather_2023.csv", index=False)
 from weather_tools import read_silo_xarray
 import matplotlib.pyplot as plt
 
-# Load data
+# Load specific variable
 ds = read_silo_xarray(variables=["daily_rain"])
 
 # Select a specific day
@@ -834,7 +829,7 @@ df_api = api.get_data_drill(
 )
 
 # Local file approach (faster for bulk queries)
-ds = read_silo_xarray(variables=["daily_rain"])
+ds = read_silo_xarray(variables=None)  # Uses default daily set
 df_local = ds.sel(
     lat=-27.5,
     lon=153.0,
@@ -913,15 +908,15 @@ api.clear_cache()  # Clear when done
 ### 2. Use Local Files for Bulk Processing
 
 ```python
-# Download once
+# Download once (default daily variables)
 download_silo_gridded(
-    variables="daily",
+    variables=None,
     start_year=2020,
     end_year=2023
 )
 
 # Query many times (fast, no network)
-ds = read_silo_xarray(variables="daily")
+ds = read_silo_xarray(variables=None)
 for lat in range(-44, -10):
     for lon in range(113, 154):
         df = ds.sel(lat=lat, lon=lon, method="nearest").to_dataframe()

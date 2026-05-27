@@ -199,7 +199,7 @@ $ weather-tools local extract [OPTIONS]
 * `--start-date TEXT`: Start date (YYYY-MM-DD format)  [required]
 * `--end-date TEXT`: End date (YYYY-MM-DD format)  [required]
 * `--output TEXT`: Output CSV filename  [default: weather_data.csv]
-* `--variables TEXT`: Weather variables to extract. Use &#x27;daily&#x27; or &#x27;monthly&#x27; for presets, or specify individual variables
+* `--var TEXT`: Weather variables to extract. Specify individual variables: daily_rain, max_temp, min_temp, evap_syn, monthly_rain. Default (if omitted): daily_rain, max_temp, min_temp, evap_syn
 * `--silo-dir PATH`: Path to SILO data directory
 * `--tolerance FLOAT`: Maximum distance (in degrees) for nearest neighbor selection  [default: 0.1]
 * `--keep-location / --no-keep-location`: Keep location columns (crs, lat, lon) in output CSV  [default: no-keep-location]
@@ -237,14 +237,14 @@ By default, existing files are skipped. Use --force to re-download.
 
 Examples:
     # Download daily variables for 2020-2023
-    weather-tools local download --var daily --start-year 2020 --end-year 2023
+    weather-tools local download --start-year 2020 --end-year 2023
 
     # Download specific variables
     weather-tools local download --var daily_rain --var max_temp \
         --start-year 2022 --end-year 2023
 
     # Download to custom directory
-    weather-tools local download --var monthly \
+    weather-tools local download --var monthly_rain \
         --start-year 2020 --end-year 2023 \
         --silo-dir /data/silo_grids
 
@@ -262,7 +262,7 @@ $ weather-tools local download [OPTIONS]
 
 * `--start-year INTEGER`: First year to download (inclusive)  [required]
 * `--end-year INTEGER`: Last year to download (inclusive)  [required]
-* `--var [daily_rain|monthly_rain|max_temp|min_temp|vp|vp_deficit|rh_tmax|rh_tmin|mslp|evap_pan|evap_syn|evap_comb|evap_morton_lake|radiation|et_short_crop|et_tall_crop|et_morton_actual|et_morton_potential|et_morton_wet|wind_speed|wind_speed_max|cloud_fraction|weather_symbol]`: Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.
+* `--var [daily_rain|monthly_rain|max_temp|min_temp|vp|vp_deficit|rh_tmax|rh_tmin|mslp|evap_pan|evap_syn|evap_comb|evap_morton_lake|radiation|et_short_crop|et_tall_crop|et_morton_actual|et_morton_potential|et_morton_wet|wind_speed|wind_speed_max|cloud_fraction|weather_symbol]`: Variable names (daily_rain, max_temp, etc.). Can specify multiple. If omitted, uses default daily set (daily_rain, max_temp, min_temp, evap_syn).
 * `--silo-dir PATH`: Output directory for downloaded files
 * `--force / --no-force`: Overwrite existing files  [default: no-force]
 * `--timeout INTEGER`: Download timeout in seconds  [default: 600]
@@ -424,7 +424,7 @@ $ weather-tools geotiff download [OPTIONS]
 
 * `--start-date TEXT`: Start date (YYYY-MM-DD format)  [required]
 * `--end-date TEXT`: End date (YYYY-MM-DD format)  [required]
-* `--var TEXT`: Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.
+* `--var TEXT`: Variable names (daily_rain, max_temp, etc.). Can specify multiple. If omitted, uses default daily set (daily_rain, max_temp, min_temp, evap_syn).
 * `--output-dir PATH`: Output directory for downloaded GeoTIFF files
 * `--bbox FLOAT`: Bounding box: min_lon min_lat max_lon max_lat (4 values, mutually exclusive with --geometry)
 * `--geometry PATH`: Path to GeoJSON file with Polygon for clipping (mutually exclusive with --bbox)
