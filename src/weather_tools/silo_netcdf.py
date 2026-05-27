@@ -3,6 +3,7 @@ Download SILO gridded NetCDF files from AWS S3 public data.
 
 This module provides functionality to download climate data files that can be
 used with the local NetCDF processing functions.
+Full list of NetCDF files can be found [here](https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/index.html)
 """
 
 import logging

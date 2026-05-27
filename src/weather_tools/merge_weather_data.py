@@ -25,13 +25,6 @@ class MergeValidationError(Exception):
     """Raised when data cannot be safely merged."""
 
 
-class DateGapError(MergeValidationError):
-    """Raised when there's a gap in dates between datasets."""
-
-
-class ColumnMismatchError(MergeValidationError):
-    """Raised when columns don't align properly."""
-
 
 def merge_historical_and_forecast(
     silo_data: pd.DataFrame,
@@ -63,8 +56,6 @@ def merge_historical_and_forecast(
 
     Raises:
         MergeValidationError: If data cannot be safely merged
-        DateGapError: If there's a gap between datasets
-        ColumnMismatchError: If required columns are missing
 
     Example:
         >>> silo_df = get_silo_data(...)

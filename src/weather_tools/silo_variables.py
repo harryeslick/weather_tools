@@ -74,6 +74,7 @@ class VariableMetadata(BaseModel):
     units: str
     description: Optional[str] = None
     metno_only: bool = False
+    granularity: Literal["daily", "monthly"] = "daily"
 
 
 # Complete mapping of all SILO variables
@@ -92,6 +93,7 @@ SILO_VARIABLES: dict[str, VariableMetadata] = {
         netcdf_name="monthly_rain",
         full_name="Monthly rainfall",
         units="mm",
+        granularity="monthly",
     ),
     # Temperature
     "max_temp": VariableMetadata(

@@ -45,6 +45,24 @@ def _ensure_logging_configured():
         configure_logging()
 
 
+def _generate_month_range(
+    start_date: datetime.date, end_date: datetime.date
+) -> List[tuple[int, int]]:
+    """Return (year, month) pairs from start_date to end_date (inclusive, monthly cadence)."""
+    months = []
+    year, month = start_date.year, start_date.month
+    end_year, end_month = end_date.year, end_date.month
+    today = datetime.date.today()
+    while (year, month) <= (end_year, end_month):
+        if datetime.date(year, month, 1) < today:
+            months.append((year, month))
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+    return months
+
+
 def _generate_date_range(start_date: datetime.date, end_date: datetime.date) -> List[datetime.date]:
     """
     Generate list of dates between start and end (inclusive).
@@ -453,17 +471,24 @@ def download_geotiffs(
     # Build download task list
     download_tasks = []
     file_paths = {var: [] for var in metadata_map.keys()}
-    for var_name, _ in metadata_map.items():
-        for date in date_list:
-            # Construct URL and destination path
-            url = construct_geotiff_daily_url(var_name, date)
-            dest_path = (
-                cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
-            )
-
-            file_paths[var_name].append(dest_path)
-            if not dest_path.exists() or force:
-                download_tasks.append((var_name, date, url, dest_path))
+    for var_name, metadata in metadata_map.items():
+        if metadata.granularity == "monthly":
+            month_list = _generate_month_range(start_date, end_date)
+            for year, month in month_list:
+                url = construct_geotiff_monthly_url(var_name, year, month)
+                dest_path = cache_dir / var_name / str(year) / f"{year:04d}{month:02d}.{var_name}.tif"
+                file_paths[var_name].append(dest_path)
+                if not dest_path.exists() or force:
+                    download_tasks.append((var_name, datetime.date(year, month, 1), url, dest_path))
+        else:
+            for date in date_list:
+                url = construct_geotiff_daily_url(var_name, date)
+                dest_path = (
+                    cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
+                )
+                file_paths[var_name].append(dest_path)
+                if not dest_path.exists() or force:
+                    download_tasks.append((var_name, date, url, dest_path))
 
     # Download files with progress bar
     downloaded_files = {var: set() for var in metadata_map.keys()}

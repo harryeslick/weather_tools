@@ -59,11 +59,13 @@ def geotiff_download(
     Files are organized in the structure:
         output_dir/
         ├── daily_rain/
-        │   ├── 2023/
-        │   │   ├── 20230101.daily_rain.tif
-        │   │   └── 20230102.daily_rain.tif
-        │   └── ...
-        └── ...
+        │   └── 2023/
+        │       ├── 20230101.daily_rain.tif
+        │       └── 20230102.daily_rain.tif
+        └── monthly_rain/       # monthly variables use YYYYMM filename
+            └── 2023/
+                ├── 202301.monthly_rain.tif
+                └── 202302.monthly_rain.tif
 
     By default, existing files are skipped. Use --force to re-download.
 

@@ -164,13 +164,6 @@ class DailyWeatherSummary(BaseModel):
     Aggregates hourly met.no forecast data to daily values compatible with
     SILO daily weather data format.
 
-    Examples:
-        >>> summary = DailyWeatherSummary(
-        ...     date=dt.date(2023, 1, 15),
-        ...     min_temperature=18.5,
-        ...     max_temperature=28.3,
-        ...     total_precipitation=5.2
-        ... )
     """
 
     date: dt.date = Field(..., description="Date for this daily summary")
