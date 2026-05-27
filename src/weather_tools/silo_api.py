@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from zoneinfo import ZoneInfo
 
 import diskcache
 import pandas as pd
@@ -39,6 +40,18 @@ from weather_tools.silo_variables import VARIABLES
 SILO_BASE_URL = "https://www.longpaddock.qld.gov.au/cgi-bin/silo/"
 
 logger = logging.getLogger(__name__)
+
+_BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
+
+
+def _is_silo_maintenance_window() -> bool:
+    """Return True if the current Brisbane time falls in SILO's scheduled maintenance window.
+
+    SILO may be unavailable Wednesday and Thursday 11:00–13:00 Brisbane time (AEST, UTC+10).
+    """
+    now = datetime.now(_BRISBANE_TZ)
+    # weekday(): Monday=0 … Sunday=6; Wednesday=2, Thursday=3
+    return now.weekday() in (2, 3) and 11 <= now.hour < 13
 
 
 class SiloAPIError(Exception):
@@ -235,6 +248,13 @@ class SiloAPI:
                 )
                 logger.debug("Cache key: %s", cache_key)
                 return cached
+
+        if _is_silo_maintenance_window():
+            logger.warning(
+                "SILO scheduled maintenance: the service may be unavailable "
+                "Wednesday and Thursday 11:00–13:00 Brisbane time (AEST). "
+                "If your request fails, please try again after 1:00 pm."
+            )
 
         last_exception = None
         for attempt in range(self.max_retries):

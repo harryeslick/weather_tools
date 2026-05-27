@@ -6,6 +6,8 @@ Maps between:
 - NetCDF filenames (used for gridded data downloads)
 - Full variable names and metadata
 - DataFrame column names (canonical names = SILO_VARIABLES.keys())
+
+SILO variable reference: https://www.longpaddock.qld.gov.au/silo/about/climate-variables/
 """
 
 from typing import Iterator, KeysView, List, Literal, Optional, Union, ValuesView
@@ -114,7 +116,7 @@ SILO_VARIABLES: dict[str, VariableMetadata] = {
     "vp": VariableMetadata(
         silo_code="V",
         netcdf_name="vp",
-        metno_name="avg_relative_humidity",
+        metno_name="",
         full_name="Vapour pressure",
         units="hPa",
     ),
@@ -159,7 +161,7 @@ SILO_VARIABLES: dict[str, VariableMetadata] = {
     "evap_comb": VariableMetadata(
         silo_code="C",
         netcdf_name="evap_comb",
-        full_name="Combination evaporation",
+        full_name="Combination (synthetic estimate pre-1970, class A pan 1970 onwards)",
         units="mm",
     ),
     "evap_morton_lake": VariableMetadata(
@@ -203,7 +205,7 @@ SILO_VARIABLES: dict[str, VariableMetadata] = {
     "et_morton_wet": VariableMetadata(
         silo_code="W",
         netcdf_name="et_morton_wet",
-        full_name="Morton's wet-environment areal potential evapotranspiration",
+        full_name="Morton's wet-environment areal potential evapotranspiration over land",
         units="mm",
     ),
     # Met.no-only variables (not available in SILO)
