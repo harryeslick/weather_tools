@@ -38,6 +38,7 @@ def merge_historical_and_forecast(
     metno_data: pd.DataFrame,
     overlap_strategy: Literal["prefer_silo", "prefer_metno", "error"] = "prefer_silo",
     return_cols: Literal["all", "silo_only", "metno_only"] = "all",
+    convert_rh_to_vp: bool = True,
 ) -> pd.DataFrame:
     """
     Merge SILO historical data with met.no forecast data.
@@ -53,6 +54,9 @@ def merge_historical_and_forecast(
                     - "all": All columns from both datasets (default)
                     - "silo_only": Only columns present in the SILO DataFrame
                     - "metno_only": Only columns present in the met.no DataFrame
+        convert_rh_to_vp: If True (default), explicitly convert met.no
+                    relative humidity (%) into the SILO ``vp`` column
+                    (vapour pressure, hPa) using mean daily temperature.
 
     Returns:
         Merged DataFrame with 'data_source' column indicating origin
@@ -118,7 +122,7 @@ def merge_historical_and_forecast(
         )
 
     # Convert met.no columns to SILO format if needed
-    metno_df = prepare_metno_for_merge(metno_df, silo_df)
+    metno_df = prepare_metno_for_merge(metno_df, silo_df, convert_rh_to_vp=convert_rh_to_vp)
 
     # Add data source metadata
     silo_df["data_source"] = "silo"
@@ -237,16 +241,32 @@ def validate_merge_compatibility(
     return len(issues) == 0, issues
 
 
-def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame) -> pd.DataFrame:
+def prepare_metno_for_merge(
+    metno_df: pd.DataFrame,
+    silo_df: pd.DataFrame,
+    convert_rh_to_vp: bool = True,
+) -> pd.DataFrame:
     """
     Prepare met.no data for merging with SILO data.
 
     Converts column names, adds SILO date columns, and optionally
     fills missing variables.
 
+    The SILO ``vp`` column holds vapour pressure (hPa), but met.no only
+    reports relative humidity (%). The variable registry maps
+    ``avg_relative_humidity -> vp``, so a plain rename would silently drop
+    raw RH percentages into a column labelled ``vp``. When
+    ``convert_rh_to_vp`` is True we instead capture the RH values before the
+    rename and derive true vapour pressure from the daily mean temperature.
+
     Args:
         metno_df: met.no forecast DataFrame
         silo_df: SILO DataFrame (for column reference)
+        convert_rh_to_vp: If True (default), explicitly convert met.no
+            ``avg_relative_humidity`` (%) into the SILO ``vp`` column
+            (vapour pressure, hPa) using mean daily temperature. If False,
+            the RH->vp registry mapping is suppressed and no ``vp`` column is
+            produced from met.no humidity.
 
     Returns:
         Prepared DataFrame with SILO-compatible columns
@@ -259,20 +279,32 @@ def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame) -> pd
     if not has_silo_format:
         # Convert column names to SILO format
         column_mapping = convert_metno_to_silo_columns(metno_df, include_extra=False)
+
+        # The registry maps avg_relative_humidity -> vp directly. Letting the
+        # rename run as-is would mislabel raw RH percentages as vapour
+        # pressure. Capture the RH values *before* the rename, then drop that
+        # mapping so the rename cannot clobber the computed vp column.
+        has_rh = "avg_relative_humidity" in metno_df.columns
+        rh_values = metno_df["avg_relative_humidity"].copy() if has_rh else None
+        if has_rh:
+            column_mapping.pop("avg_relative_humidity", None)
+
         metno_df = metno_df.rename(columns=column_mapping)
 
-        # Convert relative humidity to vapor pressure if both are present
-        if "avg_relative_humidity" in metno_df.columns and "min_temperature" in metno_df.columns:
-            metno_df["vp"] = metno_df.apply(
-                lambda row: rh_to_vapor_pressure(
-                    row["avg_relative_humidity"],
-                    (row["min_temperature"] + row.get("max_temperature", row["min_temperature"]))
-                    / 2,
-                )
-                if pd.notna(row.get("avg_relative_humidity"))
-                else np.nan,
-                axis=1,
+        # Derive true vapour pressure from RH and mean daily temperature.
+        # Guards use post-rename names (vp / min_temp).
+        if convert_rh_to_vp and rh_values is not None and "min_temp" in metno_df.columns:
+            logger.warning(
+                "Converting met.no relative_humidity (%) -> vp (vapour pressure, hPa) "
+                "using mean daily temperature; the SILO 'vp' column is vapour pressure, "
+                "not relative humidity."
             )
+            max_temp = metno_df["max_temp"] if "max_temp" in metno_df.columns else metno_df["min_temp"]
+            mean_temp = (metno_df["min_temp"] + max_temp) / 2
+            metno_df["vp"] = [
+                rh_to_vapor_pressure(rh, temp) if pd.notna(rh) else np.nan
+                for rh, temp in zip(rh_values, mean_temp)
+            ]
 
     return metno_df
 

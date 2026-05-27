@@ -322,6 +322,56 @@ class TestMetNoPreparation:
         assert "min_temperature" not in prepared.columns
         assert "max_temperature" not in prepared.columns
 
+    def test_prepare_metno_rh_converted_to_vapour_pressure(self, sample_silo_data):
+        """vp must hold vapour pressure (hPa), not raw relative humidity (%).
+
+        Regression test: the variable registry maps avg_relative_humidity -> vp,
+        so a naive rename would leave RH percentages mislabelled as vapour
+        pressure. prepare_metno_for_merge must instead derive true vp.
+        """
+        from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
+
+        metno = pd.DataFrame(
+            {
+                "date": pd.date_range("2023-01-11", periods=3),
+                "min_temperature": [15.0, 16.0, 14.0],
+                "max_temperature": [25.0, 26.0, 24.0],
+                "total_precipitation": [0.0, 2.0, 1.0],
+                "avg_relative_humidity": [80.0, 60.0, 90.0],
+            }
+        )
+
+        prepared = prepare_metno_for_merge(metno, sample_silo_data)
+
+        expected = [
+            rh_to_vapor_pressure(80.0, 20.0),
+            rh_to_vapor_pressure(60.0, 21.0),
+            rh_to_vapor_pressure(90.0, 19.0),
+        ]
+        assert np.allclose(prepared["vp"], expected)
+        # Vapour pressure is ~5-40 hPa; raw RH would be ~0-100.
+        assert (prepared["vp"] < 50).all()
+
+    def test_prepare_metno_rh_conversion_can_be_disabled(self, sample_silo_data):
+        """convert_rh_to_vp=False suppresses the RH->vp conversion entirely."""
+        metno = pd.DataFrame(
+            {
+                "date": pd.date_range("2023-01-11", periods=3),
+                "min_temperature": [15.0, 16.0, 14.0],
+                "max_temperature": [25.0, 26.0, 24.0],
+                "total_precipitation": [0.0, 2.0, 1.0],
+                "avg_relative_humidity": [80.0, 60.0, 90.0],
+            }
+        )
+
+        prepared = prepare_metno_for_merge(metno, sample_silo_data, convert_rh_to_vp=False)
+
+        # No vp column should be produced, and RH must never be mislabelled as vp.
+        assert "vp" not in prepared.columns
+        # Raw RH is preserved under its own name, not silently dropped.
+        assert "avg_relative_humidity" in prepared.columns
+        assert prepared["avg_relative_humidity"].tolist() == [80.0, 60.0, 90.0]
+
     # def test_prepare_metno_adds_date_columns(self, sample_silo_data, sample_metno_data):
     #     """Test adding day and year columns."""
     #     prepared = prepare_metno_for_merge(sample_metno_data, sample_silo_data)
