@@ -81,27 +81,28 @@ Aggregates hourly data into a daily rollup compatible with SILO daily schemata:
 
 ```python
 from weather_tools.metno_models import DailyWeatherSummary
+from datetime import date
 
 summary = DailyWeatherSummary(
     date=date(2024, 10, 12),
-    min_temperature=12.4,
-    max_temperature=23.1,
-    total_precipitation=5.8,
+    min_temp=12.4,
+    max_temp=23.1,
+    daily_rain=5.8,
 )
 ```
 
-Fields closely align with the columns produced by `MetNoAPI.to_dataframe(aggregate_to_daily=True)`:
+Fields closely align with the columns produced by `MetNoAPI.to_dataframe(daily=True)`:
 
 | Field                     | Description |
 |---------------------------|-------------|
 | `date`                    | Python `date` for the summary |
-| `min_temperature` / `max_temperature` | Daily temperature extremes (°C) |
-| `total_precipitation`     | Total rainfall (mm) |
-| `avg_wind_speed` / `max_wind_speed`   | Wind statistics (m/s) |
-| `avg_relative_humidity`   | Average humidity (%) |
-| `avg_pressure`            | Sea level pressure (hPa) |
-| `avg_cloud_fraction`      | Cloud cover (%) |
-| `dominant_weather_symbol` | Most common or severe symbol code for the day |
+| `min_temp` / `max_temp`   | Daily temperature extremes (°C) |
+| `daily_rain`              | Total rainfall (mm) |
+| `wind_speed` / `wind_speed_max` | Wind statistics (m/s) |
+| `relative_humidity`       | Average humidity (%) |
+| `mslp`                    | Mean sea level pressure (hPa) |
+| `cloud_fraction`          | Cloud cover (%) |
+| `weather_symbol`          | Most common or severe symbol code for the day |
 
 Use `.model_dump()` to serialize the summaries for DataFrame construction or downstream storage.
 

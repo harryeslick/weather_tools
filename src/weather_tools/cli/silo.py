@@ -90,7 +90,7 @@ def silo_patched_point(
         # Get rainfall and temperature for Brisbane Aero (format auto-detected)
         weather-tools silo patched-point --station 30043 \\
             --start-date 2023-01-01 --end-date 2023-01-31 \\
-            --var rainfall --var max_temp --var min_temp --output data.csv
+            --var daily_rain --var max_temp --var min_temp --output data.csv
         
         # Get all variables in APSIM format
         weather-tools silo patched-point --station 30043 \\
@@ -290,7 +290,7 @@ def silo_data_drill(
         # Get rainfall for a specific location
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\
             --start-date 2023-01-01 --end-date 2023-01-31 \\
-            --var rainfall --output data.csv
+            --var daily_rain --output data.csv
         
         # Get all variables for a location
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\

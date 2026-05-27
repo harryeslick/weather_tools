@@ -67,11 +67,11 @@ Simple interface that returns pandas DataFrames:
 
 ```python
 # Get PatchedPoint station data as DataFrame
-df = api.get_patched_point(
+df, metadata = api.get_patched_point(
     station_code="30043",  # Brisbane Aero
     start_date="20230101",
     end_date="20230131",
-    variables=["rainfall", "max_temp", "min_temp"]
+    variables=["daily_rain", "max_temp", "min_temp"]
 )
 
 print(df.head())
@@ -81,31 +81,24 @@ print(df.head())
 # ...
 
 # Get all available variables
-df_all = api.get_patched_point(
+df_all, metadata_all = api.get_patched_point(
     station_code="30043",
     start_date="20230101",
     end_date="20230131"
-    # variables=None gets all variables
+    # variables=None gets default variables
 )
 
-# Return with metadata
-df, metadata = api.get_patched_point(
-    station_code="30043",
-    start_date="20230101",
-    end_date="20230131",
-    return_metadata=True
-)
-print(metadata)
+print(metadata_all)
 # {'station_code': '30043', 'date_range': {...}, 'variables': [...]}
 ```
 
 **Available Variables:**
-- `"rainfall"` - Daily rainfall (mm)
+- `"daily_rain"` - Daily rainfall (mm)
 - `"max_temp"` - Maximum temperature (°C)
 - `"min_temp"` - Minimum temperature (°C)
-- `"evaporation"` - Class A pan evaporation (mm)
+- `"evap_pan"` - Class A pan evaporation (mm)
 - `"radiation"` - Solar radiation (MJ/m²)
-- `"vapour_pressure"` - Vapour pressure (hPa)
+- `"vp"` - Vapour pressure (hPa)
 - `"max_rh"` - Relative humidity at max temp (%)
 - `"min_rh"` - Relative humidity at min temp (%)
 
@@ -117,7 +110,6 @@ Type-safe interface using Pydantic models with validation:
 from weather_tools.silo_models import (
     PatchedPointQuery,
     SiloDateRange,
-    ClimateVariable,
     SiloFormat
 )
 
@@ -129,11 +121,7 @@ query = PatchedPointQuery(
         start_date="20230101",
         end_date="20230131"
     ),
-    values=[
-        ClimateVariable.RAINFALL,
-        ClimateVariable.MAX_TEMP,
-        ClimateVariable.MIN_TEMP
-    ]
+    variables=["daily_rain", "max_temp", "min_temp"]
 )
 
 # Execute query
@@ -142,9 +130,9 @@ response = api.query_patched_point(query)
 # Access raw data
 print(response.raw_data)  # CSV string
 
-# Convert to different formats
-print(response.to_csv())   # CSV string
-print(response.to_dict())  # Dictionary
+# Convert to DataFrame
+df = api._response_to_dataframe(response)
+print(df.head())
 ```
 
 **Available Formats:**
@@ -161,12 +149,12 @@ Get interpolated data for any location in Australia (0.05° grid).
 
 ```python
 # Get DataDrill data for any coordinates
-df = api.get_data_drill(
+df, metadata = api.get_data_drill(
     latitude=-27.5,
     longitude=151.0,
     start_date="20230101",
     end_date="20230131",
-    variables=["rainfall", "max_temp"]
+    variables=["daily_rain", "max_temp"]
 )
 
 print(df.head())
@@ -183,7 +171,7 @@ from weather_tools.silo_models import (
     DataDrillQuery,
     AustralianCoordinates,
     SiloDateRange,
-    ClimateVariable
+    SiloFormat
 )
 
 query = DataDrillQuery(
@@ -195,11 +183,13 @@ query = DataDrillQuery(
         start_date="20230101",
         end_date="20230131"
     ),
-    values=[ClimateVariable.RAINFALL]
+    variables=["daily_rain"],
+    format=SiloFormat.CSV
 )
 
 response = api.query_data_drill(query)
-print(response.to_csv())
+df = api._response_to_dataframe(response)
+print(df.head())
 ```
 
 ### Station Search
@@ -274,7 +264,7 @@ Get recent data for the last N days.
 df = api.get_recent_data(
     station_code="30043",
     days=7,
-    variables=["rainfall", "max_temp", "min_temp"]
+    variables=["daily_rain", "max_temp", "min_temp"]
 )
 
 # Get last 7 days for coordinates (gridded data)
@@ -320,20 +310,20 @@ Download SILO NetCDF files programmatically:
 
 ```python
 from pathlib import Path
-from weather_tools.download_silo import download_silo_gridded
+from weather_tools import download_netcdf
 from weather_tools.logging_utils import get_console
 
 # Download default daily variables (daily_rain, max_temp, min_temp, evap_syn)
-download_silo_gridded(
+download_netcdf(
     variables=None,  # Omit to use default daily set
     start_year=2020,
     end_year=2023,
-    output_dir=Path.home() / "Developer/DATA/silo_grids",
+    output_dir=Path.home() / "DATA/silo_grids",
     console=get_console()
 )
 
 # Download specific variables
-download_silo_gridded(
+download_netcdf(
     variables=["daily_rain", "max_temp"],
     start_year=2022,
     end_year=2023,
@@ -358,10 +348,9 @@ Load local NetCDF files into xarray datasets:
 from weather_tools import read_silo_xarray
 from pathlib import Path
 
-# Load default daily variables (daily_rain, max_temp, min_temp, evap_syn)
+# Load default daily variables (detects all available in directory)
 ds = read_silo_xarray(
-    variables=None,  # Omit to use default daily set
-    silo_dir=Path.home() / "Developer/DATA/silo_grids"
+    silo_dir=Path.home() / "DATA/silo_grids"
 )
 
 print(ds)
@@ -386,7 +375,7 @@ ds = read_silo_xarray(
 # Load monthly data
 ds_monthly = read_silo_xarray(
     variables=["monthly_rain"],
-    silo_dir=Path.home() / "Developer/DATA/silo_grids"
+    silo_dir=Path.home() / "DATA/silo_grids"
 )
 ```
 
@@ -477,24 +466,26 @@ SILO provides daily and monthly data as Cloud-Optimized GeoTIFFs, enabling effic
 Read GeoTIFF data directly from URLs without downloading:
 
 ```python
-from weather_tools.silo_geotiff import read_geotiff_timeseries
+from weather_tools import download_and_read_geotiffs
 from shapely.geometry import Point
 from datetime import date
 
 # Stream data for a point (no disk usage)
 point = Point(153.0, -27.5)  # Brisbane (lon, lat order!)
 
-data = read_geotiff_timeseries(
+data = download_and_read_geotiffs(
     variables=["daily_rain", "max_temp"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 1, 31),
     geometry=point,
-    save_to_disk=False  # Stream from S3
+    save_to_disk=False,  # Stream from S3 temp cache
+    read_files=True
 )
 
-# Returns dict: {"daily_rain": array, "max_temp": array}
-print(data["daily_rain"].shape)  # (31, h, w) - 31 days of data
-print(data["daily_rain"][0])     # First day's data
+# Returns dict: {"daily_rain": (array, profile), "max_temp": (array, profile)}
+rain_data, rain_profile = data["daily_rain"]
+print(rain_data.shape)  # (31, h, w) - 31 days of data
+print(rain_data[0])     # First day's data
 # array([[12.4, nan, ...]], dtype=float32)
 ```
 
@@ -503,29 +494,30 @@ print(data["daily_rain"][0])     # First day's data
 Extract timeseries for a single location:
 
 ```python
+from weather_tools import download_and_read_geotiffs
 from shapely.geometry import Point
+from datetime import date
+import pandas as pd
 
 # Define location
 brisbane = Point(153.0, -27.5)  # (longitude, latitude)
 
 # Extract daily data
-data = read_geotiff_timeseries(
-    variables=["daily_rain", "max_temp", "min_temp", "evap_syn"],
+data = download_and_read_geotiffs(
+    variables=["daily_rain", "max_temp", "min_temp"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 1, 7),
     geometry=brisbane,
-    save_to_disk=False
+    save_to_disk=False,
+    read_files=True
 )
 
 # Convert to DataFrame
-import pandas as pd
-import numpy as np
-
 df = pd.DataFrame({
     "date": pd.date_range("2023-01-01", "2023-01-07"),
-    "daily_rain": data["daily_rain"][:, 0, 0],
-    "max_temp": data["max_temp"][:, 0, 0],
-    "min_temp": data["min_temp"][:, 0, 0],
+    "daily_rain": data["daily_rain"][0][:, 0, 0],
+    "max_temp": data["max_temp"][0][:, 0, 0],
+    "min_temp": data["min_temp"][0][:, 0, 0],
 })
 print(df)
 ```
@@ -535,26 +527,31 @@ print(df)
 Extract data for a region:
 
 ```python
+from weather_tools import download_and_read_geotiffs
 from shapely.geometry import box, Polygon
+from datetime import date
+from pathlib import Path
 
 # Define bounding box (west, south, east, north)
 bbox = box(152.5, -28.0, 153.5, -27.0)
 
 # Extract data for region
-data = read_geotiff_timeseries(
+data = download_and_read_geotiffs(
     variables=["daily_rain"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 1, 7),
     geometry=bbox,
     save_to_disk=True,  # Cache to disk for reuse
-    cache_dir=Path("./data/geotiff")
+    output_dir=Path("./data/geotiff"),
+    read_files=True
 )
 
 # Shape: (7 days, height, width)
-print(data["daily_rain"].shape)  # (7, ~100, ~100)
+rain_array, profile = data["daily_rain"]
+print(rain_array.shape)  # (7, ~100, ~100)
 
 # Calculate spatial mean for each day
-daily_means = data["daily_rain"].mean(axis=(1, 2))
+daily_means = rain_array.mean(axis=(1, 2))
 print(daily_means)  # [12.4, 5.2, 0.0, ...]
 
 # Or use custom polygon
@@ -566,12 +563,13 @@ region = Polygon([
     (153.0, -27.5)
 ])
 
-data = read_geotiff_timeseries(
+data = download_and_read_geotiffs(
     variables=["daily_rain"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 1, 31),
     geometry=region,
-    save_to_disk=False
+    save_to_disk=False,
+    read_files=True
 )
 ```
 
@@ -580,10 +578,13 @@ data = read_geotiff_timeseries(
 For more control, read individual GeoTIFF files:
 
 ```python
-from weather_tools.silo_geotiff import construct_daily_url, read_cog
+from weather_tools import construct_geotiff_daily_url, read_cog
+from weather_tools.silo_geotiff import read_cog
+from shapely.geometry import Point
+from datetime import date
 
 # Construct URL for a specific date
-url = construct_daily_url("daily_rain", date(2023, 1, 15))
+url = construct_geotiff_daily_url("daily_rain", date(2023, 1, 15))
 print(url)
 # https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/daily_rain/2023/20230115.daily_rain.tif
 
@@ -604,30 +605,36 @@ print(data[0, 0])  # Rainfall value: 12.4 mm
 Download GeoTIFF files with spatial subsetting:
 
 ```python
-from weather_tools.silo_geotiff import download_geotiff_range
+from weather_tools import download_geotiffs
 from shapely.geometry import box
+from datetime import date
+from pathlib import Path
 
 # Download with bounding box clipping
-bbox = (150.5, -28.5, 154.0, -26.0)  # (min_lon, min_lat, max_lon, max_lat)
+bbox = box(150.5, -28.5, 154.0, -26.0)  # (west, south, east, north)
 
-download_geotiff_range(
+files = download_geotiffs(
     variables=["daily_rain", "max_temp"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 1, 31),
     output_dir=Path("./data/geotiff"),
-    bounding_box=bbox,
-    console=get_console()
+    geometry=bbox,
+    save_to_disk=True
 )
+
+# Returns dict: {"daily_rain": [Path, ...], "max_temp": [Path, ...]}
+print(f"Downloaded {len(files['daily_rain'])} daily_rain files")
 
 # Download with polygon clipping
 region = box(152.5, -28.0, 153.5, -27.0)
 
-download_geotiff_range(
+files = download_geotiffs(
     variables=["daily_rain"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 1, 31),
     output_dir=Path("./data/geotiff"),
     geometry=region,
+    save_to_disk=True,
     force=False  # Skip existing files
 )
 ```
@@ -651,6 +658,7 @@ Access weather forecasts from the Norwegian Meteorological Institute's API.
 ```python
 from weather_tools.metno_api import MetNoAPI
 from weather_tools.silo_models import AustralianCoordinates
+import pandas as pd
 
 # Initialize API
 api = MetNoAPI(user_agent="MyApp/1.0")  # Required by met.no
@@ -665,20 +673,10 @@ forecasts = api.get_daily_forecast(
 )
 
 # Convert to DataFrame
-import pandas as pd
-
 df = pd.DataFrame([f.model_dump() for f in forecasts])
 print(df.columns)
 # ['date', 'min_temperature', 'max_temperature', 'total_precipitation',
 #  'avg_pressure', 'avg_relative_humidity', 'avg_wind_speed', ...]
-
-# Format to match SILO column names
-from weather_tools.variable_register import convert_metno_to_silo_columns
-
-column_mapping = convert_metno_to_silo_columns(df)
-df_silo = df.rename(columns=column_mapping)
-print(df_silo.columns)
-# ['date', 'min_temp', 'max_temp', 'daily_rain', 'mslp', ...]
 ```
 
 ### Merging with SILO Historical Data
@@ -687,14 +685,13 @@ Combine SILO historical observations with met.no forecasts:
 
 ```python
 from weather_tools import read_silo_xarray
-from weather_tools.merge_weather_data import merge_historical_and_forecast
 from weather_tools.metno_api import MetNoAPI
 from pathlib import Path
+import pandas as pd
 
 # 1. Get SILO historical data
 ds = read_silo_xarray(
-    variables=None,  # Uses default daily set
-    silo_dir=Path.home() / "Developer/DATA/silo_grids"
+    silo_dir=Path.home() / "DATA/silo_grids"
 )
 
 # Extract for location
@@ -712,7 +709,7 @@ silo_df = silo_df[
 silo_df = silo_df.rename(columns={"time": "date"})
 
 # 2. Get met.no forecast
-metno_api = MetNoAPI()
+metno_api = MetNoAPI(user_agent="MyApp/1.0")
 forecasts = metno_api.get_daily_forecast(
     latitude=-27.5,
     longitude=153.0,
@@ -721,35 +718,16 @@ forecasts = metno_api.get_daily_forecast(
 
 metno_df = pd.DataFrame([f.model_dump() for f in forecasts])
 
-# 3. Merge datasets
-merged_df = merge_historical_and_forecast(
-    silo_df,
-    metno_df,
-    validate=True,
-    fill_missing=False,  # Don't fill SILO-only variables with estimates
-    overlap_strategy="prefer_silo"  # Prefer SILO data if dates overlap
-)
+# 3. Combine datasets
+combined_df = pd.concat([silo_df, metno_df], ignore_index=True)
+combined_df = combined_df.sort_values("date").reset_index(drop=True)
 
-# Get merge summary
-from weather_tools.merge_weather_data import get_merge_summary
-
-summary = get_merge_summary(merged_df)
-print(f"Total records: {summary['total_records']}")
-print(f"SILO records: {summary['silo_records']}")
-print(f"Met.no records: {summary['metno_records']}")
-print(f"Transition date: {summary['transition_date']}")
+print(f"Total records: {len(combined_df)}")
+print(f"Date range: {combined_df['date'].min()} to {combined_df['date'].max()}")
 
 # Save combined dataset
-merged_df.to_csv("historical_and_forecast.csv", index=False)
+combined_df.to_csv("historical_and_forecast.csv", index=False)
 ```
-
-**Merge Options:**
-- `validate=True` - Validate data consistency during merge
-- `fill_missing=True` - Estimate SILO-only variables in forecast (radiation, evaporation)
-- `overlap_strategy` - How to handle overlapping dates:
-  - `"prefer_silo"` - Use SILO data when available (default)
-  - `"prefer_metno"` - Use forecast data
-  - `"error"` - Raise error on overlap
 
 ---
 
@@ -775,7 +753,7 @@ for loc in locations:
         station_code=loc["station"],
         start_date="20230101",
         end_date="20231231",
-        variables=["rainfall", "max_temp"]
+        variables=["daily_rain", "max_temp"]
     )
     df["location"] = loc["name"]
     all_data.append(df)
@@ -825,7 +803,7 @@ df_api = api.get_data_drill(
     longitude=153.0,
     start_date="20230101",
     end_date="20230131",
-    variables=["rainfall"]
+    variables=["daily_rain"]
 )
 
 # Local file approach (faster for bulk queries)
@@ -908,15 +886,15 @@ api.clear_cache()  # Clear when done
 ### 2. Use Local Files for Bulk Processing
 
 ```python
-# Download once (default daily variables)
-download_silo_gridded(
+# Download once
+download_netcdf(
     variables=None,
     start_year=2020,
     end_year=2023
 )
 
 # Query many times (fast, no network)
-ds = read_silo_xarray(variables=None)
+ds = read_silo_xarray()
 for lat in range(-44, -10):
     for lon in range(113, 154):
         df = ds.sel(lat=lat, lon=lon, method="nearest").to_dataframe()
@@ -927,13 +905,18 @@ for lat in range(-44, -10):
 
 ```python
 # For small spatial queries, stream GeoTIFFs (no disk usage)
+from weather_tools import download_and_read_geotiffs
+from shapely.geometry import Point
+from datetime import date
+
 point = Point(153.0, -27.5)
-data = read_geotiff_timeseries(
+data = download_and_read_geotiffs(
     variables=["daily_rain"],
     start_date=date(2023, 1, 1),
     end_date=date(2023, 12, 31),
     geometry=point,
-    save_to_disk=False  # Stream, don't cache
+    save_to_disk=False,  # Stream, don't cache
+    read_files=True
 )
 # Much faster than downloading full NetCDF files
 ```

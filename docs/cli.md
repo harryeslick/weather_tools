@@ -28,16 +28,26 @@ After installation, the `weather-tools` command will be available.
 
 ## Commands Overview
 
-The CLI provides two command groups:
+The CLI provides four command groups:
 
 ### SILO API Commands (Online)
 - **`silo patched-point`** - Query SILO PatchedPoint dataset (station-based data)
 - **`silo data-drill`** - Query SILO DataDrill dataset (gridded data)
 - **`silo search`** - Search for SILO stations by name or find nearby stations
+- **`silo cache`** - View or manage the SILO API response cache
 
 ### Local NetCDF Commands (Offline)
 - **`local info`** - Display information about available local SILO data
 - **`local extract`** - Extract weather data from local netCDF files
+- **`local download`** - Download SILO gridded NetCDF files from AWS S3
+
+### Met.no Forecast Commands
+- **`metno forecast`** - Get met.no weather forecast for an Australian location
+- **`metno merge`** - Merge SILO historical data with met.no forecast data
+- **`metno info`** - Display information about the met.no API and variable mappings
+
+### GeoTIFF Commands
+- **`geotiff download`** - Download SILO GeoTIFF files for a date range with optional spatial clipping
 
 ## Quick Start Examples
 
@@ -202,7 +212,9 @@ weather-tools silo search [OPTIONS]
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
-| `--radius` | FLOAT | Search radius in km | `50.0` |
+| `--radius` | INTEGER | Search radius in km | `50` |
+| `--state` | TEXT | Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT) | |
+| `--details` | BOOLEAN | Get detailed info for a specific station | False |
 | `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
 | `--output` | TEXT | Output filename (optional) | |
 
@@ -312,10 +324,10 @@ weather-tools local extract [OPTIONS]
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--output` | TEXT | Output CSV filename | `weather_data.csv` |
-| `--var` | TEXT | Weather variables to extract (see below) | `daily_rain`, `max_temp`, `min_temp`, `evap_syn` (if omitted) |
+| `--var` | TEXT | Weather variables to extract (see below; repeat for multiple) | daily_rain, max_temp, min_temp, evap_syn (if omitted) |
 | `--silo-dir` | PATH | Path to SILO data directory | `~/DATA/silo_grids` |
 | `--tolerance` | FLOAT | Maximum distance (in degrees) for nearest neighbor selection | `0.1` |
-| `--keep-location` | BOOLEAN | Keep location columns (crs, lat, lon) in output CSV | `False` (columns are dropped by default) |
+| `--keep-location` | BOOLEAN | Keep location columns (crs, lat, lon) in output CSV | False |
 | `--help` | | Show help message and exit | |
 
 #### Variable Options

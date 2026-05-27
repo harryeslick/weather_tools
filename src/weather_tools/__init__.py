@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__version__ = "0.0.3"
+__version__ = "0.1.0"
 
 from weather_tools.cli import main as cli_main
 from weather_tools.output_schemas import (

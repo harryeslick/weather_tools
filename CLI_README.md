@@ -30,11 +30,18 @@ weather-tools
 ├── silo          # SILO API commands (requires API key)
 │   ├── patched-point    # Query station-based data
 │   ├── data-drill       # Query gridded data
-│   └── search           # Search for stations
-└── local         # Local netCDF file commands
-    ├── download         # Download SILO data from AWS S3
-    ├── extract          # Extract data for a location
-    └── info             # View available local data
+│   ├── search           # Search for stations
+│   └── cache            # View/manage API cache
+├── local         # Local netCDF file commands
+│   ├── download         # Download SILO data from AWS S3
+│   ├── extract          # Extract data for a location
+│   └── info             # View available local data
+├── metno         # Met.no forecast commands
+│   ├── forecast         # Get forecast for a location
+│   ├── merge            # Merge historical & forecast data
+│   └── info             # View met.no API info
+└── geotiff       # GeoTIFF file commands
+    └── download         # Download GeoTIFF files with clipping
 ```
 
 ## Quick Start

@@ -36,7 +36,7 @@ export SILO_DATA_DIR="/path/to/your/silo_data"
 # Query station data
 weather-tools silo patched-point --station 30043 \
     --start-date 2023-01-01 --end-date 2023-01-31 \
-    --var rainfall --var max_temp --output weather.csv
+    --var daily_rain --var max_temp --output weather.csv
 
 # Search for stations
 weather-tools silo search --name Brisbane --state QLD
@@ -64,11 +64,11 @@ from weather_tools.silo_api import SiloAPI
 api = SiloAPI()  # Uses SILO_API_KEY environment variable
 
 # Get PatchedPoint data (weather station data) as DataFrame
-df = api.get_patched_point(
+df, metadata = api.get_patched_point(
     station_code="30043",
     start_date="20230101",
     end_date="20230131",
-    variables=["rainfall", "max_temp", "min_temp"]
+    variables=["daily_rain", "max_temp", "min_temp"]
 )
 
 # Search for stations
@@ -122,9 +122,9 @@ Data is available via:
 
 **Variable Names:**
 
-- **CLI**: Readable names (rainfall, max_temp, min_temp, evaporation, etc.)
-- **Python API (low-level)**: Single letter codes (R=rainfall, X=max_temp, N=min_temp, etc.)
-- **Local files**: Full names (daily_rain, max_temp, min_temp, etc.)
+- **CLI**: Canonical names (daily_rain, max_temp, min_temp, evap_pan, radiation, vp, etc.)
+- **Python API**: Canonical variable names (daily_rain, max_temp, min_temp, etc.)
+- **Local files**: Same canonical names (daily_rain, max_temp, min_temp, etc.)
 
 See [full documentation](https://harryeslick.github.io/weather_tools/silo_api/#climate-variables) for complete variable list.
 
