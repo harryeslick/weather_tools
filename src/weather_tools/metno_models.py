@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from weather_tools.silo_models import AustralianCoordinates
+
 
 class MetNoFormat(str, Enum):
     """
@@ -44,9 +46,9 @@ class MetNoQuery(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-    coordinates: Any = Field(
+    coordinates: AustralianCoordinates = Field(
         ...,
-        description="Australian coordinates (GDA94). Import AustralianCoordinates from silo_models.",
+        description="Australian coordinates (GDA94) validated at construction time.",
     )
     format: MetNoFormat = Field(
         default=MetNoFormat.COMPACT, description="Response format (compact or complete)"
@@ -70,16 +72,10 @@ class MetNoQuery(BaseModel):
         """
         # Truncate coordinates to 4 decimals as per met.no Terms of Service
         # https://developer.yr.no/doc/TermsOfService/
-        params: Dict[str, Any] = {
+        return {
             "lat": round(self.coordinates.latitude, 4),
             "lon": round(self.coordinates.longitude, 4),
         }
-
-        # Include altitude if available (altitude is not in AustralianCoordinates)
-        if hasattr(self.coordinates, "altitude") and self.coordinates.altitude is not None:
-            params["altitude"] = self.coordinates.altitude
-
-        return params
 
 
 class MetNoResponse(BaseModel):

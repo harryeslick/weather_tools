@@ -124,13 +124,20 @@ class BaseSiloQuery(BaseModel):
     @field_validator("variables")
     @classmethod
     def validate_variables(cls, v: Optional[List[str]]) -> Optional[List[str]]:
-        """Validate that all variable names exist in SILO registry."""
+        """Validate that all variable names exist in SILO registry and have a SILO API code."""
         if v is None:
             return v
-        invalid = [name for name in v if name not in VARIABLES]
-        if invalid:
+        unknown = [name for name in v if name not in VARIABLES]
+        if unknown:
             valid_names = ", ".join(sorted(VARIABLES.keys()))
-            raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")
+            raise ValueError(f"Unknown variables: {unknown}. Valid names: {valid_names}")
+        no_api_code = [name for name in v if VARIABLES.silo_code_from_name(name) is None]
+        if no_api_code:
+            raise ValueError(
+                f"Variables not transportable over the SILO API (no API code): {no_api_code}. "
+                "These variables cannot be requested via PatchedPoint or DataDrill queries. "
+                "Use the NetCDF download interface instead (e.g., 'weather-tools local download')."
+            )
         return v
 
     def _get_silo_codes(self) -> str:
@@ -140,8 +147,10 @@ class BaseSiloQuery(BaseModel):
         codes = []
         for name in self.variables:
             code = VARIABLES.silo_code_from_name(name)
-            if code:  # Skip variables without API codes (e.g., monthly_rain)
-                codes.append(code)
+            assert code is not None, (
+                f"Variable '{name}' has no SILO API code (should have been caught by validator)"
+            )
+            codes.append(code)
         return "".join(codes)
 
 

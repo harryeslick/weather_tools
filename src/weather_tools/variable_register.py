@@ -6,7 +6,7 @@ Maps between:
 - NetCDF filenames (used for gridded data downloads)
 - Full variable names and metadata
 - DataFrame column names (canonical names = SILO_VARIABLES.keys())
-- SILO variables and metno aggregated forecast variables. 
+- SILO variables and metno aggregated forecast variables.
 
 SILO variable reference: https://www.longpaddock.qld.gov.au/silo/about/climate-variables/
 """

@@ -12,6 +12,63 @@ from weather_tools.silo_models import (
 )
 
 # ---------------------------------------------------------------------------
+# FIX 1: Variables without SILO API codes must be rejected at validation time
+# ---------------------------------------------------------------------------
+
+
+class TestUntransportableVariableRejection:
+    """Variables with no SILO API code (e.g. monthly_rain) must raise at construction."""
+
+    def test_monthly_rain_rejected_in_patched_point(self):
+        """monthly_rain has no SILO API code — must raise ValidationError."""
+        with pytest.raises(ValidationError, match="no API code"):
+            PatchedPointQuery(
+                format=SiloFormat.CSV,
+                station_code="30043",
+                date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+                variables=["monthly_rain"],
+            )
+
+    def test_monthly_rain_rejected_in_data_drill(self):
+        with pytest.raises(ValidationError, match="no API code"):
+            DataDrillQuery(
+                coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
+                date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+                variables=["monthly_rain"],
+            )
+
+    def test_metno_only_variable_rejected(self):
+        """met.no-only variables (e.g. relative_humidity) also have no SILO code."""
+        with pytest.raises(ValidationError, match="no API code"):
+            PatchedPointQuery(
+                format=SiloFormat.CSV,
+                station_code="30043",
+                date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+                variables=["relative_humidity"],
+            )
+
+    def test_mixed_valid_and_untransportable_rejected(self):
+        """A mix of valid and untransportable variables should still raise."""
+        with pytest.raises(ValidationError, match="no API code"):
+            PatchedPointQuery(
+                format=SiloFormat.CSV,
+                station_code="30043",
+                date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+                variables=["daily_rain", "monthly_rain"],
+            )
+
+    def test_valid_silo_variable_accepted(self):
+        """Variables with SILO API codes must continue to be accepted."""
+        query = PatchedPointQuery(
+            format=SiloFormat.CSV,
+            station_code="30043",
+            date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+            variables=["daily_rain", "max_temp", "min_temp"],
+        )
+        assert query.variables == ["daily_rain", "max_temp", "min_temp"]
+
+
+# ---------------------------------------------------------------------------
 # 1.2 extra="forbid" hardening
 # ---------------------------------------------------------------------------
 

@@ -148,7 +148,6 @@ def silo_patched_point(
                 output = str(output_path) + expected_ext
 
     try:
-
         # Validate variable names
         invalid_vars = [v for v in variables if v not in VARIABLES]
         if invalid_vars:

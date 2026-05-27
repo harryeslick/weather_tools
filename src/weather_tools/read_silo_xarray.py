@@ -62,8 +62,19 @@ def read_silo_xarray(
 
     dss = []
     for variable in variables:
+        variable_dir = silo_dir / variable
+
         # Convert generator to sorted list of file paths
-        file_paths = sorted((silo_dir / variable).glob("*.nc"))
+        file_paths = sorted(variable_dir.glob("*.nc")) if variable_dir.is_dir() else []
+
+        if not file_paths:
+            raise FileNotFoundError(
+                f"No .nc files found for variable '{variable}' in '{variable_dir}'. "
+                f"Expected files matching the pattern: "
+                f"'{variable_dir / ('{year}.' + variable + '.nc')}' "
+                f"(e.g. '{variable_dir / ('2023.' + variable + '.nc')}'). "
+                f"Run 'weather-tools local download --var {variable}' to fetch data."
+            )
 
         # Use open_mfdataset to open all years for a single variable
         ds = xr.open_mfdataset(

@@ -11,6 +11,7 @@ GeoTIFF files from AWS S3, with support for:
 
 import datetime
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
@@ -268,13 +269,38 @@ def read_cog(
 
 
 def _download_full_geotiff(url: str, destination: Path, timeout: int) -> None:
-    """Download entire GeoTIFF file via streaming."""
-    response = requests.get(url, stream=True, timeout=timeout)
-    response.raise_for_status()
+    """Download entire GeoTIFF file via streaming.
 
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+    Uses a temp file + atomic rename so that a failed or interrupted download
+    never leaves a truncated file at the destination path.
+    Always calls response.close() so the connection is returned to the pool.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_str = tempfile.mkstemp(dir=destination.parent, suffix=".tmp")
+    tmp_path = Path(tmp_str)
+    response = requests.get(url, stream=True, timeout=timeout)
+    try:
+        response.raise_for_status()
+        with os.fdopen(fd, "wb") as f:
+            fd = -1  # fdopen took ownership
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+    except Exception:
+        if fd != -1:
+            # fdopen was never called — close the raw fd to avoid a leak
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        tmp_path.unlink(missing_ok=True)
+        tmp_path = None
+        raise
+    finally:
+        response.close()
+
+    if tmp_path is not None:
+        # Atomic rename: only reached if the full download succeeded
+        tmp_path.replace(destination)
 
 
 def _download_geotiff_subset(
@@ -283,11 +309,27 @@ def _download_geotiff_subset(
     geometry: Union[Point, Polygon, None],
     overview_level=None,
 ) -> None:
-    """Download and clip GeoTIFF to geometry subset."""
+    """Download and clip GeoTIFF to geometry subset.
+
+    Writes to a temp file then renames atomically so that a failure mid-write
+    never leaves a truncated file at the destination path.
+    """
     data, profile = read_cog(url, geometry, overview_level=overview_level)
 
-    with rasterio.open(destination, "w", **profile) as dst:
-        dst.write(data, 1)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_str = tempfile.mkstemp(dir=destination.parent, suffix=".tmp")
+    tmp_path = Path(tmp_str)
+    try:
+        os.close(fd)  # rasterio will open by path, not by fd
+        with rasterio.open(tmp_path, "w", **profile) as dst:
+            dst.write(data, 1)
+        # Atomic rename: only reached if the full write succeeded
+        tmp_path.replace(destination)
+        tmp_path = None
+    except Exception:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def download_geotiff_with_subset(

@@ -42,6 +42,7 @@ from weather_tools.metno_models import (
     MetNoResponse,
     MetNoUserAgentError,
 )
+from weather_tools.silo_models import AustralianCoordinates
 from weather_tools.variable_register import VARIABLES
 
 # Get package version for User-Agent
@@ -292,9 +293,7 @@ class MetNoAPI:
 
         return MetNoResponse(raw_data=raw_data, format=query.format, coordinates=query.coordinates)
 
-    def get_daily_forecast(
-        self, latitude: float, longitude: float, days: int = 9, altitude: Optional[int] = None
-    ) -> pd.DataFrame:
+    def get_daily_forecast(self, latitude: float, longitude: float, days: int = 9) -> pd.DataFrame:
         """
         Convenience method: Get daily forecast summaries as DataFrame.
 
@@ -302,7 +301,6 @@ class MetNoAPI:
             latitude: Latitude in decimal degrees
             longitude: Longitude in decimal degrees
             days: Number of forecast days (1-9, default: 9)
-            altitude: Optional elevation in meters
 
         Returns:
             DataFrame with daily aggregated forecasts
@@ -317,9 +315,6 @@ class MetNoAPI:
         """
         if days < 1 or days > 9:
             raise ValueError(f"Days must be between 1 and 9, got {days}")
-
-        # Import here to avoid circular import
-        from weather_tools.silo_models import AustralianCoordinates
 
         coords = AustralianCoordinates(latitude=latitude, longitude=longitude)
         query = MetNoQuery(coordinates=coords, format=MetNoFormat.COMPACT)

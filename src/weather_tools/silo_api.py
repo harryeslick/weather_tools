@@ -474,7 +474,14 @@ class SiloAPI:
             "apsim": SiloFormat.APSIM,
             "standard": SiloFormat.STANDARD,
         }
-        silo_format = format_mapping.get(format.lower(), SiloFormat.CSV)
+        fmt_lower = format.lower()
+        if fmt_lower not in format_mapping:
+            supported = ", ".join(sorted(format_mapping.keys()))
+            raise ValueError(
+                f"Unsupported format '{format}' for get_patched_point(). "
+                f"Supported values: {supported}"
+            )
+        silo_format = format_mapping[fmt_lower]
 
         # Create query with canonical variable names
         query = PatchedPointQuery(
@@ -559,7 +566,13 @@ class SiloAPI:
             "apsim": SiloFormat.APSIM,
             "standard": SiloFormat.STANDARD,
         }
-        silo_format = format_mapping.get(format.lower(), SiloFormat.CSV)
+        fmt_lower = format.lower()
+        if fmt_lower not in format_mapping:
+            supported = ", ".join(sorted(format_mapping.keys()))
+            raise ValueError(
+                f"Unsupported format '{format}' for get_data_drill(). Supported values: {supported}"
+            )
+        silo_format = format_mapping[fmt_lower]
 
         # Create query with canonical variable names
         query = DataDrillQuery(
@@ -839,6 +852,12 @@ class SiloAPI:
         # Split into lines and remove empty lines
         raw_data = response.raw_data
         lines = [line.strip() for line in raw_data.strip().split("\n") if line.strip()]
+
+        # Return an empty, correctly-shaped DataFrame when there are no results
+        if not lines:
+            return pd.DataFrame(
+                columns=["station_code", "name", "latitude", "longitude", "state", "elevation"]
+            )
 
         # Parse header and data rows
         header_line = lines[0]
