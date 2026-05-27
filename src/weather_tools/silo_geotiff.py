@@ -476,7 +476,9 @@ def download_geotiffs(
             month_list = _generate_month_range(start_date, end_date)
             for year, month in month_list:
                 url = construct_geotiff_monthly_url(var_name, year, month)
-                dest_path = cache_dir / var_name / str(year) / f"{year:04d}{month:02d}.{var_name}.tif"
+                dest_path = (
+                    cache_dir / var_name / str(year) / f"{year:04d}{month:02d}.{var_name}.tif"
+                )
                 file_paths[var_name].append(dest_path)
                 if not dest_path.exists() or force:
                     download_tasks.append((var_name, datetime.date(year, month, 1), url, dest_path))
@@ -484,7 +486,10 @@ def download_geotiffs(
             for date in date_list:
                 url = construct_geotiff_daily_url(var_name, date)
                 dest_path = (
-                    cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
+                    cache_dir
+                    / var_name
+                    / str(date.year)
+                    / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
                 )
                 file_paths[var_name].append(dest_path)
                 if not dest_path.exists() or force:

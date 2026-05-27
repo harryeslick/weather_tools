@@ -25,8 +25,8 @@ import pandas as pd
 import pytest
 
 from weather_tools.output_schemas import (
-    MetNoForecastSchema,
     MergedPointSchema,
+    MetNoForecastSchema,
     SiloPointSchema,
     validate_point_dataframe,
 )
@@ -61,9 +61,7 @@ def _prepare_silo_df(df: pd.DataFrame) -> pd.DataFrame:
     Location and metadata belong in ``PointMetadata``, not in the DataFrame.
     """
     non_schema = [
-        c
-        for c in df.columns
-        if c.endswith("_source") or c in ("station", "latitude", "longitude")
+        c for c in df.columns if c.endswith("_source") or c in ("station", "latitude", "longitude")
     ]
     return df.drop(columns=non_schema, errors="ignore")
 
@@ -166,8 +164,8 @@ class TestSiloPointSchema:
 
     def test_patched_point_date_column_present(self, raw_patched_point):
         """PatchedPoint response has a 'date' column (not 'time')."""
-        assert "date" in raw_patched_point.columns, (
-            "Expected 'date' column; found: " + str(raw_patched_point.columns.tolist())
+        assert "date" in raw_patched_point.columns, "Expected 'date' column; found: " + str(
+            raw_patched_point.columns.tolist()
         )
 
     def test_patched_point_date_is_datetime(self, raw_patched_point):
@@ -218,6 +216,7 @@ class TestSiloPointSchema:
         """DataDrill returns the expected number of rows for the date window."""
         assert len(raw_data_drill) == 7
 
+
 @pytest.mark.integration
 class TestMetNoForecastSchema:
     """MetNoForecastSchema validated against a live met.no API response."""
@@ -234,22 +233,22 @@ class TestMetNoForecastSchema:
     def test_forecast_date_is_timezone_naive(self, raw_forecast):
         """Forecast 'date' column is timezone-naive (matches SILO format)."""
         assert pd.api.types.is_datetime64_any_dtype(raw_forecast["date"])
-        assert raw_forecast["date"].dt.tz is None, (
-            "Expected timezone-naive; got tz=" + str(raw_forecast["date"].dt.tz)
+        assert raw_forecast["date"].dt.tz is None, "Expected timezone-naive; got tz=" + str(
+            raw_forecast["date"].dt.tz
         )
 
     def test_forecast_expected_columns_present(self, raw_forecast):
-        """Forecast DataFrame contains the core met.no variable columns."""
-        for col in ("min_temperature", "max_temperature", "total_precipitation"):
+        """Forecast DataFrame contains the core canonical SILO variable columns."""
+        for col in ("min_temp", "max_temp", "daily_rain"):
             assert col in raw_forecast.columns, f"Missing expected column '{col}'"
 
     def test_forecast_variables_are_float(self, raw_forecast):
         """Numeric forecast columns are float64."""
         float_cols = [
-            "min_temperature",
-            "max_temperature",
-            "total_precipitation",
-            "avg_wind_speed",
+            "min_temp",
+            "max_temp",
+            "daily_rain",
+            "wind_speed",
         ]
         for col in float_cols:
             if col in raw_forecast.columns:
@@ -316,9 +315,7 @@ class TestMergedPointSchema:
     def test_merged_uses_silo_column_names(self, raw_merged):
         """After merging, variable columns use SILO canonical names."""
         for col in ("daily_rain", "max_temp", "min_temp"):
-            assert col in raw_merged.columns, (
-                f"Expected SILO canonical column '{col}' after merge"
-            )
+            assert col in raw_merged.columns, f"Expected SILO canonical column '{col}' after merge"
 
     def test_merged_range_index(self, raw_merged):
         """Merged DataFrame uses RangeIndex."""

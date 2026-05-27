@@ -10,55 +10,52 @@ import pandas as pd
 import pytest
 
 from weather_tools.cli.metno import add_silo_date_columns
-from weather_tools.silo_variables import (
-    VARIABLES,
-    convert_metno_to_silo_columns,
-)
+from weather_tools.silo_variables import VARIABLES
 from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
 
 class TestVariableRegistryMetnoMappings:
-    """Test met.no mappings in unified VariableRegistry."""
+    """Test the met.no daily aggregation spec in the unified VariableRegistry.
 
-    def test_direct_temperature_mappings(self):
-        """Test temperature variable mappings."""
-        assert VARIABLES.has_metno_mapping("min_temperature")
-        assert VARIABLES.has_metno_mapping("max_temperature")
+    The registry is the single source of truth: each canonical variable records
+    the raw met.no field it comes from and how that field is aggregated daily.
+    """
 
-        assert VARIABLES.name_from_metno("min_temperature") == "min_temp"
-        assert VARIABLES.name_from_metno("max_temperature") == "max_temp"
+    def test_temperature_agg_spec(self):
+        """air_temperature feeds both max_temp (max) and min_temp (min)."""
+        spec = VARIABLES.metno_daily_agg_spec()
+        assert spec["max_temp"] == ("air_temperature", "max")
+        assert spec["min_temp"] == ("air_temperature", "min")
 
-    def test_direct_precipitation_mapping(self):
-        """Test precipitation mapping."""
-        assert VARIABLES.has_metno_mapping("total_precipitation")
-        assert VARIABLES.name_from_metno("total_precipitation") == "daily_rain"
+    def test_precipitation_agg_spec(self):
+        """precipitation_amount is summed into daily_rain."""
+        assert VARIABLES.metno_daily_agg_spec()["daily_rain"] == (
+            "precipitation_amount",
+            "sum",
+        )
 
-    def test_pressure_mapping(self):
-        """Test pressure mapping."""
-        assert VARIABLES.has_metno_mapping("avg_pressure")
-        assert VARIABLES.name_from_metno("avg_pressure") == "mslp"
+    def test_pressure_agg_spec(self):
+        """air_pressure_at_sea_level is averaged into mslp."""
+        assert VARIABLES.metno_daily_agg_spec()["mslp"] == (
+            "air_pressure_at_sea_level",
+            "mean",
+        )
 
-    def test_humidity_mapping(self):
-        """Test humidity mapping to vapour pressure."""
-        assert VARIABLES.has_metno_mapping("avg_relative_humidity")
-        canonical = VARIABLES.name_from_metno("avg_relative_humidity")
-        assert canonical == "vp"
+    def test_humidity_agg_spec(self):
+        """relative_humidity maps to a canonical relative_humidity column (mean)."""
+        spec = VARIABLES.metno_daily_agg_spec()
+        assert spec["relative_humidity"] == ("relative_humidity", "mean")
+        # vp is *derived* in merge, not mapped directly from met.no.
+        assert VARIABLES["vp"].metno_name is None
+        assert VARIABLES["vp"].units == "hPa"
 
-        # Verify the vp variable metadata
-        meta = VARIABLES[canonical]
-        assert meta.units == "hPa"
-        assert meta.full_name == "Vapour pressure"
-
-    def test_metno_only_variables(self):
-        """Test met.no-only variables are in registry."""
-        assert VARIABLES.has_metno_mapping("avg_wind_speed")
-        assert VARIABLES.has_metno_mapping("max_wind_speed")
-        assert VARIABLES.has_metno_mapping("avg_cloud_fraction")
-
-        # Verify they map to canonical names
-        assert VARIABLES.name_from_metno("avg_wind_speed") == "wind_speed"
-        assert VARIABLES.name_from_metno("max_wind_speed") == "wind_speed_max"
-        assert VARIABLES.name_from_metno("avg_cloud_fraction") == "cloud_fraction"
+    def test_metno_only_agg_spec(self):
+        """met.no-only variables share raw fields and carry an aggregation."""
+        spec = VARIABLES.metno_daily_agg_spec()
+        assert spec["wind_speed"] == ("wind_speed", "mean")
+        assert spec["wind_speed_max"] == ("wind_speed", "max")
+        assert spec["cloud_fraction"] == ("cloud_area_fraction", "mean")
+        assert spec["weather_symbol"] == ("symbol_code", "dominant")
 
     def test_metno_only_flag(self):
         """Test metno_only flag on variables."""
@@ -134,57 +131,6 @@ class TestRelativeHumidityConversion:
         assert vp < 10.0  # Should be low at negative temps
 
 
-class TestColumnConversion:
-    """Test DataFrame column conversion."""
-
-    def test_convert_basic_columns(self):
-        """Test converting basic met.no columns."""
-        df = pd.DataFrame(
-            {
-                "date": [dt.date(2023, 1, 1)],
-                "min_temperature": [18.5],
-                "max_temperature": [28.3],
-                "total_precipitation": [5.2],
-            }
-        )
-
-        mapping = convert_metno_to_silo_columns(df, include_extra=False)
-
-        assert mapping["date"] == "date"
-        assert mapping["min_temperature"] == "min_temp"
-        assert mapping["max_temperature"] == "max_temp"
-        assert mapping["total_precipitation"] == "daily_rain"
-
-    def test_convert_with_extra_columns(self):
-        """Test converting with met.no-only columns."""
-        df = pd.DataFrame(
-            {
-                "date": [dt.date(2023, 1, 1)],
-                "min_temperature": [18.5],
-                "avg_wind_speed": [4.2],
-                "avg_cloud_fraction": [60.0],
-            }
-        )
-
-        mapping = convert_metno_to_silo_columns(df, include_extra=True)
-
-        assert "avg_wind_speed" in mapping
-        assert mapping["avg_wind_speed"] == "wind_speed"
-        assert "avg_cloud_fraction" in mapping
-        assert mapping["avg_cloud_fraction"] == "cloud_fraction"
-
-    def test_convert_exclude_extra_columns(self):
-        """Test excluding met.no-only columns."""
-        df = pd.DataFrame(
-            {"date": [dt.date(2023, 1, 1)], "min_temperature": [18.5], "avg_wind_speed": [4.2]}
-        )
-
-        mapping = convert_metno_to_silo_columns(df, include_extra=False)
-
-        assert "avg_wind_speed" not in mapping
-        assert "min_temperature" in mapping
-
-
 class TestAddSiloDateColumns:
     """Test adding SILO date columns."""
 
@@ -236,40 +182,36 @@ class TestAddSiloDateColumns:
 
 
 class TestIntegratedConversion:
-    """Test integrated conversion workflow."""
+    """Test the integrated daily-aggregation workflow.
 
-    def test_full_metno_to_silo_conversion(self):
-        """Test complete conversion from met.no to SILO format."""
-        # Create met.no daily summary DataFrame
-        metno_df = pd.DataFrame(
+    Daily aggregation now emits canonical SILO names directly (driven by the
+    registry), so there is no separate rename step.
+    """
+
+    def test_raw_hourly_aggregates_to_canonical_daily(self):
+        """Raw met.no fields aggregate straight to canonical SILO columns."""
+        from weather_tools.metno_api import MetNoAPI
+
+        api = MetNoAPI(enable_cache=False)
+        times = pd.to_datetime(
+            [dt.datetime(2023, 1, 15, h, tzinfo=dt.timezone.utc) for h in range(0, 24, 6)]
+            + [dt.datetime(2023, 1, 16, h, tzinfo=dt.timezone.utc) for h in range(0, 24, 6)]
+        )
+        raw = pd.DataFrame(
             {
-                "date": [dt.date(2023, 1, 15), dt.date(2023, 1, 16)],
-                "min_temperature": [18.5, 19.0],
-                "max_temperature": [28.3, 29.5],
-                "total_precipitation": [5.2, 0.0],
-                "avg_pressure": [1013.2, 1012.5],
+                "time": times,
+                "air_temperature": [18.5, 28.3, 24.0, 20.0, 19.0, 29.5, 25.0, 21.0],
+                "precipitation_amount": [0.0, 2.1, 3.1, 0.0, 0.0, 0.0, 0.0, 0.0],
+                "air_pressure_at_sea_level": [1013.2] * 4 + [1012.5] * 4,
             }
         )
 
-        # Get column mapping
-        mapping = convert_metno_to_silo_columns(metno_df, include_extra=False)
+        daily = api._aggregate_daily(raw)
+        daily = add_silo_date_columns(daily)
 
-        # Rename columns
-        silo_df = metno_df.rename(columns=mapping)
-
-        # Add SILO date columns
-        silo_df = add_silo_date_columns(silo_df)
-
-        # Verify SILO format
-        assert "date" in silo_df.columns
-        assert "day" in silo_df.columns
-        assert "year" in silo_df.columns
-        assert "min_temp" in silo_df.columns
-        assert "max_temp" in silo_df.columns
-        assert "daily_rain" in silo_df.columns
-        assert "mslp" in silo_df.columns
-
-        # Verify values preserved
-        assert silo_df["min_temp"].iloc[0] == 18.5
-        assert silo_df["max_temp"].iloc[0] == 28.3
-        assert silo_df["daily_rain"].iloc[0] == 5.2
+        # Canonical SILO names appear directly — no intermediate vocabulary.
+        for col in ("date", "day", "year", "min_temp", "max_temp", "daily_rain", "mslp"):
+            assert col in daily.columns
+        assert daily["max_temp"].iloc[0] == 28.3
+        assert daily["min_temp"].iloc[0] == 18.5
+        assert daily["daily_rain"].iloc[0] == pytest.approx(5.2)

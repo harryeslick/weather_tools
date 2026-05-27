@@ -27,7 +27,9 @@ local_app = typer.Typer(
 def extract(
     lat: Annotated[float, typer.Option(help="Latitude coordinate")],
     lon: Annotated[float, typer.Option(help="Longitude coordinate")],
-    start_date: Annotated[str, typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_date_option)],
+    start_date: Annotated[
+        str, typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_date_option)
+    ],
     end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD)", callback=iso_date_option)],
     output: Annotated[str, typer.Option(help="Output CSV filename")] = "weather_data.csv",
     variables: Annotated[

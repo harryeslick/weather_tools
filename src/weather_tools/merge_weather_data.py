@@ -12,9 +12,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from weather_tools.silo_variables import (
-    convert_metno_to_silo_columns,
-)
+from weather_tools.silo_variables import VARIABLES
 from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
 logger = logging.getLogger(__name__)
@@ -23,7 +21,6 @@ logger = logging.getLogger(__name__)
 # Custom exceptions
 class MergeValidationError(Exception):
     """Raised when data cannot be safely merged."""
-
 
 
 def merge_historical_and_forecast(
@@ -211,23 +208,17 @@ def validate_merge_compatibility(
                 f"Set overlap_strategy to 'prefer_silo', 'prefer_metno', or 'error'"
             )
 
-    # Check for critical columns in both datasets
-    critical_silo_cols = ["min_temp", "max_temp", "daily_rain"]
-    critical_metno_cols = ["min_temperature", "max_temperature", "total_precipitation"]
+    # Check for critical columns in both datasets. Both SILO and met.no daily
+    # frames use canonical SILO names, so the same set applies to each.
+    critical_cols = ["min_temp", "max_temp", "daily_rain"]
 
-    missing_silo = [col for col in critical_silo_cols if col not in silo_data.columns]
+    missing_silo = [col for col in critical_cols if col not in silo_data.columns]
     if missing_silo:
         issues.append(f"SILO data missing critical columns: {missing_silo}")
 
-    # met.no data can have either met.no column names OR already-converted SILO column names
-    has_metno_cols = all(col in metno_data.columns for col in critical_metno_cols)
-    has_silo_cols = all(col in metno_data.columns for col in critical_silo_cols)
-
-    if not has_metno_cols and not has_silo_cols:
-        issues.append(
-            f"met.no data missing critical columns. Expected either "
-            f"met.no format {critical_metno_cols} or SILO format {critical_silo_cols}"
-        )
+    missing_metno = [col for col in critical_cols if col not in metno_data.columns]
+    if missing_metno:
+        issues.append(f"met.no data missing critical columns: {missing_metno}")
 
     return len(issues) == 0, issues
 
@@ -238,64 +229,57 @@ def prepare_metno_for_merge(
     convert_rh_to_vp: bool = True,
 ) -> pd.DataFrame:
     """
-    Prepare met.no data for merging with SILO data.
+    Prepare met.no daily data for merging with SILO data.
 
-    Converts column names, adds SILO date columns, and optionally
-    fills missing variables.
+    met.no daily summaries already use canonical SILO column names (the
+    aggregation in :meth:`MetNoAPI._aggregate_daily` is driven by the
+    ``VARIABLES`` registry), so no column renaming happens here.
 
-    The SILO ``vp`` column holds vapour pressure (hPa), but met.no only
-    reports relative humidity (%). The variable registry maps
-    ``avg_relative_humidity -> vp``, so a plain rename would silently drop
-    raw RH percentages into a column labelled ``vp``. When
-    ``convert_rh_to_vp`` is True we instead capture the RH values before the
-    rename and derive true vapour pressure from the daily mean temperature.
+    Two SILO-alignment steps remain:
+
+    1. Derive the SILO ``vp`` column. The SILO ``vp`` column holds vapour
+       pressure (hPa), but met.no only reports relative humidity (%). When
+       ``convert_rh_to_vp`` is True we compute true vapour pressure from the
+       met.no ``relative_humidity`` column and the daily mean temperature.
+    2. Drop met.no-only columns (wind, cloud, relative humidity, weather
+       symbol) so the merged output stays SILO-aligned. The derived ``vp`` is a
+       SILO variable and is retained.
 
     Args:
-        metno_df: met.no forecast DataFrame
+        metno_df: met.no daily forecast DataFrame (canonical column names)
         silo_df: SILO DataFrame (for column reference)
-        convert_rh_to_vp: If True (default), explicitly convert met.no
-            ``avg_relative_humidity`` (%) into the SILO ``vp`` column
-            (vapour pressure, hPa) using mean daily temperature. If False,
-            the RH->vp registry mapping is suppressed and no ``vp`` column is
-            produced from met.no humidity.
+        convert_rh_to_vp: If True (default), convert met.no ``relative_humidity``
+            (%) into the SILO ``vp`` column (vapour pressure, hPa) using mean
+            daily temperature. If False, no ``vp`` is derived from humidity.
 
     Returns:
-        Prepared DataFrame with SILO-compatible columns
+        Prepared DataFrame with SILO-aligned columns
     """
     metno_df = metno_df.copy()
 
-    # Check if data is already in SILO format (has SILO column names)
-    has_silo_format = all(col in metno_df.columns for col in ["min_temp", "max_temp", "daily_rain"])
+    # Derive vapour pressure (vp) from relative humidity and mean daily temp.
+    if (
+        convert_rh_to_vp
+        and "relative_humidity" in metno_df.columns
+        and "min_temp" in metno_df.columns
+        and "vp" in silo_df.columns
+    ):
+        logger.warning(
+            "Converting met.no relative_humidity (%) -> vp (vapour pressure, hPa) "
+            "using mean daily temperature; the SILO 'vp' column is vapour pressure, "
+            "not relative humidity."
+        )
+        max_temp = metno_df["max_temp"] if "max_temp" in metno_df.columns else metno_df["min_temp"]
+        mean_temp = (metno_df["min_temp"] + max_temp) / 2
+        metno_df["vp"] = [
+            rh_to_vapor_pressure(rh, temp) if pd.notna(rh) else np.nan
+            for rh, temp in zip(metno_df["relative_humidity"], mean_temp)
+        ]
 
-    if not has_silo_format:
-        # Convert column names to SILO format
-        column_mapping = convert_metno_to_silo_columns(metno_df, include_extra=False)
-
-        # The registry maps avg_relative_humidity -> vp directly. Letting the
-        # rename run as-is would mislabel raw RH percentages as vapour
-        # pressure. Capture the RH values *before* the rename, then drop that
-        # mapping so the rename cannot clobber the computed vp column.
-        has_rh = "avg_relative_humidity" in metno_df.columns
-        rh_values = metno_df["avg_relative_humidity"].copy() if has_rh else None
-        if has_rh:
-            column_mapping.pop("avg_relative_humidity", None)
-
-        metno_df = metno_df.rename(columns=column_mapping)
-
-        # Derive true vapour pressure from RH and mean daily temperature.
-        # Guards use post-rename names (vp / min_temp).
-        if convert_rh_to_vp and rh_values is not None and "min_temp" in metno_df.columns:
-            logger.warning(
-                "Converting met.no relative_humidity (%) -> vp (vapour pressure, hPa) "
-                "using mean daily temperature; the SILO 'vp' column is vapour pressure, "
-                "not relative humidity."
-            )
-            max_temp = metno_df["max_temp"] if "max_temp" in metno_df.columns else metno_df["min_temp"]
-            mean_temp = (metno_df["min_temp"] + max_temp) / 2
-            metno_df["vp"] = [
-                rh_to_vapor_pressure(rh, temp) if pd.notna(rh) else np.nan
-                for rh, temp in zip(rh_values, mean_temp)
-            ]
+    # Drop met.no-only columns to keep merged output SILO-aligned (vp, derived
+    # above, is a SILO variable and is not in this list).
+    # metno_only_cols = [c for c in VARIABLES.metno_only_variables() if c in metno_df.columns]
+    # metno_df = metno_df.drop(columns=metno_only_cols)
 
     return metno_df
 

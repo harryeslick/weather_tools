@@ -264,15 +264,15 @@ class TestMetNoAPIDailyAggregation:
 
         timeseries = mock_metno_response["properties"]["timeseries"]
         df = api._timeseries_to_dataframe(timeseries)
-        daily_df = api._resample(df, "D")
+        daily_df = api._aggregate_daily(df)
 
         assert len(daily_df) == 2  # 2 days in fixture
 
-        # Check first day
+        # Check first day — canonical SILO column names
         assert daily_df.iloc[0]["date"].date() == dt.date(2023, 1, 15)
-        assert pd.notna(daily_df.iloc[0]["min_temperature"])
-        assert pd.notna(daily_df.iloc[0]["max_temperature"])
-        assert pd.notna(daily_df.iloc[0]["total_precipitation"])
+        assert pd.notna(daily_df.iloc[0]["min_temp"])
+        assert pd.notna(daily_df.iloc[0]["max_temp"])
+        assert pd.notna(daily_df.iloc[0]["daily_rain"])
 
         # Check second day
         assert daily_df.iloc[1]["date"].date() == dt.date(2023, 1, 16)
@@ -283,12 +283,12 @@ class TestMetNoAPIDailyAggregation:
 
         timeseries = mock_metno_response["properties"]["timeseries"]
         df = api._timeseries_to_dataframe(timeseries)
-        daily_df = api._resample(df, "D")
+        daily_df = api._aggregate_daily(df)
 
         day1 = daily_df.iloc[0]
         # From fixture: 25.5, 26.2, 27.1
-        assert day1["min_temperature"] == 25.5
-        assert day1["max_temperature"] == 27.1
+        assert day1["min_temp"] == 25.5
+        assert day1["max_temp"] == 27.1
 
     def test_aggregate_precipitation_sum(self, mock_metno_response, sample_coords):
         """Test precipitation summation using DataFrame approach."""
@@ -296,11 +296,11 @@ class TestMetNoAPIDailyAggregation:
 
         timeseries = mock_metno_response["properties"]["timeseries"]
         df = api._timeseries_to_dataframe(timeseries)
-        daily_df = api._resample(df, "D")
+        daily_df = api._aggregate_daily(df)
 
         day1 = daily_df.iloc[0]
         # From fixture: 0.0, 0.2, 0.8 = 1.0
-        assert day1["total_precipitation"] == pytest.approx(1.0, abs=0.01)
+        assert day1["daily_rain"] == pytest.approx(1.0, abs=0.01)
 
     def test_get_dominant_symbol(self):
         """Test weather symbol selection."""
@@ -339,7 +339,7 @@ class TestMetNoAPIConvenience:
             assert isinstance(df, pd.DataFrame)
             assert len(df) <= 7
             assert "date" in df.columns
-            assert "min_temperature" in df.columns
+            assert "min_temp" in df.columns
 
     def test_get_daily_forecast_invalid_days(self):
         """Test validation of days parameter."""
@@ -363,16 +363,16 @@ class TestMetNoAPIConvenience:
             raw_data=mock_metno_response, format=MetNoFormat.COMPACT, coordinates=sample_coords
         )
 
-        df = api.to_dataframe(response, frequency="daily")
+        df = api.to_dataframe(response, daily=True)
 
         assert not df.empty
         assert "date" in df.columns
-        assert "min_temperature" in df.columns
-        assert "max_temperature" in df.columns
-        assert "total_precipitation" in df.columns
+        assert "min_temp" in df.columns
+        assert "max_temp" in df.columns
+        assert "daily_rain" in df.columns
 
-    def test_to_dataframe_hourly(self, mock_metno_response, sample_coords):
-        """Test conversion to DataFrame with hourly data."""
+    def test_to_dataframe_raw(self, mock_metno_response, sample_coords):
+        """Test conversion to DataFrame with raw (un-aggregated) data."""
         api = MetNoAPI()
 
         from weather_tools.metno_models import MetNoResponse
@@ -381,9 +381,10 @@ class TestMetNoAPIConvenience:
             raw_data=mock_metno_response, format=MetNoFormat.COMPACT, coordinates=sample_coords
         )
 
-        df = api.to_dataframe(response, frequency="hourly")
+        df = api.to_dataframe(response, daily=False)
 
         assert not df.empty
+        # Raw mode keeps the raw met.no field names
         assert "time" in df.columns
         assert "air_temperature" in df.columns
 

@@ -37,4 +37,3 @@ def test_iso_to_silo_yyyymmdd_option_converts() -> None:
 
 def test_silo_yyyymmdd_to_iso_converts_for_display() -> None:
     assert silo_yyyymmdd_to_iso("20230131") == "2023-01-31"
-

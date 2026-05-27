@@ -161,45 +161,34 @@ class DailyWeatherSummary(BaseModel):
     """
     Daily aggregated weather summary from hourly forecasts.
 
-    Aggregates hourly met.no forecast data to daily values compatible with
-    SILO daily weather data format.
-
+    Aggregates hourly met.no forecast data to daily values using canonical SILO
+    column names (the same names produced by :meth:`MetNoAPI._aggregate_daily`).
     """
 
     date: dt.date = Field(..., description="Date for this daily summary")
 
     # Temperature (°C)
-    min_temperature: Optional[float] = Field(
-        None, description="Minimum temperature for the day (°C)"
-    )
-    max_temperature: Optional[float] = Field(
-        None, description="Maximum temperature for the day (°C)"
-    )
+    min_temp: Optional[float] = Field(None, description="Minimum temperature for the day (°C)")
+    max_temp: Optional[float] = Field(None, description="Maximum temperature for the day (°C)")
 
     # Precipitation (mm)
-    total_precipitation: Optional[float] = Field(
-        None, description="Total precipitation for the day (mm)"
-    )
-
-    # Wind (m/s)
-    avg_wind_speed: Optional[float] = Field(None, description="Average wind speed (m/s)")
-    max_wind_speed: Optional[float] = Field(None, description="Maximum wind speed (m/s)")
-
-    # Humidity (%)
-    avg_relative_humidity: Optional[float] = Field(
-        None, description="Average relative humidity (%)"
-    )
+    daily_rain: Optional[float] = Field(None, description="Total precipitation for the day (mm)")
 
     # Pressure (hPa)
-    avg_pressure: Optional[float] = Field(None, description="Average sea level pressure (hPa)")
+    mslp: Optional[float] = Field(None, description="Mean sea level pressure (hPa)")
 
-    # Cloud cover (%)
-    avg_cloud_fraction: Optional[float] = Field(
-        None, description="Average cloud cover fraction (%)"
-    )
+    # Humidity (%) — met.no-only
+    relative_humidity: Optional[float] = Field(None, description="Average relative humidity (%)")
 
-    # Weather condition
-    dominant_weather_symbol: Optional[str] = Field(
+    # Wind (m/s) — met.no-only
+    wind_speed: Optional[float] = Field(None, description="Average wind speed (m/s)")
+    wind_speed_max: Optional[float] = Field(None, description="Maximum wind speed (m/s)")
+
+    # Cloud cover (%) — met.no-only
+    cloud_fraction: Optional[float] = Field(None, description="Average cloud cover fraction (%)")
+
+    # Weather condition — met.no-only
+    weather_symbol: Optional[str] = Field(
         None, description="Most common or severe weather symbol for the day"
     )
 

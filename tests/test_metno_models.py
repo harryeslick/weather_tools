@@ -201,61 +201,59 @@ class TestDailyWeatherSummary:
     """Test DailyWeatherSummary model."""
 
     def test_valid_summary_creation(self):
-        """Test creating valid daily summary."""
+        """Test creating valid daily summary (canonical SILO field names)."""
         summary = DailyWeatherSummary(
             date=dt.date(2023, 1, 15),
-            min_temperature=18.5,
-            max_temperature=28.3,
-            total_precipitation=5.2,
+            min_temp=18.5,
+            max_temp=28.3,
+            daily_rain=5.2,
         )
 
         assert summary.date == dt.date(2023, 1, 15)
-        assert summary.min_temperature == 18.5
-        assert summary.max_temperature == 28.3
-        assert summary.total_precipitation == 5.2
+        assert summary.min_temp == 18.5
+        assert summary.max_temp == 28.3
+        assert summary.daily_rain == 5.2
 
     def test_summary_with_all_fields(self):
         """Test summary with all available fields."""
         summary = DailyWeatherSummary(
             date=dt.date(2023, 1, 15),
-            min_temperature=18.5,
-            max_temperature=28.3,
-            total_precipitation=5.2,
-            avg_wind_speed=4.2,
-            max_wind_speed=8.5,
-            avg_relative_humidity=75.0,
-            avg_pressure=1013.25,
-            avg_cloud_fraction=60.0,
-            dominant_weather_symbol="partlycloudy_day",
+            min_temp=18.5,
+            max_temp=28.3,
+            daily_rain=5.2,
+            wind_speed=4.2,
+            wind_speed_max=8.5,
+            relative_humidity=75.0,
+            mslp=1013.25,
+            cloud_fraction=60.0,
+            weather_symbol="partlycloudy_day",
         )
 
-        assert summary.avg_wind_speed == 4.2
-        assert summary.max_wind_speed == 8.5
-        assert summary.avg_relative_humidity == 75.0
-        assert summary.avg_pressure == 1013.25
-        assert summary.avg_cloud_fraction == 60.0
-        assert summary.dominant_weather_symbol == "partlycloudy_day"
+        assert summary.wind_speed == 4.2
+        assert summary.wind_speed_max == 8.5
+        assert summary.relative_humidity == 75.0
+        assert summary.mslp == 1013.25
+        assert summary.cloud_fraction == 60.0
+        assert summary.weather_symbol == "partlycloudy_day"
 
     def test_summary_with_minimal_fields(self):
         """Test summary with only required date field."""
         summary = DailyWeatherSummary(date=dt.date(2023, 1, 15))
 
         assert summary.date == dt.date(2023, 1, 15)
-        assert summary.min_temperature is None
-        assert summary.max_temperature is None
-        assert summary.total_precipitation is None
+        assert summary.min_temp is None
+        assert summary.max_temp is None
+        assert summary.daily_rain is None
 
     def test_summary_temperature_validation(self):
         """Test that temperatures can be negative (winter conditions)."""
-        summary = DailyWeatherSummary(
-            date=dt.date(2023, 7, 15), min_temperature=-5.0, max_temperature=2.0
-        )
+        summary = DailyWeatherSummary(date=dt.date(2023, 7, 15), min_temp=-5.0, max_temp=2.0)
 
-        assert summary.min_temperature == -5.0
-        assert summary.max_temperature == 2.0
+        assert summary.min_temp == -5.0
+        assert summary.max_temp == 2.0
 
     def test_summary_zero_precipitation(self):
         """Test that zero precipitation is valid."""
-        summary = DailyWeatherSummary(date=dt.date(2023, 1, 15), total_precipitation=0.0)
+        summary = DailyWeatherSummary(date=dt.date(2023, 1, 15), daily_rain=0.0)
 
-        assert summary.total_precipitation == 0.0
+        assert summary.daily_rain == 0.0

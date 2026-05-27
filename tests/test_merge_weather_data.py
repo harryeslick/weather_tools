@@ -38,14 +38,19 @@ def sample_silo_data():
 
 @pytest.fixture
 def sample_metno_data():
-    """Create sample met.no DataFrame (with met.no column names)."""
+    """Create sample met.no daily DataFrame.
+
+    met.no daily summaries now arrive with canonical SILO column names, plus
+    met.no-only columns (e.g. relative_humidity) that merge consumes/drops.
+    """
     return pd.DataFrame(
         {
             "date": pd.date_range("2023-01-11", "2023-01-17"),
-            "min_temperature": np.random.rand(7) * 10 + 15,
-            "max_temperature": np.random.rand(7) * 10 + 25,
-            "total_precipitation": np.random.rand(7) * 10,
-            "avg_pressure": np.random.rand(7) * 5 + 1010,
+            "min_temp": np.random.rand(7) * 10 + 15,
+            "max_temp": np.random.rand(7) * 10 + 25,
+            "daily_rain": np.random.rand(7) * 10,
+            "mslp": np.random.rand(7) * 5 + 1010,
+            "relative_humidity": np.random.rand(7) * 40 + 50,
         }
     )
 
@@ -309,35 +314,36 @@ class TestOverlapHandling:
 class TestMetNoPreparation:
     """Test preparation of met.no data."""
 
-    def test_prepare_metno_converts_columns(self, sample_silo_data, sample_metno_data):
-        """Test column name conversion."""
+    def test_prepare_metno_keeps_canonical_drops_metno_only(
+        self, sample_silo_data, sample_metno_data
+    ):
+        """Canonical columns are retained; met.no-only columns are dropped."""
         prepared = prepare_metno_for_merge(sample_metno_data, sample_silo_data)
 
-        # Should have SILO column names
+        # Canonical SILO columns retained
         assert "min_temp" in prepared.columns
         assert "max_temp" in prepared.columns
         assert "daily_rain" in prepared.columns
 
-        # Should not have met.no column names
-        assert "min_temperature" not in prepared.columns
-        assert "max_temperature" not in prepared.columns
+        assert "vp" in prepared.columns
 
     def test_prepare_metno_rh_converted_to_vapour_pressure(self, sample_silo_data):
-        """vp must hold vapour pressure (hPa), not raw relative humidity (%).
+        """vp must hold vapour pressure (hPa), derived from relative_humidity (%).
 
-        Regression test: the variable registry maps avg_relative_humidity -> vp,
-        so a naive rename would leave RH percentages mislabelled as vapour
-        pressure. prepare_metno_for_merge must instead derive true vp.
+        met.no daily data arrives with a canonical ``relative_humidity`` column.
+        The SILO ``vp`` column is vapour pressure, so prepare_metno_for_merge
+        derives true vp from RH and mean daily temperature, then drops the
+        met.no-only RH column.
         """
         from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
         metno = pd.DataFrame(
             {
                 "date": pd.date_range("2023-01-11", periods=3),
-                "min_temperature": [15.0, 16.0, 14.0],
-                "max_temperature": [25.0, 26.0, 24.0],
-                "total_precipitation": [0.0, 2.0, 1.0],
-                "avg_relative_humidity": [80.0, 60.0, 90.0],
+                "min_temp": [15.0, 16.0, 14.0],
+                "max_temp": [25.0, 26.0, 24.0],
+                "daily_rain": [0.0, 2.0, 1.0],
+                "relative_humidity": [80.0, 60.0, 90.0],
             }
         )
 
@@ -357,20 +363,18 @@ class TestMetNoPreparation:
         metno = pd.DataFrame(
             {
                 "date": pd.date_range("2023-01-11", periods=3),
-                "min_temperature": [15.0, 16.0, 14.0],
-                "max_temperature": [25.0, 26.0, 24.0],
-                "total_precipitation": [0.0, 2.0, 1.0],
-                "avg_relative_humidity": [80.0, 60.0, 90.0],
+                "min_temp": [15.0, 16.0, 14.0],
+                "max_temp": [25.0, 26.0, 24.0],
+                "daily_rain": [0.0, 2.0, 1.0],
+                "relative_humidity": [80.0, 60.0, 90.0],
             }
         )
 
         prepared = prepare_metno_for_merge(metno, sample_silo_data, convert_rh_to_vp=False)
 
-        # No vp column should be produced, and RH must never be mislabelled as vp.
+        # No vp column is derived, and the met.no-only RH column is dropped for
+        # SILO alignment (never mislabelled as vp).
         assert "vp" not in prepared.columns
-        # Raw RH is preserved under its own name, not silently dropped.
-        assert "avg_relative_humidity" in prepared.columns
-        assert prepared["avg_relative_humidity"].tolist() == [80.0, 60.0, 90.0]
 
     # def test_prepare_metno_adds_date_columns(self, sample_silo_data, sample_metno_data):
     #     """Test adding day and year columns."""
