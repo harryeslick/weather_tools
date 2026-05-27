@@ -262,6 +262,11 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 ### GeoTIFF Structure and Usage
 - **URL Pattern**: `https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/{variable}/{year}/{YYYYMMDD}.{variable}.tif`
 - **File Organization** (when cached): `{cache_dir}/{variable}/{year}/{YYYYMMDD}.{variable}.tif`
+  - Full-resolution, unclipped downloads use this plain path.
+  - Requests with a `geometry` clip and/or an `overview_level` produce request-specific bytes,
+    so they are namespaced under `{cache_dir}/{variable}/{year}/_subset_{key}/{YYYYMMDD}.{variable}.tif`,
+    where `key` is a stable hash of the geometry WKT + overview level (`subset_cache_key()`).
+    This stops a raster clipped/down-sampled for one request being silently reused for another.
 - **COG Benefits**: Only download pixels you need via HTTP range requests (much faster than full file)
 - **Date Format**: GeoTIFF uses YYYY-MM-DD (unlike NetCDF which uses years)
 - **CRS**: All GeoTIFFs are in EPSG:4326 (WGS84 lat/lon)

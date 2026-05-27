@@ -10,6 +10,7 @@ GeoTIFF files from AWS S3, with support for:
 """
 
 import datetime
+import hashlib
 import logging
 import os
 import tempfile
@@ -149,6 +150,39 @@ def construct_geotiff_monthly_url(variable: str, year: int, month: int) -> str:
     date_str = f"{year:04d}{month:02d}"
 
     return f"{SILO_GEOTIFF_BASE_URL}/monthly/{var_name}/{year}/{date_str}.{var_name}.tif"
+
+
+def subset_cache_key(
+    geometry: Optional[Union[Point, Polygon]],
+    overview_level: Optional[int],
+) -> Optional[str]:
+    """Derive a stable cache key for a clipped/down-sampled GeoTIFF request.
+
+    The on-disk bytes of a downloaded GeoTIFF depend not only on variable and date
+    (which are encoded in the file path) but also on the ``geometry`` it was clipped
+    to and the ``overview_level`` it was read at. This key folds those two parameters
+    into a short deterministic token so that different subset requests resolve to
+    different cache paths and are never silently reused for one another.
+
+    Returns ``None`` for a full-resolution, unclipped request (``geometry is None`` and
+    ``overview_level is None``). Such files keep the plain ``{date}.{var}.tif`` path so
+    the cache stays backward compatible and readable by plain SILO tooling.
+
+    Args:
+        geometry: Optional shapely geometry the file was clipped to.
+        overview_level: Optional pyramid level the file was read at.
+
+    Returns:
+        A 16-character hex token, or ``None`` for the full-file case.
+    """
+    if geometry is None and overview_level is None:
+        return None
+
+    # geometry.wkt is a canonical, stable text encoding of the geometry, so identical
+    # geometries hash identically regardless of object identity.
+    geom_repr = geometry.wkt if geometry is not None else ""
+    payload = f"{geom_repr}|{overview_level}".encode()
+    return hashlib.sha1(payload, usedforsecurity=False).hexdigest()[:16]
 
 
 def read_cog(
@@ -508,6 +542,12 @@ def download_geotiffs(
         # Files persist across function calls and even across sessions until system reboot
         cache_dir = Path(tempfile.gettempdir()) / "weather_tools_cache" / "geotiff"
 
+    # Files clipped to a geometry or read at an overview level have request-specific
+    # bytes, so they are namespaced under a _subset_<key> directory to keep their cache
+    # entries distinct from each other and from the full-resolution file (key is None).
+    cache_key = subset_cache_key(geometry, overview_level)
+    subset_subdir = f"_subset_{cache_key}" if cache_key is not None else None
+
     # Build download task list
     download_tasks = []
     file_paths = {var: [] for var in metadata_map.keys()}
@@ -516,21 +556,20 @@ def download_geotiffs(
             month_list = _generate_month_range(start_date, end_date)
             for year, month in month_list:
                 url = construct_geotiff_monthly_url(var_name, year, month)
-                dest_path = (
-                    cache_dir / var_name / str(year) / f"{year:04d}{month:02d}.{var_name}.tif"
-                )
+                year_dir = cache_dir / var_name / str(year)
+                if subset_subdir is not None:
+                    year_dir = year_dir / subset_subdir
+                dest_path = year_dir / f"{year:04d}{month:02d}.{var_name}.tif"
                 file_paths[var_name].append(dest_path)
                 if not dest_path.exists() or force:
                     download_tasks.append((var_name, datetime.date(year, month, 1), url, dest_path))
         else:
             for date in date_list:
                 url = construct_geotiff_daily_url(var_name, date)
-                dest_path = (
-                    cache_dir
-                    / var_name
-                    / str(date.year)
-                    / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
-                )
+                year_dir = cache_dir / var_name / str(date.year)
+                if subset_subdir is not None:
+                    year_dir = year_dir / subset_subdir
+                dest_path = year_dir / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
                 file_paths[var_name].append(dest_path)
                 if not dest_path.exists() or force:
                     download_tasks.append((var_name, date, url, dest_path))

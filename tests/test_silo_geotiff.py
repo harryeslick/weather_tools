@@ -22,6 +22,7 @@ from weather_tools.silo_geotiff import (
     download_geotiffs,
     read_cog,
     read_geotiff_stack,
+    subset_cache_key,
 )
 
 
@@ -446,6 +447,87 @@ class TestDownloadGeoTiffRange:
         assert call_count == 2
         # Only one should have succeeded
         assert len(result["daily_rain"]) == 1
+
+
+class TestSubsetCacheKey:
+    """Test the cache-key helper that disambiguates clipped/down-sampled requests."""
+
+    def test_full_request_has_no_key(self):
+        """No geometry and no overview level is the plain full-file case (key None)."""
+        assert subset_cache_key(None, None) is None
+
+    def test_identical_geometry_yields_identical_key(self):
+        """Two separately constructed but equal geometries must hash the same."""
+        key_a = subset_cache_key(Point(153.0, -27.5), None)
+        key_b = subset_cache_key(Point(153.0, -27.5), None)
+        assert key_a == key_b
+        assert key_a is not None
+
+    def test_different_geometry_yields_different_key(self):
+        """Different clip extents must not collide."""
+        brisbane = subset_cache_key(Point(153.0, -27.5), None)
+        sydney = subset_cache_key(Point(151.2, -33.9), None)
+        assert brisbane != sydney
+
+    def test_overview_level_changes_key(self):
+        """Same geometry at a different resolution is a different product."""
+        full_res = subset_cache_key(Point(153.0, -27.5), None)
+        overview = subset_cache_key(Point(153.0, -27.5), 1)
+        assert full_res != overview
+
+    def test_overview_only_request_has_key(self):
+        """An overview-level request without geometry still gets a key."""
+        assert subset_cache_key(None, 0) is not None
+
+
+class TestSubsetCachePathing:
+    """Regression tests: cache paths must reflect geometry and overview_level."""
+
+    def _paths_for(self, tmp_path, geometry, overview_level=None):
+        """Run download_geotiff with downloads mocked, returning the file paths."""
+        with patch("weather_tools.silo_geotiff.download_geotiff_with_subset", return_value=True):
+            result = download_geotiff(
+                variables=["daily_rain"],
+                start_date=datetime.date(2023, 1, 1),
+                end_date=datetime.date(2023, 1, 1),
+                geometry=geometry,
+                overview_level=overview_level,
+                output_dir=tmp_path,
+                save_to_disk=True,
+                read_files=False,
+            )
+        return result["daily_rain"]
+
+    def test_different_geometries_get_distinct_paths(self, tmp_path):
+        """The core bug: two geometries for the same var/date must not share a path."""
+        brisbane_paths = self._paths_for(tmp_path, Point(153.0, -27.5))
+        sydney_paths = self._paths_for(tmp_path, Point(151.2, -33.9))
+
+        assert brisbane_paths[0] != sydney_paths[0]
+        # Both live under a _subset_ namespace, not the plain year directory.
+        assert "_subset_" in brisbane_paths[0].parent.name
+        assert "_subset_" in sydney_paths[0].parent.name
+
+    def test_identical_request_reuses_path(self, tmp_path):
+        """An identical repeat request resolves to the same cache path."""
+        first = self._paths_for(tmp_path, Point(153.0, -27.5))
+        second = self._paths_for(tmp_path, Point(153.0, -27.5))
+        assert first[0] == second[0]
+
+    def test_overview_level_gets_distinct_path(self, tmp_path):
+        """Same geometry at different resolutions must not collide."""
+        full = self._paths_for(tmp_path, Point(153.0, -27.5), overview_level=None)
+        overview = self._paths_for(tmp_path, Point(153.0, -27.5), overview_level=1)
+        assert full[0] != overview[0]
+
+    def test_full_request_keeps_clean_path(self, tmp_path):
+        """geometry=None and overview_level=None keeps the backward-compatible path."""
+        paths = self._paths_for(tmp_path, None, overview_level=None)
+        dest = paths[0]
+        # No _subset_ namespacing; matches {var}/{year}/{YYYYMMDD}.{var}.tif
+        assert "_subset_" not in str(dest)
+        assert dest.name == "20230101.daily_rain.tif"
+        assert dest.parent.name == "2023"
 
 
 # Integration tests (require network access and actual SILO data)
