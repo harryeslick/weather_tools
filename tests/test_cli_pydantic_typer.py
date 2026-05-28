@@ -238,3 +238,79 @@ class TestThroughTyper:
         assert q.date_range.start_date == "20230101"
         assert q.variables == ["daily_rain", "max_temp"]
         assert captured["api_key"] == "user@example.com"
+
+
+# ---------------------------------------------------------------------------
+# Regression: ``from __future__ import annotations`` must not silently strip
+# ``typer.Option(...)`` metadata from CLI-only extras.
+# ---------------------------------------------------------------------------
+
+
+class TestForwardRefExtras:
+    """Extras carrying string-form Annotated metadata must still reach Typer.
+
+    Modules that use ``from __future__ import annotations`` have all their
+    type hints stored as strings. Without resolving them via
+    ``typing.get_type_hints(..., include_extras=True)`` the adapter would
+    hand Typer a string like ``"Annotated[Optional[str], typer.Option(...)]"``
+    that Typer can't evaluate — silently dropping the help text, envvar, and
+    flag aliases. This test exercises the resolution path.
+    """
+
+    def test_extras_with_stringified_annotations_keep_option_metadata(self):
+        # Module-level test helper to ensure annotations are stringified the
+        # same way they would be under ``from __future__ import annotations``.
+        # We can't easily flip the import in the test file itself, so we build
+        # the function dynamically with explicit string annotations.
+        import builtins
+
+        captured: dict = {}
+
+        def cmd(
+            query: PatchedPointQuery,
+            api_key: "Annotated[Optional[str], typer.Option('--api-key', envvar='SILO_API_KEY', help='SILO key')]" = None,  # noqa: F722
+        ) -> None:
+            captured["query"] = query
+            captured["api_key"] = api_key
+
+        # Make the names referenced in the forward-ref string resolvable.
+        cmd.__globals__.update(
+            {
+                "Annotated": Annotated,
+                "Optional": Optional,
+                "typer": typer,
+                "builtins": builtins,
+            }
+        )
+
+        decorated = from_pydantic(
+            PatchedPointQuery,
+            field_aliases={"variables": "--var"},
+            skip={"radius", "name_fragment"},
+        )(cmd)
+
+        app = typer.Typer()
+        app.command()(decorated)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            [
+                "--station-code",
+                "30043",
+                "--start-date",
+                "2023-01-01",
+                "--end-date",
+                "2023-01-31",
+                "--api-key",
+                "via-flag@example.com",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["api_key"] == "via-flag@example.com"
+
+        # And the help text must surface the resolved Option metadata, proving
+        # the string-form annotation was evaluated rather than passed through.
+        help_result = runner.invoke(app, ["--help"])
+        assert help_result.exit_code == 0
+        assert "SILO key" in help_result.output

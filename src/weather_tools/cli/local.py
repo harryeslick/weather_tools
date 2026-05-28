@@ -1,23 +1,30 @@
-"""Local SILO NetCDF file CLI commands."""
+"""Local SILO NetCDF file CLI commands.
+
+The ``extract`` and ``download`` commands are auto-derived from the Pydantic
+query models in :mod:`weather_tools.local_models` via :func:`from_pydantic`.
+Pure CLI concerns (output path, force overwrite, download timeout) remain as
+hand-written Typer options after the model-derived ones.
+
+``info`` is plain Typer because it takes no user-facing query inputs — there's
+nothing to validate.
+"""
 
 import logging
 from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-from typing_extensions import List
+from pydantic import ValidationError
 
-from weather_tools.cli.date_utils import iso_date_option
+from weather_tools.cli.pydantic_typer import from_pydantic
 from weather_tools.config import get_silo_data_dir
+from weather_tools.local_models import DEFAULT_DAILY_VARIABLES, DownloadQuery, ExtractQuery
 from weather_tools.logging_utils import get_console
 from weather_tools.read_silo_xarray import read_silo_xarray
 from weather_tools.silo_netcdf import download_netcdf
-from weather_tools.variable_register import VARIABLES, SiloNetCDFError
+from weather_tools.variable_register import SiloNetCDFError
 
 logger = logging.getLogger(__name__)
-
-# Valid variable names for help text (SILO-only variables, not met.no-only)
-VALID_VARIABLES = VARIABLES.silo_variables()
 
 local_app = typer.Typer(
     name="local",
@@ -26,61 +33,53 @@ local_app = typer.Typer(
 )
 
 
+# ---------------------------------------------------------------------------
+# extract — auto-derived from ExtractQuery
+# ---------------------------------------------------------------------------
+
+
 @local_app.command()
+@from_pydantic(ExtractQuery, field_aliases={"variables": "--var"})
 def extract(
-    lat: Annotated[float, typer.Option(help="Latitude coordinate")],
-    lon: Annotated[float, typer.Option(help="Longitude coordinate")],
-    start_date: Annotated[
-        str, typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_date_option)
-    ],
-    end_date: Annotated[str, typer.Option(help="End date (YYYY-MM-DD)", callback=iso_date_option)],
-    output: Annotated[str, typer.Option(help="Output CSV filename")] = "weather_data.csv",
-    variables: Annotated[
-        Optional[List[str]],
-        typer.Option(
-            "--var",
-            help=(
-                f"Climate variables: {', '.join(VALID_VARIABLES)}. "
-                "Repeat the option for multiple; leave blank for the default daily variables."
-            ),
-        ),
-    ] = None,
-    silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
-    tolerance: Annotated[
-        float, typer.Option(help="Maximum distance (in degrees) for nearest neighbor selection")
-    ] = 0.1,
-    keep_location: Annotated[
-        bool, typer.Option(help="Keep location columns (crs, lat, lon) in output CSV")
-    ] = False,
+    query: ExtractQuery,
+    output: Annotated[
+        str, typer.Option("--output", "-o", help="Output CSV filename")
+    ] = "weather_data.csv",
 ) -> None:
-    """
-    Extract weather data from local netCDF files for a specific location and date range.
+    """Extract weather data from local netCDF files for a point and date range.
+
+    The query model (``ExtractQuery``) drives all input validation: coordinates
+    must be in the Australian bounding box, dates must be in SILO's
+    1889-2100 window, and variable names must exist in the registry.
 
     Example:
-        weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2025-01-01 --output weather.csv
+        weather-tools local extract --latitude -27.5 --longitude 153.0 \\
+            --start-date 2020-01-01 --end-date 2025-01-01 -o weather.csv
     """
-    # When no variables are given, fall back to read_silo_xarray's default set.
-    variables_to_use: Optional[List[str]] = variables if variables else None
-
-    if silo_dir is None:
-        silo_dir = get_silo_data_dir()
+    silo_dir = query.silo_dir if query.silo_dir is not None else get_silo_data_dir()
+    variables_to_use = query.variables  # ``None`` → read_silo_xarray default set
 
     try:
         typer.echo(f"Loading SILO data from: {silo_dir}")
         typer.echo(f"Variables: {variables_to_use or 'default daily set'}")
 
-        # Load the dataset
         with typer.progressbar(length=1, label="Loading SILO dataset...") as progress:
             ds = read_silo_xarray(variables=variables_to_use, silo_dir=silo_dir)
             progress.update(1)
 
-        typer.echo(f"Extracting data for location: lat={lat}, lon={lon}")
-        typer.echo(f"Date range: {start_date} to {end_date}")
+        lat = query.coordinates.latitude
+        lon = query.coordinates.longitude
+        # The model stores YYYYMMDD; xarray time slicing accepts that form, but ISO
+        # reads more naturally in log output.
+        start_iso = f"{query.date_range.start_date[:4]}-{query.date_range.start_date[4:6]}-{query.date_range.start_date[6:]}"
+        end_iso = f"{query.date_range.end_date[:4]}-{query.date_range.end_date[4:6]}-{query.date_range.end_date[6:]}"
 
-        # Extract data for the specified location and date range
+        typer.echo(f"Extracting data for location: lat={lat}, lon={lon}")
+        typer.echo(f"Date range: {start_iso} to {end_iso}")
+
         df = (
-            ds.sel(lat=lat, lon=lon, method="nearest", tolerance=tolerance)
-            .sel(time=slice(start_date, end_date))
+            ds.sel(lat=lat, lon=lon, method="nearest", tolerance=query.tolerance)
+            .sel(time=slice(start_iso, end_iso))
             .to_dataframe()
             .reset_index()
         )
@@ -89,14 +88,12 @@ def extract(
         if "time" in df.columns and "date" not in df.columns:
             df = df.rename(columns={"time": "date"})
 
-        # Drop location columns by default unless --keep-location is specified
-        if not keep_location:
+        if not query.keep_location:
             columns_to_drop = [col for col in ["crs", "lat", "lon"] if col in df.columns]
             if columns_to_drop:
                 df = df.drop(columns=columns_to_drop)
                 typer.echo(f"🗑️  Dropped location columns: {', '.join(columns_to_drop)}")
 
-        # Save to CSV
         output_path = Path(output)
         df.to_csv(output_path, index=False)
 
@@ -104,23 +101,30 @@ def extract(
         typer.echo(f"📊 Shape: {df.shape[0]} rows, {df.shape[1]} columns")
         typer.echo(f"💾 Saved to: {output_path.absolute()}")
 
-        # Show a preview of the data
         if not df.empty:
             typer.echo("\n📋 Preview (first 5 rows):")
             typer.echo(df.head().to_string())
 
+    except ValidationError as e:
+        typer.echo("❌ Validation error:", err=True)
+        for error in e.errors():
+            typer.echo(f"   {error['loc'][0]}: {error['msg']}", err=True)
+        raise typer.Exit(1)
     except Exception as e:
         typer.echo(f"❌ Error: {e}", err=True)
         raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# info — no user-facing query inputs; left as plain Typer.
+# ---------------------------------------------------------------------------
 
 
 @local_app.command(name="info")
 def local_info(
     silo_dir: Annotated[Optional[Path], typer.Option(help="Path to SILO data directory")] = None,
 ) -> None:
-    """
-    Display information about available local SILO data.
-    """
+    """Display information about available local SILO data."""
     if silo_dir is None:
         silo_dir = get_silo_data_dir()
 
@@ -156,30 +160,22 @@ def local_info(
                 typer.echo(f"    📅 Years: {min(years)}-{max(years)}")
 
 
+# ---------------------------------------------------------------------------
+# download — auto-derived from DownloadQuery
+# ---------------------------------------------------------------------------
+
+
 @local_app.command()
+@from_pydantic(DownloadQuery, field_aliases={"variables": "--var"})
 def download(
-    start_year: Annotated[int, typer.Option(help="First year to download (inclusive)")],
-    end_year: Annotated[int, typer.Option(help="Last year to download (inclusive)")],
-    variables: Annotated[
-        Optional[List[str]],
-        typer.Option(
-            "--var",
-            help=(
-                f"Climate variables: {', '.join(VALID_VARIABLES)}. "
-                "Repeat the option for multiple; leave blank for the default daily variables."
-            ),
-        ),
-    ] = ["daily_rain", "max_temp", "min_temp", "evap_syn"],
-    silo_dir: Annotated[
-        Optional[Path], typer.Option(help="Output directory for downloaded files")
-    ] = None,
+    query: DownloadQuery,
     force: Annotated[bool, typer.Option(help="Overwrite existing files")] = False,
     timeout: Annotated[int, typer.Option(help="Download timeout in seconds")] = 600,
 ) -> None:
-    """
-    Download SILO gridded NetCDF files from AWS S3.
+    """Download SILO gridded NetCDF files from AWS S3.
 
-    Files are organized in the same structure expected by 'weather-tools local extract':
+    Files are organized in the structure expected by ``weather-tools local extract``::
+
         output_dir/
         ├── daily_rain/
         │   ├── 2020.daily_rain.nc
@@ -188,46 +184,37 @@ def download(
         │   └── ...
         └── ...
 
-    By default, existing files are skipped. Use --force to re-download.
+    By default, existing files are skipped. Use ``--force`` to re-download.
 
     Examples:
-        # Download the default daily variables for 2020-2023
+        # Default daily variables for 2020-2023
         weather-tools local download --start-year 2020 --end-year 2023
 
-        # Download specific variables
+        # Specific variables
         weather-tools local download --var daily_rain --var max_temp \\
             --start-year 2022 --end-year 2023
 
-        # Download to custom directory
+        # Custom output directory
         weather-tools local download --var monthly_rain \\
             --start-year 2020 --end-year 2023 \\
             --silo-dir /data/silo_grids
-
-        # Force re-download existing files
-        weather-tools local download --var daily_rain \\
-            --start-year 2023 --end-year 2023 --force
     """
-    # When no variable is given, fall back to the core daily variable set.
-    var_input: list[str] = (
-        variables if variables else ["daily_rain", "max_temp", "min_temp", "evap_syn"]
-    )
-
-    if silo_dir is None:
-        silo_dir = get_silo_data_dir()
-
+    silo_dir = query.silo_dir if query.silo_dir is not None else get_silo_data_dir()
+    # Pydantic guarantees variables is a non-empty list (default factory supplies
+    # the daily set). We pass it through directly.
+    variables = query.variables or list(DEFAULT_DAILY_VARIABLES)
     console = get_console()
 
     try:
         download_netcdf(
-            variables=var_input,
-            start_year=start_year,
-            end_year=end_year,
+            variables=variables,
+            start_year=query.start_year,
+            end_year=query.end_year,
             output_dir=silo_dir,
             force=force,
             timeout=timeout,
             console=console,
         )
-
     except ValueError as e:
         logger.error(f"[red]❌ Validation error: {e}[/red]")
         raise typer.Exit(1)

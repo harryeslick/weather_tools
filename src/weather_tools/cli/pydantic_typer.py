@@ -78,12 +78,30 @@ def from_pydantic(
 
         # Take the original function's signature and drop the model-shaped param.
         original_sig = inspect.signature(fn)
+        # Resolve forward references on the wrapped function so commands written
+        # under ``from __future__ import annotations`` still surface their
+        # extras' ``Annotated[..., typer.Option(...)]`` metadata to Typer.
+        # Without ``include_extras=True`` we'd lose the OptionInfo objects.
+        try:
+            resolved_hints = typing.get_type_hints(fn, include_extras=True)
+        except Exception:
+            # Unresolvable references shouldn't take the whole decorator down;
+            # fall back to the raw (possibly-stringified) annotations.
+            resolved_hints = {}
+
         extra_params: list[inspect.Parameter] = []
         for p in original_sig.parameters.values():
             if p.name == model_param:
                 continue
-            # Force POSITIONAL_OR_KEYWORD so Typer accepts mixed positions.
-            extra_params.append(p.replace(kind=inspect.Parameter.POSITIONAL_OR_KEYWORD))
+            resolved = resolved_hints.get(p.name, p.annotation)
+            # Force POSITIONAL_OR_KEYWORD so Typer accepts mixed positions, and
+            # replace any string-form annotation with the evaluated one.
+            extra_params.append(
+                p.replace(
+                    kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    annotation=resolved,
+                )
+            )
 
         # New visible signature: derived params, then the CLI-only extras.
         visible_params = list(model_params.values()) + extra_params
