@@ -10,10 +10,9 @@ from weather_tools.merge_weather_data import merge_historical_and_forecast, get_
 merged = merge_historical_and_forecast(
     silo_data=silo_dataframe,
     metno_data=metno_dataframe,
-    transition_date=None,           # auto (last SILO date + 1 day)
-    validate=True,
-    fill_missing=True,
     overlap_strategy="prefer_silo", # or 'prefer_metno' / 'error'
+    return_cols="all",              # or 'silo_only' / 'metno_only'
+    convert_rh_to_vp=True,          # convert met.no relative_humidity to vp
 )
 
 summary = get_merge_summary(merged)
@@ -24,19 +23,22 @@ summary = get_merge_summary(merged)
 Orchestrates the entire merge process:
 
 1. Normalises date columns and sorts both inputs.
-2. Optionally validates continuity and critical columns.
+2. Validates continuity and critical columns (`min_temp`, `max_temp`, `daily_rain`).
 3. Applies the requested overlap strategy:
    - `prefer_silo` (default): keep SILO records when dates collide.
    - `prefer_metno`: prefer met.no records for overlaps.
    - `error`: raise `MergeValidationError` if overlap exists.
-4. Converts met.no columns (e.g., `min_temperature`) into SILO-style columns (`min_temp`) via `prepare_metno_for_merge`.
-5. Adds metadata columns (`data_source`, `is_forecast`, `forecast_generated_at`).
-6. Concatenates, aligns columns, and returns a chronological DataFrame.
+4. Prepares met.no data (already in SILO canonical names from aggregation) via `prepare_metno_for_merge`.
+5. Optionally converts met.no `relative_humidity` (%) to SILO `vp` (vapour pressure, hPa) using mean daily temperature.
+6. Adds metadata columns (`data_source`, `is_forecast`, `forecast_generated_at`).
+7. Filters columns based on `return_cols` setting.
+8. Concatenates and returns a chronological DataFrame.
 
-#### Important Flags
+#### Important Parameters
 
-- `transition_date`: force the hand-over date if you do not want the automatic transition.
-- `fill_missing`: backfill SILO-only variables in the forecast (radiation, vapour pressure, etc.) using `fill_missing_silo_variables`.
+- `overlap_strategy`: how to handle overlapping dates (default: `"prefer_silo"`).
+- `return_cols`: which columns to include—`"all"` (default), `"silo_only"`, or `"metno_only"`.
+- `convert_rh_to_vp`: whether to derive SILO `vp` from met.no `relative_humidity` (default: `True`).
 
 ## Validation Utilities
 
@@ -44,16 +46,18 @@ Orchestrates the entire merge process:
 
 Runs checks before merging:
 
-- Ensures `date` columns exist.
+- Ensures `date` columns exist in both DataFrames.
 - Detects gaps or overlaps depending on `overlap_strategy`.
-- Confirms SILO has `min_temp`, `max_temp`, `daily_rain`.
-- Accepts met.no data in either native (`min_temperature`) or SILO (`min_temp`) naming schemes.
+- Confirms both datasets have critical columns: `min_temp`, `max_temp`, `daily_rain`.
+- Validates that data can be safely merged without irreconcilable conflicts.
 
-Returns `(is_valid: bool, issues: List[str])`. The merge function raises `MergeValidationError` when validation fails and `validate=True`.
+Returns `(is_valid: bool, issues: List[str])`. The merge function raises `MergeValidationError` when validation fails.
 
 ### validate_date_continuity(...)
 
 Lower-level helper that inspects two DataFrames for gaps or overlaps relative to a maximum allowed gap (default: 1 day).
+
+Returns `(is_continuous: bool, error_message: Optional[str])`.
 
 ## Preparing met.no Data
 
@@ -62,24 +66,14 @@ Lower-level helper that inspects two DataFrames for gaps or overlaps relative to
 ```python
 from weather_tools.merge_weather_data import prepare_metno_for_merge
 
-prepared = prepare_metno_for_merge(metno_daily_df, silo_history_df, fill_missing=True)
+prepared = prepare_metno_for_merge(metno_daily_df, silo_history_df, convert_rh_to_vp=True)
 ```
 
-- Renames met.no columns to their SILO equivalents using `convert_metno_to_silo_columns`.
-- Adds SILO-specific date columns (`day`, `year`) when missing.
-- Optionally fills SILO-only variables by calling `fill_missing_silo_variables`.
+- Met.no daily summaries already use SILO canonical column names (aggregation is driven by the `VARIABLES` registry), so no rename step occurs.
+- Optionally derives the SILO `vp` (vapour pressure, hPa) column from met.no `relative_humidity` (%) using mean daily temperature when `convert_rh_to_vp=True`.
+- Drops met.no-only columns (wind, cloud, relative humidity, weather symbol) to keep output SILO-aligned.
 
-### fill_missing_silo_variables(...)
-
-Supports three strategies when met.no data lacks SILO-only columns:
-
-| Strategy      | Behaviour |
-|---------------|-----------|
-| `"default"`   | Inserts conservative defaults (e.g., `radiation=20.0`, `evap_syn=5.0`). |
-| `"last_known"`| Reuses the last available SILO value when possible. |
-| `"median"`    | Fills using the median from the SILO history. |
-
-This allows downstream systems expecting complete SILO schema to continue operating.
+The derived `vp` is a SILO variable and is retained in the output.
 
 ## Summaries and Diagnostics
 
@@ -95,17 +89,15 @@ Useful for sanity checks or logging after a merge.
 
 ## Exceptions
 
-- `MergeValidationError` — raised when a merge cannot proceed safely.
-- `DateGapError` — specialised for gaps between SILO and met.no periods.
-- `ColumnMismatchError` — raised when required columns are missing.
+- `MergeValidationError` — raised when a merge cannot proceed safely (missing columns, incompatible dates, etc.).
 
-Handle exceptions to alert users or prompt data remediation.
+Handle this exception to alert users or prompt data remediation.
 
 ## Typical Pipeline
 
-1. Fetch SILO history using `SiloAPI.get_gridded_data` or local NetCDF extracts.
-2. Retrieve met.no forecasts with `MetNoAPI.to_dataframe(aggregate_to_daily=True)`.
-3. Call `merge_historical_and_forecast` and inspect `get_merge_summary`.
+1. Fetch SILO history using `SiloAPI.get_patched_point()` / `get_data_drill()` or local NetCDF extracts via `read_silo_xarray()`.
+2. Retrieve met.no forecasts with `MetNoAPI.to_dataframe(daily=True)`.
+3. Call `merge_historical_and_forecast()` and inspect `get_merge_summary()`.
 4. Persist or visualise as required.
 
 Check the [Forecast example notebook](notebooks/metno_forecast_example.ipynb) for a live demonstration of this workflow.

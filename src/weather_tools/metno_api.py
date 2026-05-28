@@ -42,6 +42,8 @@ from weather_tools.metno_models import (
     MetNoResponse,
     MetNoUserAgentError,
 )
+from weather_tools.silo_models import AustralianCoordinates
+from weather_tools.variable_register import VARIABLES
 
 # Get package version for User-Agent
 try:
@@ -78,7 +80,7 @@ class MetNoAPI:
         >>> response = api.query_forecast(query)
 
         >>> # Get daily forecast summaries
-        >>> daily_forecasts = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=7)
+        >>> daily_forecasts = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=9)
     """
 
     DEFAULT_TIMEOUT = 30
@@ -291,17 +293,14 @@ class MetNoAPI:
 
         return MetNoResponse(raw_data=raw_data, format=query.format, coordinates=query.coordinates)
 
-    def get_daily_forecast(
-        self, latitude: float, longitude: float, days: int = 9, altitude: Optional[int] = None
-    ) -> pd.DataFrame:
+    def get_daily_forecast(self, latitude: float, longitude: float, days: int = 9) -> pd.DataFrame:
         """
         Convenience method: Get daily forecast summaries as DataFrame.
 
         Args:
             latitude: Latitude in decimal degrees
             longitude: Longitude in decimal degrees
-            days: Number of forecast days (1-9, default: 7)
-            altitude: Optional elevation in meters
+            days: Number of forecast days (1-9, default: 9)
 
         Returns:
             DataFrame with daily aggregated forecasts
@@ -311,14 +310,11 @@ class MetNoAPI:
 
         Example:
             >>> api = MetNoAPI()
-            >>> df = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=7)
-            >>> print(df[['date', 'min_temperature', 'max_temperature', 'total_precipitation']])
+            >>> df = api.get_daily_forecast(latitude=-27.5, longitude=153.0, days=9)
+            >>> print(df[['date', 'min_temp', 'max_temp', 'daily_rain']])
         """
         if days < 1 or days > 9:
             raise ValueError(f"Days must be between 1 and 9, got {days}")
-
-        # Import here to avoid circular import
-        from weather_tools.silo_models import AustralianCoordinates
 
         coords = AustralianCoordinates(latitude=latitude, longitude=longitude)
         query = MetNoQuery(coordinates=coords, format=MetNoFormat.COMPACT)
@@ -327,7 +323,7 @@ class MetNoAPI:
         # Convert to DataFrame and aggregate to daily
         timeseries = response.get_timeseries()
         df = self._timeseries_to_dataframe(timeseries)
-        daily_df = self._resample(df, "D")
+        daily_df = self._aggregate_daily(df)
 
         # Return only requested number of days
         return daily_df.head(days)
@@ -377,62 +373,46 @@ class MetNoAPI:
 
         return pd.DataFrame(records)
 
-    def _resample(self, df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    def _aggregate_daily(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Aggregate DataFrame to specified frequency using pandas resample.
+        Aggregate raw hourly forecast data to daily summaries.
 
-        This replaces ~80 lines of manual aggregation with pandas built-in
-        time series operations. Much cleaner and more performant.
+        Column naming and aggregation are driven entirely by the central
+        ``VARIABLES`` registry (``metno_daily_agg_spec()``), so the output
+        columns are canonical SILO names directly — there is no intermediate
+        vocabulary and no second rename step. A single raw met.no field may
+        produce several canonical columns (e.g. ``air_temperature`` yields both
+        ``max_temp`` and ``min_temp``).
 
         Args:
-            df: DataFrame with time index
-            freq: Pandas frequency string ('D' for daily, 'W' for weekly, 'M' for monthly)
+            df: DataFrame with a ``time`` column and raw met.no fields
 
         Returns:
-            Aggregated DataFrame with renamed columns matching SILO conventions
+            Daily DataFrame with a ``date`` column and canonical variable columns
         """
-        # Set time as index for resampling
-        df = df.set_index("time")
+        # Build pandas named-aggregation kwargs from the registry, keeping only
+        # the variables whose raw met.no field is actually present in this frame.
+        named_aggs = {}
+        for canonical, (raw_field, agg) in VARIABLES.metno_daily_agg_spec().items():
+            if raw_field not in df.columns:
+                continue
+            func = self._get_dominant_symbol_series if agg == "dominant" else agg
+            named_aggs[canonical] = pd.NamedAgg(column=raw_field, aggfunc=func)
 
-        # Define aggregations for each variable
-        aggregated = df.resample(freq).agg(
-            {
-                "air_temperature": ["min", "max"],
-                "precipitation_amount": "sum",
-                "wind_speed": ["mean", "max"],
-                "relative_humidity": "mean",
-                "air_pressure_at_sea_level": "mean",
-                "cloud_area_fraction": "mean",
-                "symbol_code": lambda x: self._get_dominant_symbol(x.dropna().tolist()),
-            }
-        )
+        daily = df.set_index("time").resample("D").agg(**named_aggs)
 
-        # Flatten multi-level column names
-        aggregated.columns = ["_".join(col).strip("_") for col in aggregated.columns]
+        # Reset index to make 'time' a column again, rename to canonical 'date'
+        result = daily.reset_index().rename(columns={"time": "date"})
 
-        # Rename to match SILO/user-friendly conventions
-        aggregated = aggregated.rename(
-            columns={
-                "air_temperature_min": "min_temperature",
-                "air_temperature_max": "max_temperature",
-                "precipitation_amount_sum": "total_precipitation",
-                "wind_speed_mean": "avg_wind_speed",
-                "wind_speed_max": "max_wind_speed",
-                "relative_humidity_mean": "avg_relative_humidity",
-                "air_pressure_at_sea_level_mean": "avg_pressure",
-                "cloud_area_fraction_mean": "avg_cloud_fraction",
-                "symbol_code_<lambda>": "dominant_weather_symbol",
-            }
-        )
-
-        # Reset index to make 'time' a column again, rename to 'date'
-        result = aggregated.reset_index().rename(columns={"time": "date"})
-
-        # Convert to timezone-naive to match SILO data format (SILO uses naive timestamps)
-        # This prevents "Cannot compare tz-naive and tz-aware timestamps" errors during merge
+        # Convert to timezone-naive to match SILO data format (SILO uses naive
+        # timestamps); prevents tz-aware/naive comparison errors during merge.
         result["date"] = result["date"].dt.tz_localize(None)
 
         return result
+
+    def _get_dominant_symbol_series(self, symbols: "pd.Series") -> Optional[str]:
+        """Aggregation adaptor: pick the dominant symbol from a pandas Series."""
+        return self._get_dominant_symbol(symbols.dropna().tolist())
 
     def _get_dominant_symbol(self, symbols: List[str]) -> Optional[str]:
         """
@@ -477,64 +457,46 @@ class MetNoAPI:
     def to_dataframe(
         self,
         response: MetNoResponse,
-        frequency: str = "daily",
-        aggregate_to_daily: Optional[bool] = None,
+        daily: bool = True,
     ) -> pd.DataFrame:
         """
-        Convert met.no response to pandas DataFrame with flexible aggregation.
+        Convert a met.no response to a pandas DataFrame.
+
+        There are exactly two output modes:
+
+        - ``daily=True`` (default): aggregate the hourly forecast to daily
+          summaries. Columns use canonical SILO names (``daily_rain``,
+          ``max_temp``, ``min_temp``, ``mslp``, plus met.no-only extras such as
+          ``relative_humidity``, ``wind_speed``). Driven by the ``VARIABLES``
+          registry — see :meth:`_aggregate_daily`.
+        - ``daily=False``: the raw hourly forecast with the **raw met.no field
+          names** exactly as returned by the API (``air_temperature``,
+          ``precipitation_amount``, ``wind_speed``, ``symbol_code``, ...).
 
         Args:
-            response: MetNoResponse from API
-            frequency: Aggregation frequency: 'hourly', 'daily' (default), 'weekly', 'monthly'
-                      Pandas frequency codes also accepted: 'D', 'W', 'M'
-            aggregate_to_daily: Deprecated. Use frequency='daily' or frequency='hourly' instead.
-                               For backwards compatibility, if set to False, uses frequency='hourly'
+            response: MetNoResponse from the API
+            daily: If True, return daily canonical summaries; if False, return
+                raw hourly values with raw met.no names.
 
         Returns:
-            DataFrame with weather data at the specified frequency
+            DataFrame with weather data, daily or raw.
 
         Example:
             >>> response = api.query_forecast(query)
-            >>> # Daily aggregation (default)
-            >>> daily_df = api.to_dataframe(response)
-            >>> # Hourly data
-            >>> hourly_df = api.to_dataframe(response, frequency='hourly')
-            >>> # Weekly aggregation
-            >>> weekly_df = api.to_dataframe(response, frequency='weekly')
+            >>> daily_df = api.to_dataframe(response)            # canonical daily
+            >>> raw_df = api.to_dataframe(response, daily=False)  # raw met.no names
         """
-        # Handle deprecated aggregate_to_daily parameter
-        if aggregate_to_daily is not None:
-            logger.warning(
-                "aggregate_to_daily parameter is deprecated. Use frequency='daily' or frequency='hourly' instead."
-            )
-            frequency = "daily" if aggregate_to_daily else "hourly"
-
-        # Convert to DataFrame first (always)
         timeseries = response.get_timeseries()
         df = self._timeseries_to_dataframe(timeseries)
 
-        # Normalize frequency parameter
-        freq_map = {
-            "hourly": None,  # No aggregation
-            "daily": "D",
-            "weekly": "W",
-            "monthly": "M",
-            "D": "D",
-            "W": "W",
-            "M": "M",
-        }
+        if daily:
+            return self._aggregate_daily(df)
 
-        freq = freq_map.get(frequency.lower() if isinstance(frequency, str) else frequency)
-
-        if freq is None:
-            # Return hourly data (no aggregation)
-            # Convert to timezone-naive to match SILO format
-            if "time" in df.columns:
-                df["time"] = df["time"].dt.tz_localize(None)
-            return df
-
-        # Aggregate using pandas resample
-        return self._resample(df, freq)
+        # Raw hourly values with raw met.no names. Make timezone-naive to match
+        # SILO format and the daily output.
+        if "time" in df.columns:
+            df["time"] = df["time"].dt.tz_localize(None)
+        return df
 
     def clear_cache(self) -> None:
         """

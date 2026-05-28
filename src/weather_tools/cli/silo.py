@@ -1,28 +1,34 @@
-"""SILO API CLI commands."""
+"""SILO API CLI commands.
 
+The ``patched-point`` and ``data-drill`` commands are thin downloaders: they
+build a Pydantic query from CLI options (auto-derived from ``PatchedPointQuery``
+/ ``DataDrillQuery`` via :func:`from_pydantic`), call the low-level API, and
+write the raw SILO response body to disk. There is no format-driven branching
+and no DataFrame round-trip — the CLI is a downloader, not a data adapter.
+
+For analysis use cases (pandas DataFrames + metadata) use the Python API:
+``SiloAPI().get_patched_point(...)`` and ``SiloAPI().get_data_drill(...)``.
+"""
+
+import json
 import logging
 from pathlib import Path
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Literal, Optional
 
 import typer
 from pydantic import ValidationError
 
-from weather_tools.cli.date_utils import iso_to_silo_yyyymmdd_option, silo_yyyymmdd_to_iso
+from weather_tools.cli.pydantic_typer import from_pydantic
 from weather_tools.config import get_cache_dir
 from weather_tools.silo_api import SiloAPI, SiloAPIError
 from weather_tools.silo_models import (
-    AustralianCoordinates,
     DataDrillQuery,
     PatchedPointQuery,
-    SiloDateRange,
     SiloFormat,
+    SiloResponse,
 )
-from weather_tools.silo_variables import VARIABLES
 
 logger = logging.getLogger(__name__)
-
-# Valid variable names for validation (SILO-only variables, not met.no-only)
-VALID_VARIABLES = VARIABLES.silo_variables()
 
 silo_app = typer.Typer(
     name="silo",
@@ -31,32 +37,119 @@ silo_app = typer.Typer(
 )
 
 
+# ---------------------------------------------------------------------------
+# Format → output-extension mapping. The CLI coerces --output's extension to
+# match --format so users don't end up with foo.json containing CSV bytes.
+# ---------------------------------------------------------------------------
+
+_FORMAT_EXTENSIONS: dict[SiloFormat, str] = {
+    SiloFormat.CSV: ".csv",
+    SiloFormat.JSON: ".json",
+    SiloFormat.APSIM: ".apsim",
+    SiloFormat.STANDARD: ".txt",
+    SiloFormat.ALLDATA: ".txt",
+}
+
+_PATCHED_POINT_DATA_FORMATS = {
+    SiloFormat.CSV,
+    SiloFormat.JSON,
+    SiloFormat.APSIM,
+    SiloFormat.STANDARD,
+}
+_DATA_DRILL_DATA_FORMATS = {
+    SiloFormat.CSV,
+    SiloFormat.JSON,
+    SiloFormat.APSIM,
+    SiloFormat.ALLDATA,
+    SiloFormat.STANDARD,
+}
+
+
+def _resolve_output_path(output: Optional[str], format: SiloFormat) -> Optional[Path]:
+    """Coerce ``output``'s extension to match the SILO response format.
+
+    Returns ``None`` if no output path was supplied. Otherwise returns a Path
+    whose suffix matches :data:`_FORMAT_EXTENSIONS`, replacing any existing
+    suffix or appending one if the user gave a bare filename.
+    """
+    if not output:
+        return None
+    path = Path(output)
+    expected = _FORMAT_EXTENSIONS.get(format)
+    if expected is None:
+        return path
+    if path.suffix.lower() != expected:
+        path = path.with_suffix(expected)
+    return path
+
+
+def _materialise_response(response: SiloResponse) -> str:
+    """Turn a SILO response body into text for writing to disk verbatim.
+
+    JSON responses come back as dicts (parsed in ``SiloAPI._parse_response``);
+    everything else is already text. We re-serialise JSON with ``json.dumps``
+    so the on-disk file preserves SILO's native response shape rather than a
+    pandas-flattened approximation.
+    """
+    raw = response.raw_data
+    if isinstance(raw, str):
+        return raw
+    return json.dumps(raw, indent=2)
+
+
+def _write_or_echo(text: str, output_path: Optional[Path]) -> None:
+    """Write the response to disk if a path was given, otherwise echo (truncated)."""
+    if output_path:
+        output_path.write_text(text)
+        typer.echo(f"💾 Saved to: {output_path.absolute()}")
+        return
+    typer.echo("\n📄 Result:")
+    if len(text) > 500:
+        typer.echo(text[:500] + "\n... (truncated)")
+    else:
+        typer.echo(text)
+
+
+def _build_api(
+    api_key: Optional[str],
+    enable_cache: bool,
+    cache_dir: Optional[str],
+    log_level: str,
+) -> SiloAPI:
+    """Construct the API client from CLI-only knobs."""
+    cache_kwargs: dict = {"enable_cache": enable_cache}
+    if cache_dir:
+        cache_kwargs["cache_dir"] = cache_dir
+    if api_key:
+        return SiloAPI(api_key=api_key, log_level=log_level, **cache_kwargs)
+    return SiloAPI(log_level=log_level, **cache_kwargs)
+
+
+def _report_cache(api: SiloAPI, enable_cache: bool) -> None:
+    if not enable_cache:
+        return
+    disk_usage = api.get_cache_disk_usage()
+    typer.echo(
+        f"📦 Cache: {api.get_cache_size()} entries"
+        f"{f', {disk_usage / 1024:.1f} KB on disk' if disk_usage else ''}. "
+        "Clear with: weather-tools silo cache --clear"
+    )
+
+
+# ---------------------------------------------------------------------------
+# patched-point — auto-derived from PatchedPointQuery
+# ---------------------------------------------------------------------------
+
+
 @silo_app.command(name="patched-point")
+@from_pydantic(
+    PatchedPointQuery,
+    format_choices=_PATCHED_POINT_DATA_FORMATS,
+    field_aliases={"variables": "--var"},
+    skip={"radius", "name_fragment"},
+)
 def silo_patched_point(
-    station: Annotated[
-        str, typer.Option(help="BOM station code (e.g., '30043' for Brisbane Aero)")
-    ],
-    start_date: Annotated[
-        str,
-        typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
-    ],
-    end_date: Annotated[
-        str,
-        typer.Option(help="End date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
-    ],
-    format: Annotated[
-        Optional[str],
-        typer.Option(
-            help="Output format: csv, json, apsim, standard (auto-detected from filename if not specified)"
-        ),
-    ] = None,
-    variables: Annotated[
-        Optional[List[str]],
-        typer.Option(
-            "--var",
-            help=f"Climate variables: {', '.join(VALID_VARIABLES)}",
-        ),
-    ] = None,
+    query: PatchedPointQuery,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[
         Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
@@ -70,169 +163,46 @@ def silo_patched_point(
     ] = None,
     log_level: Annotated[
         str,
-        typer.Option(
-            "--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)"
-        ),
+        typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG)"),
     ] = "INFO",
 ) -> None:
-    """
-    Query SILO PatchedPoint dataset (station-based data).
+    """Download SILO PatchedPoint data (station observations with infilled gaps).
 
-    Format is auto-detected from output filename extension:
-    - .csv → csv format
-    - .json → json format  
-    - .apsim → apsim format
-    - .txt → standard format
-    
-    Use 'weather-tools silo search' to find station codes by name.
-    
+    Variables, station, dates, and format come from the underlying
+    ``PatchedPointQuery`` model — that's the single source of truth for what's
+    valid. The response body is written to ``--output`` verbatim; for JSON, the
+    file contains SILO's native shape (with metadata block) rather than a
+    pandas-flattened approximation.
+
+    Use ``weather-tools silo search`` to find station codes by name.
+
     Examples:
-        # Get rainfall and temperature for Brisbane Aero (format auto-detected)
-        weather-tools silo patched-point --station 30043 \\
+
+        weather-tools silo patched-point --station-code 30043 \\
             --start-date 2023-01-01 --end-date 2023-01-31 \\
-            --var rainfall --var max_temp --var min_temp --output data.csv
-        
-        # Get all variables in APSIM format
-        weather-tools silo patched-point --station 30043 \\
+            --var daily_rain --var max_temp -o data.csv
+
+        weather-tools silo patched-point --station-code 30043 \\
             --start-date 2023-01-01 --end-date 2023-01-31 \\
-            --output data.apsim
-            
-        # Force specific format (extension will be corrected)
-        weather-tools silo patched-point --station 30043 \\
-            --start-date 2023-01-01 --end-date 2023-01-31 \\
-            --format json --output data.json
+            --format apsim -o data.apsim
     """
-
-    # Format detection and validation
-    valid_formats = ["csv", "json", "apsim", "standard"]
-
-    # Detect format from output file extension if format not specified
-    if format is None and output:
-        output_path = Path(output)
-        suffix = output_path.suffix.lower()
-        if suffix == ".csv":
-            format = "csv"
-        elif suffix == ".json":
-            format = "json"
-        elif suffix == ".apsim":
-            format = "apsim"
-        elif suffix == ".txt":
-            format = "standard"
-        else:
-            format = "csv"  # Default fallback
-    elif format is None:
-        format = "csv"  # Default when no output file specified
-
-    # Validate format
-    if format not in valid_formats:
-        typer.echo(
-            f"❌ Error: Invalid format '{format}'. Valid formats: {', '.join(valid_formats)}",
-            err=True,
-        )
-        typer.echo("   Use 'weather-tools silo search' for station search operations", err=True)
-        raise typer.Exit(1)
-
-    # Adjust output filename to match format
-    if output:
-        output_path = Path(output)
-        format_extensions = {"csv": ".csv", "json": ".json", "apsim": ".apsim", "standard": ".txt"}
-        expected_ext = format_extensions[format]
-
-        # Force correct extension
-        if not output_path.suffix or output_path.suffix.lower() != expected_ext:
-            if output_path.suffix:
-                # Replace existing extension
-                output = str(output_path.with_suffix(expected_ext))
-            else:
-                # Add extension
-                output = str(output_path) + expected_ext
-
     try:
-        # Handle default variables
-        if variables is None:
-            variables = VALID_VARIABLES.copy()
-
-        # Validate variable names
-        invalid_vars = [v for v in variables if v not in VARIABLES]
-        if invalid_vars:
-            typer.echo(f"❌ Invalid variable names: {', '.join(invalid_vars)}", err=True)
-            typer.echo(f"   Valid options: {', '.join(VALID_VARIABLES)}", err=True)
-            raise typer.Exit(1)
-
-        # Initialize API
-        cache_kwargs = {"enable_cache": enable_cache}
-        if cache_dir:
-            cache_kwargs["cache_dir"] = cache_dir
-        if api_key:
-            api = SiloAPI(api_key=api_key, log_level=log_level, **cache_kwargs)
-        else:
-            api = SiloAPI(log_level=log_level, **cache_kwargs)
+        output_path = _resolve_output_path(output, SiloFormat(query.format))
+        api = _build_api(api_key, enable_cache, cache_dir, log_level)
 
         typer.echo("🌐 Querying SILO PatchedPoint dataset...")
-        typer.echo(f"   Station: {station}")
-        typer.echo(
-            f"   Date Range: {silo_yyyymmdd_to_iso(start_date)} to {silo_yyyymmdd_to_iso(end_date)}"
-        )
-        typer.echo(f"   Format: {format}")
-
-        # Branch: CSV/JSON use convenience methods, APSIM/standard use low-level API
-        if format in ["csv", "json"]:
-            df, _ = api.get_patched_point(
-                station_code=station,
-                start_date=start_date,
-                end_date=end_date,
-                variables=variables,
-                format=format,
-            )
-
-            typer.echo("✅ Query successful!")
-
-            # Convert DataFrame to output format
-            if format == "csv":
-                result_text = df.to_csv(index=False)
-            else:  # json
-                result_text = df.to_json(orient="records", date_format="iso")
-        else:
-            # Use low-level Pydantic API for APSIM/standard formats
-            # Convert readable names to SILO codes
-            valid_variables = [v for v in variables if v in VALID_VARIABLES]
-
-            # variable_enums = [ClimateVariable(code) for code in variable_codes]
-
-            # Build query using Pydantic model
-            query = PatchedPointQuery(
-                format=SiloFormat(format),
-                station_code=station,
-                date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-                values=valid_variables,
-            )
-
-            response = api.query_patched_point(query)
-
-            typer.echo("✅ Query successful!")
-
-            # Output results
-            result_text = response.to_csv()
-
-        if output:
-            output_path = Path(output)
-            output_path.write_text(result_text)
-            typer.echo(f"💾 Saved to: {output_path.absolute()}")
-        else:
-            typer.echo("\n📄 Result:")
-            # Print first 500 chars to avoid overwhelming terminal
-            if len(result_text) > 500:
-                typer.echo(result_text[:500] + "\n... (truncated)")
-            else:
-                typer.echo(result_text)
-
-        if enable_cache:
-            disk_usage = api.get_cache_disk_usage()
+        typer.echo(f"   Station: {query.station_code}")
+        if query.date_range is not None:
             typer.echo(
-                f"📦 Cache: {api.get_cache_size()} entries"
-                f"{f', {disk_usage / 1024:.1f} KB on disk' if disk_usage else ''}. "
-                "Clear with: weather-tools silo cache --clear"
+                f"   Date Range: {query.date_range.start_date} → {query.date_range.end_date}"
             )
+        typer.echo(f"   Format: {query.format}")
+
+        response = api.query_patched_point(query)
+        typer.echo("✅ Query successful!")
+
+        _write_or_echo(_materialise_response(response), output_path)
+        _report_cache(api, enable_cache)
 
     except ValidationError as e:
         typer.echo("❌ Validation error:", err=True)
@@ -242,33 +212,21 @@ def silo_patched_point(
     except SiloAPIError as e:
         typer.echo(f"❌ API Error: {e}", err=True)
         raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"❌ Unexpected error: {e}", err=True)
-        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# data-drill — auto-derived from DataDrillQuery
+# ---------------------------------------------------------------------------
 
 
 @silo_app.command(name="data-drill")
+@from_pydantic(
+    DataDrillQuery,
+    format_choices=_DATA_DRILL_DATA_FORMATS,
+    field_aliases={"variables": "--var"},
+)
 def silo_data_drill(
-    latitude: Annotated[float, typer.Option(help="Latitude in decimal degrees (-44 to -10)")],
-    longitude: Annotated[float, typer.Option(help="Longitude in decimal degrees (113 to 154)")],
-    start_date: Annotated[
-        str,
-        typer.Option(help="Start date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
-    ],
-    end_date: Annotated[
-        str,
-        typer.Option(help="End date (YYYY-MM-DD)", callback=iso_to_silo_yyyymmdd_option),
-    ],
-    format: Annotated[
-        str, typer.Option(help="Output format: csv, json, apsim, alldata, standard")
-    ] = "csv",
-    variables: Annotated[
-        Optional[List[str]],
-        typer.Option(
-            "--var",
-            help=f"Climate variables: {', '.join(VALID_VARIABLES)}",
-        ),
-    ] = None,
+    query: DataDrillQuery,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     api_key: Annotated[
         Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
@@ -282,111 +240,35 @@ def silo_data_drill(
     ] = None,
     log_level: Annotated[
         str,
-        typer.Option(
-            "--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)"
-        ),
+        typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG)"),
     ] = "INFO",
 ) -> None:
-    """
-    Query SILO DataDrill dataset (gridded data).
-    
+    """Download SILO DataDrill data (gridded data interpolated to any lat/lon).
+
     Examples:
-        # Get rainfall for a specific location
+
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\
             --start-date 2023-01-01 --end-date 2023-01-31 \\
-            --var rainfall --output data.csv
-        
-        # Get all variables for a location
+            --var daily_rain -o data.csv
+
         weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \\
             --start-date 2023-01-01 --end-date 2023-01-31 \\
-            --format alldata --output data.txt
+            --format alldata -o data.txt
     """
-
     try:
-        # Handle default variables
-        if variables is None:
-            variables = VALID_VARIABLES.copy()
-
-        # Validate variable names
-        invalid_vars = [v for v in variables if v not in VARIABLES]
-        if invalid_vars:
-            typer.echo(f"❌ Invalid variable names: {', '.join(invalid_vars)}", err=True)
-            typer.echo(f"   Valid options: {', '.join(VALID_VARIABLES)}", err=True)
-            raise typer.Exit(1)
-
-        # Initialize API
-        cache_kwargs = {"enable_cache": enable_cache}
-        if cache_dir:
-            cache_kwargs["cache_dir"] = cache_dir
-        if api_key:
-            api = SiloAPI(api_key=api_key, log_level=log_level, **cache_kwargs)
-        else:
-            api = SiloAPI(log_level=log_level, **cache_kwargs)
+        output_path = _resolve_output_path(output, SiloFormat(query.format))
+        api = _build_api(api_key, enable_cache, cache_dir, log_level)
 
         typer.echo("🌐 Querying SILO DataDrill dataset...")
-        typer.echo(f"   Location: {latitude}°S, {longitude}°E")
-        typer.echo(
-            f"   Date Range: {silo_yyyymmdd_to_iso(start_date)} to {silo_yyyymmdd_to_iso(end_date)}"
-        )
-        typer.echo(f"   Format: {format}")
+        typer.echo(f"   Location: {query.coordinates.latitude}°, {query.coordinates.longitude}°")
+        typer.echo(f"   Date Range: {query.date_range.start_date} → {query.date_range.end_date}")
+        typer.echo(f"   Format: {query.format}")
 
-        # Branch: CSV/JSON use convenience methods, APSIM/alldata/standard use low-level API
-        if format in ["csv", "json"]:
-            df, _ = api.get_data_drill(
-                latitude=latitude,
-                longitude=longitude,
-                start_date=start_date,
-                end_date=end_date,
-                variables=variables,
-                format=format,
-            )
+        response = api.query_data_drill(query)
+        typer.echo("✅ Query successful!")
 
-            typer.echo("✅ Query successful!")
-
-            # Convert DataFrame to output format
-            if format == "csv":
-                result_text = df.to_csv(index=False)
-            else:  # json
-                result_text = df.to_json(orient="records", date_format="iso")
-        else:
-            # Use low-level Pydantic API for APSIM/alldata/standard formats
-            # Convert readable names to SILO codes
-            valid_variables = [v for v in variables if v in VALID_VARIABLES]
-
-            # Build query using Pydantic model
-            query = DataDrillQuery(
-                coordinates=AustralianCoordinates(latitude=latitude, longitude=longitude),
-                date_range=SiloDateRange(start_date=start_date, end_date=end_date),
-                format=SiloFormat(format),
-                values=valid_variables,
-            )
-
-            response = api.query_data_drill(query)
-
-            typer.echo("✅ Query successful!")
-
-            # Output results
-            result_text = response.to_csv()
-
-        if output:
-            output_path = Path(output)
-            output_path.write_text(result_text)
-            typer.echo(f"💾 Saved to: {output_path.absolute()}")
-        else:
-            typer.echo("\n📄 Result:")
-            # Print first 500 chars to avoid overwhelming terminal
-            if len(result_text) > 500:
-                typer.echo(result_text[:500] + "\n... (truncated)")
-            else:
-                typer.echo(result_text)
-
-        if enable_cache:
-            disk_usage = api.get_cache_disk_usage()
-            typer.echo(
-                f"📦 Cache: {api.get_cache_size()} entries"
-                f"{f', {disk_usage / 1024:.1f} KB on disk' if disk_usage else ''}. "
-                "Clear with: weather-tools silo cache --clear"
-            )
+        _write_or_echo(_materialise_response(response), output_path)
+        _report_cache(api, enable_cache)
 
     except ValidationError as e:
         typer.echo("❌ Validation error:", err=True)
@@ -396,9 +278,12 @@ def silo_data_drill(
     except SiloAPIError as e:
         typer.echo(f"❌ API Error: {e}", err=True)
         raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"❌ Unexpected error: {e}", err=True)
-        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# search — uses PatchedPointQuery directly (NAME/NEAR/ID formats). Kept as-is
+# because it already follows the Pydantic-first pattern.
+# ---------------------------------------------------------------------------
 
 
 @silo_app.command(name="search")
@@ -427,52 +312,31 @@ def silo_search(
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output filename")] = None,
     log_level: Annotated[
         str,
-        typer.Option(
-            "--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG, WARNING)"
-        ),
+        typer.Option("--log-level", help="Logging level for SILO client (e.g. INFO, DEBUG)"),
     ] = "INFO",
 ) -> None:
-    """
-    Search for SILO stations by name, location, or find nearby stations.
+    """Search for SILO stations by name, location, or find nearby stations.
 
     Examples:
-        # Search by name
+
         weather-tools silo search --name Brisbane
-
-        # Search by name and filter by state
         weather-tools silo search --name Brisbane --state QLD
-
-        # Search by coordinates (default 50km radius)
         weather-tools silo search --lat -27.47 --lon 153.03
-
-        # Search by coordinates with custom radius and name filter
         weather-tools silo search --lat -27.47 --lon 153.03 --radius 20 --name Airport
-
-        # Find nearby stations by station code
         weather-tools silo search --station 30043 --radius 50
-
-        # Get station details
         weather-tools silo search --station 30043 --details
     """
-    from pydantic import ValidationError
-
-    from weather_tools.silo_models import PatchedPointQuery, SiloFormat
-
     try:
         if api_key:
             api = SiloAPI(api_key=api_key, log_level=log_level)
         else:
             api = SiloAPI(log_level=log_level)
 
-        # Determine search type
         if details and station:
-            # Get station details - use direct API call since search_stations doesn't support this
             typer.echo(f"ℹ️ Getting details for station {station}...")
             query = PatchedPointQuery(format=SiloFormat.ID, station_code=station)
             response = api.query_patched_point(query)
-
             typer.echo("✅ Search successful!")
-
             if output:
                 output_path = Path(output)
                 output_path.write_text(response.to_csv())
@@ -482,21 +346,17 @@ def silo_search(
                 typer.echo(response.to_csv())
 
         elif lat is not None and lon is not None:
-            # Search by coordinates using search_stations_by_location
             search_radius = radius if radius is not None else 50
             typer.echo(f"🔍 Searching for stations within {search_radius}km of ({lat}, {lon})...")
             if name:
                 typer.echo(f"   Filtering by name: '{name}'")
-
             df = api.search_stations_by_location(
                 latitude=lat,
                 longitude=lon,
                 radius_km=search_radius,
                 name_fragment=name,
             )
-
             typer.echo(f"✅ Found {len(df)} station(s)!")
-
             if output:
                 output_path = Path(output)
                 df.to_csv(output_path, index=False)
@@ -510,15 +370,11 @@ def silo_search(
             raise typer.Exit(1)
 
         elif name:
-            # Search by name using the search_stations method
             typer.echo(f"🔍 Searching for stations matching '{name}'...")
             if state:
                 typer.echo(f"   Filtering by state: {state}")
-
             df = api.search_stations(name_fragment=name, state=state)
-
             typer.echo(f"✅ Found {len(df)} station(s)!")
-
             if output:
                 output_path = Path(output)
                 df.to_csv(output_path, index=False)
@@ -528,13 +384,9 @@ def silo_search(
                 typer.echo(df.to_string(index=False))
 
         elif station and radius is not None:
-            # Nearby search using the search_stations method
             typer.echo(f"🔍 Searching for stations near {station} within {radius}km...")
-
             df = api.search_stations(station_code=station, radius_km=radius)
-
             typer.echo(f"✅ Found {len(df)} station(s)!")
-
             if output:
                 output_path = Path(output)
                 df.to_csv(output_path, index=False)
@@ -545,7 +397,8 @@ def silo_search(
 
         else:
             typer.echo(
-                "❌ Error: Provide --name for name search, --lat --lon for location search, --station --radius for nearby search, or --station --details for info",
+                "❌ Error: Provide --name for name search, --lat --lon for location search, "
+                "--station --radius for nearby search, or --station --details for info",
                 err=True,
             )
             raise typer.Exit(1)
@@ -558,9 +411,11 @@ def silo_search(
     except SiloAPIError as e:
         typer.echo(f"❌ API Error: {e}", err=True)
         raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"❌ Error: {e}", err=True)
-        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# cache — unchanged CLI plumbing
+# ---------------------------------------------------------------------------
 
 
 @silo_app.command(name="cache")
@@ -573,14 +428,11 @@ def silo_cache(
         ),
     ] = None,
 ) -> None:
-    """
-    View or manage the SILO API response cache.
+    """View or manage the SILO API response cache.
 
     Examples:
-        # Show cache info
-        weather-tools silo cache
 
-        # Clear the cache
+        weather-tools silo cache
         weather-tools silo cache --clear
     """
     import diskcache

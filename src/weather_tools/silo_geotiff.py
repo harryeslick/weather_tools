@@ -10,7 +10,9 @@ GeoTIFF files from AWS S3, with support for:
 """
 
 import datetime
+import hashlib
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
@@ -26,12 +28,11 @@ from shapely.geometry import Point, Polygon
 
 from weather_tools.config import get_silo_data_dir
 from weather_tools.logging_utils import configure_logging, create_download_progress, get_console
-from weather_tools.silo_variables import (
+from weather_tools.variable_register import (
     DEFAULT_GEOTIFF_TIMEOUT,
     SILO_GEOTIFF_BASE_URL,
     VARIABLES,
     SiloGeoTiffError,
-    VariableInput,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,24 @@ def _ensure_logging_configured():
     has_rich_handler = any(isinstance(h, RichHandler) for h in root_logger.handlers)
     if not has_rich_handler:
         configure_logging()
+
+
+def _generate_month_range(
+    start_date: datetime.date, end_date: datetime.date
+) -> List[tuple[int, int]]:
+    """Return (year, month) pairs from start_date to end_date (inclusive, monthly cadence)."""
+    months = []
+    year, month = start_date.year, start_date.month
+    end_year, end_month = end_date.year, end_date.month
+    today = datetime.date.today()
+    while (year, month) <= (end_year, end_month):
+        if datetime.date(year, month, 1) < today:
+            months.append((year, month))
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+    return months
 
 
 def _generate_date_range(start_date: datetime.date, end_date: datetime.date) -> List[datetime.date]:
@@ -131,6 +150,39 @@ def construct_geotiff_monthly_url(variable: str, year: int, month: int) -> str:
     date_str = f"{year:04d}{month:02d}"
 
     return f"{SILO_GEOTIFF_BASE_URL}/monthly/{var_name}/{year}/{date_str}.{var_name}.tif"
+
+
+def subset_cache_key(
+    geometry: Optional[Union[Point, Polygon]],
+    overview_level: Optional[int],
+) -> Optional[str]:
+    """Derive a stable cache key for a clipped/down-sampled GeoTIFF request.
+
+    The on-disk bytes of a downloaded GeoTIFF depend not only on variable and date
+    (which are encoded in the file path) but also on the ``geometry`` it was clipped
+    to and the ``overview_level`` it was read at. This key folds those two parameters
+    into a short deterministic token so that different subset requests resolve to
+    different cache paths and are never silently reused for one another.
+
+    Returns ``None`` for a full-resolution, unclipped request (``geometry is None`` and
+    ``overview_level is None``). Such files keep the plain ``{date}.{var}.tif`` path so
+    the cache stays backward compatible and readable by plain SILO tooling.
+
+    Args:
+        geometry: Optional shapely geometry the file was clipped to.
+        overview_level: Optional pyramid level the file was read at.
+
+    Returns:
+        A 16-character hex token, or ``None`` for the full-file case.
+    """
+    if geometry is None and overview_level is None:
+        return None
+
+    # geometry.wkt is a canonical, stable text encoding of the geometry, so identical
+    # geometries hash identically regardless of object identity.
+    geom_repr = geometry.wkt if geometry is not None else ""
+    payload = f"{geom_repr}|{overview_level}".encode()
+    return hashlib.sha1(payload, usedforsecurity=False).hexdigest()[:16]
 
 
 def read_cog(
@@ -251,13 +303,38 @@ def read_cog(
 
 
 def _download_full_geotiff(url: str, destination: Path, timeout: int) -> None:
-    """Download entire GeoTIFF file via streaming."""
-    response = requests.get(url, stream=True, timeout=timeout)
-    response.raise_for_status()
+    """Download entire GeoTIFF file via streaming.
 
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+    Uses a temp file + atomic rename so that a failed or interrupted download
+    never leaves a truncated file at the destination path.
+    Always calls response.close() so the connection is returned to the pool.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_str = tempfile.mkstemp(dir=destination.parent, suffix=".tmp")
+    tmp_path = Path(tmp_str)
+    response = requests.get(url, stream=True, timeout=timeout)
+    try:
+        response.raise_for_status()
+        with os.fdopen(fd, "wb") as f:
+            fd = -1  # fdopen took ownership
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+    except Exception:
+        if fd != -1:
+            # fdopen was never called — close the raw fd to avoid a leak
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        tmp_path.unlink(missing_ok=True)
+        tmp_path = None
+        raise
+    finally:
+        response.close()
+
+    if tmp_path is not None:
+        # Atomic rename: only reached if the full download succeeded
+        tmp_path.replace(destination)
 
 
 def _download_geotiff_subset(
@@ -266,11 +343,27 @@ def _download_geotiff_subset(
     geometry: Union[Point, Polygon, None],
     overview_level=None,
 ) -> None:
-    """Download and clip GeoTIFF to geometry subset."""
+    """Download and clip GeoTIFF to geometry subset.
+
+    Writes to a temp file then renames atomically so that a failure mid-write
+    never leaves a truncated file at the destination path.
+    """
     data, profile = read_cog(url, geometry, overview_level=overview_level)
 
-    with rasterio.open(destination, "w", **profile) as dst:
-        dst.write(data, 1)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_str = tempfile.mkstemp(dir=destination.parent, suffix=".tmp")
+    tmp_path = Path(tmp_str)
+    try:
+        os.close(fd)  # rasterio will open by path, not by fd
+        with rasterio.open(tmp_path, "w", **profile) as dst:
+            dst.write(data, 1)
+        # Atomic rename: only reached if the full write succeeded
+        tmp_path.replace(destination)
+        tmp_path = None
+    except Exception:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def download_geotiff_with_subset(
@@ -341,7 +434,7 @@ def download_geotiff_with_subset(
 
 
 def download_geotiffs(
-    variables: VariableInput,
+    variables: str | list[str],
     start_date: datetime.date,
     end_date: datetime.date,
     geometry: Union[Point, Polygon],
@@ -360,9 +453,8 @@ def download_geotiffs(
     enable efficient reuse, with temporary storage available for one-off queries.
 
     Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
+        variables: Canonical variable name ("daily_rain", "max_temp", etc.) or a
+                  list of canonical names. Each variable must be specified explicitly.
         start_date: First date (inclusive)
         end_date: Last date (inclusive)
         geometry: Shapely geometry (Point or Polygon) for spatial subsetting.
@@ -450,20 +542,37 @@ def download_geotiffs(
         # Files persist across function calls and even across sessions until system reboot
         cache_dir = Path(tempfile.gettempdir()) / "weather_tools_cache" / "geotiff"
 
+    # Files clipped to a geometry or read at an overview level have request-specific
+    # bytes, so they are namespaced under a _subset_<key> directory to keep their cache
+    # entries distinct from each other and from the full-resolution file (key is None).
+    cache_key = subset_cache_key(geometry, overview_level)
+    subset_subdir = f"_subset_{cache_key}" if cache_key is not None else None
+
     # Build download task list
     download_tasks = []
     file_paths = {var: [] for var in metadata_map.keys()}
-    for var_name, _ in metadata_map.items():
-        for date in date_list:
-            # Construct URL and destination path
-            url = construct_geotiff_daily_url(var_name, date)
-            dest_path = (
-                cache_dir / var_name / str(date.year) / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
-            )
-
-            file_paths[var_name].append(dest_path)
-            if not dest_path.exists() or force:
-                download_tasks.append((var_name, date, url, dest_path))
+    for var_name, metadata in metadata_map.items():
+        if metadata.granularity == "monthly":
+            month_list = _generate_month_range(start_date, end_date)
+            for year, month in month_list:
+                url = construct_geotiff_monthly_url(var_name, year, month)
+                year_dir = cache_dir / var_name / str(year)
+                if subset_subdir is not None:
+                    year_dir = year_dir / subset_subdir
+                dest_path = year_dir / f"{year:04d}{month:02d}.{var_name}.tif"
+                file_paths[var_name].append(dest_path)
+                if not dest_path.exists() or force:
+                    download_tasks.append((var_name, datetime.date(year, month, 1), url, dest_path))
+        else:
+            for date in date_list:
+                url = construct_geotiff_daily_url(var_name, date)
+                year_dir = cache_dir / var_name / str(date.year)
+                if subset_subdir is not None:
+                    year_dir = year_dir / subset_subdir
+                dest_path = year_dir / f"{date.strftime('%Y%m%d')}.{var_name}.tif"
+                file_paths[var_name].append(dest_path)
+                if not dest_path.exists() or force:
+                    download_tasks.append((var_name, date, url, dest_path))
 
     # Download files with progress bar
     downloaded_files = {var: set() for var in metadata_map.keys()}
@@ -606,7 +715,7 @@ def read_geotiff_stack(
 
 
 def download_and_read_geotiffs(
-    variables: VariableInput,
+    variables: str | list[str],
     start_date: datetime.date,
     end_date: datetime.date,
     geometry: Union[Point, Polygon],
@@ -626,9 +735,8 @@ def download_and_read_geotiffs(
     Use `download_geotiffs()` and `read_geotiff_stack()` separately for more control.
 
     Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
+        variables: Canonical variable name ("daily_rain", "max_temp", etc.) or a
+                  list of canonical names. Each variable must be specified explicitly.
         start_date: First date (inclusive)
         end_date: Last date (inclusive)
         geometry: Shapely geometry (Point or Polygon) for spatial subsetting.

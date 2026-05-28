@@ -41,11 +41,11 @@ print(response.get_meta())
 The API returns hourly forecasts in GeoJSON format. Use `MetNoAPI.to_dataframe` to convert the payload into either daily summaries or the raw hourly table:
 
 ```python
-daily_df = api.to_dataframe(response, aggregate_to_daily=True)
-hourly_df = api.to_dataframe(response, aggregate_to_daily=False)
+daily_df = api.to_dataframe(response, daily=True)
+hourly_df = api.to_dataframe(response, daily=False)
 ```
 
-- Daily data mirrors the `DailyWeatherSummary` model, providing min/max temperature, total precipitation, wind statistics, humidity, pressure, cloud cover, and the dominant weather symbol.
+- Daily data mirrors the `MetNoForecastSchema`, providing min/max temperature, total precipitation, wind statistics, humidity, pressure, cloud cover, and the dominant weather symbol.
 - Hourly data preserves the original timestamps alongside instantaneous variables and precipitation totals for the next 1/6/12 hours.
 
 ### Convenience Helper: `get_daily_forecast`
@@ -56,7 +56,7 @@ For common use cases you can skip manual query construction:
 daily = api.get_daily_forecast(latitude=-33.94, longitude=151.18, days=7)
 ```
 
-This method returns a list of `DailyWeatherSummary` models and automatically truncates the forecast horizon (met.no serves up to 9 days).
+This method returns a pandas DataFrame with daily forecasts and automatically truncates the forecast horizon (met.no serves up to 9 days).
 
 ## Configuration Options
 
@@ -115,7 +115,6 @@ from weather_tools.merge_weather_data import merge_historical_and_forecast
 merged = merge_historical_and_forecast(
     silo_data=silo_history_dataframe,
     metno_data=daily_df,
-    fill_missing=True,
     overlap_strategy="prefer_silo",
 )
 ```

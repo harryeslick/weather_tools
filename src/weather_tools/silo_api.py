@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from zoneinfo import ZoneInfo
 
 import diskcache
 import pandas as pd
@@ -34,11 +35,23 @@ from weather_tools.silo_models import (
     SiloFormat,
     SiloResponse,
 )
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.variable_register import VARIABLES
 
 SILO_BASE_URL = "https://www.longpaddock.qld.gov.au/cgi-bin/silo/"
 
 logger = logging.getLogger(__name__)
+
+_BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
+
+
+def _is_silo_maintenance_window() -> bool:
+    """Return True if the current Brisbane time falls in SILO's scheduled maintenance window.
+
+    SILO may be unavailable Wednesday and Thursday 11:00–13:00 Brisbane time (AEST, UTC+10).
+    """
+    now = datetime.now(_BRISBANE_TZ)
+    # weekday(): Monday=0 … Sunday=6; Wednesday=2, Thursday=3
+    return now.weekday() in (2, 3) and 11 <= now.hour < 13
 
 
 class SiloAPIError(Exception):
@@ -71,22 +84,22 @@ class SiloAPI:
 
     Examples:
         >>> # Query station data (using environment variable SILO_API_KEY)
-        >>> from weather_tools.silo_models import PatchedPointQuery, SiloDateRange, ClimateVariable
+        >>> from weather_tools.silo_models import PatchedPointQuery, SiloDateRange
         >>> api = SiloAPI()  # Uses SILO_API_KEY environment variable
         >>> query = PatchedPointQuery(
         ...     station_code="30043",
         ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
-        ...     values=[ClimateVariable.RAINFALL, ClimateVariable.MAX_TEMP]
+        ...     variables=["daily_rain", "max_temp"]
         ... )
         >>> response = api.query_patched_point(query)
 
         >>> # Query gridded data (with explicit API key)
-        >>> from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates
+        >>> from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates, SiloDateRange
         >>> api = SiloAPI(api_key="user@example.com")  # Explicit API key
         >>> query = DataDrillQuery(
         ...     coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
         ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
-        ...     values=[ClimateVariable.RAINFALL]
+        ...     variables=["daily_rain"]
         ... )
         >>> response = api.query_data_drill(query)
     """
@@ -236,6 +249,13 @@ class SiloAPI:
                 logger.debug("Cache key: %s", cache_key)
                 return cached
 
+        if _is_silo_maintenance_window():
+            logger.warning(
+                "SILO scheduled maintenance: the service may be unavailable "
+                "Wednesday and Thursday 11:00–13:00 Brisbane time (AEST). "
+                "If your request fails, please try again after 1:00 pm."
+            )
+
         last_exception = None
         for attempt in range(self.max_retries):
             try:
@@ -320,13 +340,13 @@ class SiloAPI:
 
         Example:
             >>> from weather_tools.silo_models import (
-            ...     PatchedPointQuery, SiloDateRange, ClimateVariable, SiloFormat
+            ...     PatchedPointQuery, SiloDateRange, SiloFormat
             ... )
             >>> query = PatchedPointQuery(
             ...     format=SiloFormat.CSV,
             ...     station_code="30043",
             ...     date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
-            ...     values=[ClimateVariable.RAINFALL, ClimateVariable.MAX_TEMP]
+            ...     variables=["daily_rain", "max_temp"]
             ... )
             >>> response = api.query_patched_point(query)
             >>> print(response.to_csv())
@@ -454,7 +474,14 @@ class SiloAPI:
             "apsim": SiloFormat.APSIM,
             "standard": SiloFormat.STANDARD,
         }
-        silo_format = format_mapping.get(format.lower(), SiloFormat.CSV)
+        fmt_lower = format.lower()
+        if fmt_lower not in format_mapping:
+            supported = ", ".join(sorted(format_mapping.keys()))
+            raise ValueError(
+                f"Unsupported format '{format}' for get_patched_point(). "
+                f"Supported values: {supported}"
+            )
+        silo_format = format_mapping[fmt_lower]
 
         # Create query with canonical variable names
         query = PatchedPointQuery(
@@ -539,7 +566,13 @@ class SiloAPI:
             "apsim": SiloFormat.APSIM,
             "standard": SiloFormat.STANDARD,
         }
-        silo_format = format_mapping.get(format.lower(), SiloFormat.CSV)
+        fmt_lower = format.lower()
+        if fmt_lower not in format_mapping:
+            supported = ", ".join(sorted(format_mapping.keys()))
+            raise ValueError(
+                f"Unsupported format '{format}' for get_data_drill(). Supported values: {supported}"
+            )
+        silo_format = format_mapping[fmt_lower]
 
         # Create query with canonical variable names
         query = DataDrillQuery(
@@ -570,7 +603,7 @@ class SiloAPI:
     def search_stations(
         self,
         name_fragment: Optional[str] = None,
-        state: Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"] = None,
+        state: Optional[Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"]] = None,
         station_code: Optional[str] = None,
         radius_km: Optional[int] = None,
     ) -> pd.DataFrame:
@@ -579,11 +612,12 @@ class SiloAPI:
 
         Args:
             name_fragment: Partial station name to search for (e.g., "Brisbane"). Underscores can be used for wildcard searching (e.g., "Bri_ne")
-            state: State abbreviation (e.g., "QLD", "NSW", "VIC")
-            return_metadata: If True, returns tuple of (DataFrame, metadata dict)
+            state: Optional state abbreviation to filter results (e.g., "QLD", "NSW", "VIC")
+            station_code: Bureau of Meteorology station code used as the centre point when searching by radius (e.g., "30043")
+            radius_km: Search radius in kilometres. When provided, searches for stations within this radius of ``station_code``.
 
         Returns:
-            pandas.DataFrame with station information, or tuple of (DataFrame, metadata)
+            pandas.DataFrame with station information
 
         Example:
             >>> api = SiloAPI()
@@ -818,6 +852,12 @@ class SiloAPI:
         # Split into lines and remove empty lines
         raw_data = response.raw_data
         lines = [line.strip() for line in raw_data.strip().split("\n") if line.strip()]
+
+        # Return an empty, correctly-shaped DataFrame when there are no results
+        if not lines:
+            return pd.DataFrame(
+                columns=["station_code", "name", "latitude", "longitude", "state", "elevation"]
+            )
 
         # Parse header and data rows
         header_line = lines[0]

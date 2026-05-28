@@ -11,7 +11,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from weather_tools.silo_variables import VARIABLES
+from weather_tools.date_range import DateRange
+from weather_tools.variable_register import VARIABLES
 
 
 class SiloDataset(str, Enum):
@@ -45,48 +46,24 @@ class SiloFormat(str, Enum):
     ID = "id"
 
 
-class SiloDateRange(BaseModel):
+class SiloDateRange(DateRange):
+    """Date range for SILO queries — base validation plus the 1889-2100 window.
+
+    SILO's data availability begins in 1889; the upper bound of 2100 is a sanity
+    check rather than a true limit. Anything outside this window is rejected at
+    construction time so callers get an error before hitting the SILO API.
     """
-    Date range for SILO queries.
-
-    Dates must be in YYYYMMDD format and within SILO's data availability period (1889-present).
-    """
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    start_date: str = Field(
-        ..., pattern=r"^\d{8}$", description="Start date in YYYYMMDD format (e.g., '20230101')"
-    )
-    end_date: str = Field(
-        ..., pattern=r"^\d{8}$", description="End date in YYYYMMDD format (e.g., '20230131')"
-    )
 
     @field_validator("start_date", "end_date")
     @classmethod
-    def validate_date(cls, v: str) -> str:
-        """Validate date format and range."""
-        try:
-            dt = datetime.strptime(v, "%Y%m%d")
-            if not (1889 <= dt.year <= 2100):
-                raise ValueError(f"Date year must be between 1889 and 2100, got {dt.year}")
-            if dt.month < 1 or dt.month > 12:
-                raise ValueError(f"Date month must be between 01 and 12, got {dt.month}")
-            if dt.day < 1 or dt.day > 31:
-                raise ValueError(f"Date day must be between 01 and 31, got {dt.day}")
-            return v
-        except ValueError as e:
-            if "does not match format" in str(e):
-                raise ValueError(f"Date must be in YYYYMMDD format, got: {v}")
-            raise
-
-    @model_validator(mode="after")
-    def validate_date_order(self) -> "SiloDateRange":
-        """Ensure start_date is before or equal to end_date."""
-        if self.start_date > self.end_date:
-            raise ValueError(
-                f"start_date ({self.start_date}) must be before or equal to end_date ({self.end_date})"
-            )
-        return self
+    def validate_silo_year_bounds(cls, v: str) -> str:
+        """Reject dates outside SILO's data availability window."""
+        # The base class's ``validate_date`` already ran (chained via inheritance),
+        # so ``v`` is a well-formed YYYYMMDD string by this point.
+        year = int(v[:4])
+        if not (1889 <= year <= 2100):
+            raise ValueError(f"Date year must be between 1889 and 2100, got {year}")
+        return v
 
 
 class AustralianCoordinates(BaseModel):
@@ -112,7 +89,7 @@ class BaseSiloQuery(BaseModel):
     (e.g., "daily_rain", "max_temp"). These are converted to SILO API codes internally.
     """
 
-    model_config = ConfigDict(use_enum_values=True, populate_by_name=True)
+    model_config = ConfigDict(use_enum_values=True, populate_by_name=True, extra="forbid")
 
     dataset: SiloDataset
     format: SiloFormat = Field(default=SiloFormat.CSV)
@@ -124,13 +101,20 @@ class BaseSiloQuery(BaseModel):
     @field_validator("variables")
     @classmethod
     def validate_variables(cls, v: Optional[List[str]]) -> Optional[List[str]]:
-        """Validate that all variable names exist in SILO registry."""
+        """Validate that all variable names exist in SILO registry and have a SILO API code."""
         if v is None:
             return v
-        invalid = [name for name in v if name not in VARIABLES]
-        if invalid:
+        unknown = [name for name in v if name not in VARIABLES]
+        if unknown:
             valid_names = ", ".join(sorted(VARIABLES.keys()))
-            raise ValueError(f"Unknown variables: {invalid}. Valid names: {valid_names}")
+            raise ValueError(f"Unknown variables: {unknown}. Valid names: {valid_names}")
+        no_api_code = [name for name in v if VARIABLES.silo_code_from_name(name) is None]
+        if no_api_code:
+            raise ValueError(
+                f"Variables not transportable over the SILO API (no API code): {no_api_code}. "
+                "These variables cannot be requested via PatchedPoint or DataDrill queries. "
+                "Use the NetCDF download interface instead (e.g., 'weather-tools local download')."
+            )
         return v
 
     def _get_silo_codes(self) -> str:
@@ -140,8 +124,10 @@ class BaseSiloQuery(BaseModel):
         codes = []
         for name in self.variables:
             code = VARIABLES.silo_code_from_name(name)
-            if code:  # Skip variables without API codes (e.g., monthly_rain)
-                codes.append(code)
+            assert code is not None, (
+                f"Variable '{name}' has no SILO API code (should have been caught by validator)"
+            )
+            codes.append(code)
         return "".join(codes)
 
 
@@ -208,6 +194,12 @@ class PatchedPointQuery(BaseSiloQuery):
         elif format_val == SiloFormat.NEAR:
             if not self.station_code:
                 raise ValueError("station_code is required for 'near' format")
+        else:
+            # Data formats (csv, json, apsim, standard, alldata) require station_code and date_range
+            if not self.station_code:
+                raise ValueError(f"station_code is required for '{format_val}' format")
+            if not self.date_range:
+                raise ValueError(f"date_range is required for '{format_val}' format")
 
         return self
 
@@ -363,9 +355,11 @@ class SiloResponse(BaseModel):
 
 class StationInfo(BaseModel):
     """
-    Station information from VARIABLES.
+    Weather station metadata returned by PatchedPoint 'id' format queries.
 
-    Returned by 'id' format queries.
+    Contains the station identifier, human-readable name, geographic position
+    (latitude, longitude, elevation), and the date range over which observations
+    are available for that station.
     """
 
     model_config = ConfigDict(populate_by_name=True)

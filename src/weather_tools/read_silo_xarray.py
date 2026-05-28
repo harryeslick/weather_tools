@@ -3,20 +3,20 @@ from pathlib import Path
 import xarray as xr
 
 from weather_tools.config import get_silo_data_dir
-from weather_tools.silo_variables import VARIABLES, VariableInput
+from weather_tools.variable_register import VARIABLES
 
 
 def read_silo_xarray(
-    variables: VariableInput = "daily",
+    variables: str | list[str] | None = None,
     silo_dir: Path | None = None,
 ) -> xr.Dataset:
     """
     Read SILO data from a directory containing the SILO netCDF files and return a merged xarray dataset.
 
     Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names. Defaults to "daily".
+        variables: Canonical variable name ("daily_rain", "max_temp", etc.) or a
+                  list of canonical names. Each variable must be specified
+                  explicitly. Defaults to the four core daily variables.
         silo_dir: Path to the directory containing variable subdirectories (each containing .nc files).
             If None, uses the directory from SILO_DATA_DIR environment variable or
             defaults to ~/DATA/silo_grids.
@@ -38,8 +38,8 @@ def read_silo_xarray(
     Example:
         >>> from pathlib import Path
         >>> from weather_tools.read_silo_xarray import read_silo_xarray
-        >>> # Read the daily variables from the default silo_dir
-        >>> ds = read_silo_xarray(variables="daily")
+        >>> # Read the default daily variables from the default silo_dir
+        >>> ds = read_silo_xarray()
         >>> print(ds)
         >>> # Or specify variables explicitly and a custom directory
         >>> ds2 = read_silo_xarray(variables=["monthly_rain"], silo_dir=Path("/data/silo_grids"))
@@ -52,13 +52,29 @@ def read_silo_xarray(
     if silo_dir is None:
         silo_dir = get_silo_data_dir()
 
-    # Use centralized variable preset expansion
-    variables = VARIABLES.expand_preset(variables)
+    # Default to the variables present in the cache dir
+    if variables is None:
+        variables = [p.stem for p in silo_dir.glob("*/")]
+        variables = [v for v in variables if v in VARIABLES.silo_variables()]
+
+    # Validate requested variables and normalise to a list of canonical names
+    variables = list(VARIABLES.validate(variables).keys())
 
     dss = []
     for variable in variables:
+        variable_dir = silo_dir / variable
+
         # Convert generator to sorted list of file paths
-        file_paths = sorted((silo_dir / variable).glob("*.nc"))
+        file_paths = sorted(variable_dir.glob("*.nc")) if variable_dir.is_dir() else []
+
+        if not file_paths:
+            raise FileNotFoundError(
+                f"No .nc files found for variable '{variable}' in '{variable_dir}'. "
+                f"Expected files matching the pattern: "
+                f"'{variable_dir / ('{year}.' + variable + '.nc')}' "
+                f"(e.g. '{variable_dir / ('2023.' + variable + '.nc')}'). "
+                f"Run 'weather-tools local download --var {variable}' to fetch data."
+            )
 
         # Use open_mfdataset to open all years for a single variable
         ds = xr.open_mfdataset(

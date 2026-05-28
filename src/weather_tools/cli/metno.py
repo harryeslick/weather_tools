@@ -54,7 +54,9 @@ def forecast(
     lon: Annotated[float, typer.Option(help="Longitude coordinate (113 to 154 for Australia)")],
     days: Annotated[int, typer.Option(help="Number of forecast days (1-9)")] = 7,
     output: Annotated[Optional[str], typer.Option(help="Output CSV filename (optional)")] = None,
-    format_silo: Annotated[bool, typer.Option(help="Convert to SILO column names")] = True,
+    silo_dates: Annotated[
+        bool, typer.Option(help="Add SILO 'day' (day-of-year) and 'year' columns")
+    ] = True,
     user_agent: Annotated[
         Optional[str], typer.Option(help="Custom User-Agent for met.no API")
     ] = None,
@@ -63,7 +65,8 @@ def forecast(
     Get met.no weather forecast for an Australian location.
 
     Retrieves up to 9 days of forecast data from met.no's locationforecast API.
-    Daily summaries are automatically aggregated from hourly forecasts.
+    Daily summaries are automatically aggregated from hourly forecasts, with
+    canonical SILO column names (daily_rain, max_temp, min_temp, ...).
 
     Example:
         weather-tools metno forecast --lat -27.5 --lon 153.0 --days 7 --output brisbane_forecast.csv
@@ -91,17 +94,11 @@ def forecast(
 
         logger.info(f"[green]✓ Retrieved {len(daily_forecasts)} days of forecast data[/green]")
 
-        # daily_forecasts is already a DataFrame
+        # daily_forecasts is already a DataFrame with canonical SILO column names
         forecast_df = daily_forecasts
 
-        if format_silo:
-            # Rename columns to SILO format
-            from weather_tools.silo_variables import (
-                convert_metno_to_silo_columns,
-            )
-
-            column_mapping = convert_metno_to_silo_columns(forecast_df, include_extra=False)
-            forecast_df = forecast_df.rename(columns=column_mapping)
+        if silo_dates:
+            # Add SILO 'day' (day-of-year) and 'year' columns
             forecast_df = add_silo_date_columns(forecast_df)
 
         # Save or display
@@ -273,16 +270,16 @@ def metno_info() -> None:
     logger.info("  • Update frequency: Hourly")
     logger.info("  • Rate limit: Fair use policy (requires User-Agent)")
 
-    logger.info("\n[bold]Available Variables (Daily Aggregates):[/bold]")
-    logger.info("  • min_temperature (°C) → min_temp")
-    logger.info("  • max_temperature (°C) → max_temp")
-    logger.info("  • total_precipitation (mm) → daily_rain")
-    logger.info("  • avg_pressure (hPa) → mslp")
-    logger.info("  • avg_relative_humidity (%) → vp (converted)")
-    logger.info("  • avg_wind_speed (m/s) → wind_speed")
-    logger.info("  • max_wind_speed (m/s) → wind_speed_max")
-    logger.info("  • avg_cloud_fraction (%) → cloud_fraction")
-    logger.info("  • dominant_weather_symbol → weather_symbol")
+    logger.info("\n[bold]Daily Aggregates (raw met.no field → canonical SILO name):[/bold]")
+    logger.info("  • air_temperature (max) → max_temp (°C)")
+    logger.info("  • air_temperature (min) → min_temp (°C)")
+    logger.info("  • precipitation_amount (sum) → daily_rain (mm)")
+    logger.info("  • air_pressure_at_sea_level (mean) → mslp (hPa)")
+    logger.info("  • relative_humidity (mean) → relative_humidity (%) → vp (converted in merge)")
+    logger.info("  • wind_speed (mean) → wind_speed (m/s)")
+    logger.info("  • wind_speed (max) → wind_speed_max (m/s)")
+    logger.info("  • cloud_area_fraction (mean) → cloud_fraction (%)")
+    logger.info("  • symbol_code (dominant) → weather_symbol")
 
     logger.info("\n[bold]SILO-Only Variables (Not Available from met.no):[/bold]")
     logger.info("  • evap_pan - Class A pan evaporation")

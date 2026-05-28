@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-__version__ = "0.0.3"
+__version__ = "0.2.0"
 
 from weather_tools.cli import main as cli_main
 from weather_tools.output_schemas import (
-    DATE_COLUMN,
     DATA_SOURCE_COLUMN,
+    DATE_COLUMN,
     IS_FORECAST_COLUMN,
-    MetNoForecastSchema,
     MergedPointSchema,
+    MetNoForecastSchema,
     PointMetadata,
     SiloPointSchema,
     validate_point_dataframe,
@@ -33,9 +33,8 @@ from weather_tools.silo_models import (
     SiloResponse,
 )
 from weather_tools.silo_netcdf import download_netcdf
-from weather_tools.silo_variables import (
+from weather_tools.variable_register import (
     SILO_VARIABLES,
-    VARIABLE_PRESETS,
     VARIABLES,
     SiloDataError,
     SiloGeoTiffError,
@@ -78,6 +77,4 @@ __all__ = [
     "VARIABLES",
     "VariableRegistry",
     "SILO_VARIABLES",
-    "API_TO_NETCDF",
-    "VARIABLE_PRESETS",
 ]

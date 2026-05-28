@@ -41,6 +41,7 @@ $ weather-tools silo [OPTIONS] COMMAND [ARGS]...
 * `patched-point`: Query SILO PatchedPoint dataset...
 * `data-drill`: Query SILO DataDrill dataset (gridded data).
 * `search`: Search for SILO stations by name or find...
+* `cache`: View or manage the SILO API response cache.
 
 ### `weather-tools silo patched-point`
 
@@ -58,7 +59,7 @@ Examples:
     # Get rainfall and temperature for Brisbane Aero (format auto-detected)
     weather-tools silo patched-point --station 30043 \
         --start-date 2023-01-01 --end-date 2023-01-31 \
-        --var rainfall --var max_temp --var min_temp --output data.csv
+        --var daily_rain --var max_temp --var min_temp --output data.csv
     
     # Get all variables in APSIM format
     weather-tools silo patched-point --station 30043 \
@@ -97,7 +98,7 @@ Examples:
     # Get rainfall for a specific location
     weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
         --start-date 2023-01-01 --end-date 2023-01-31 \
-        --var rainfall --output data.csv
+        --var daily_rain --output data.csv
     
     # Get all variables for a location
     weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
@@ -159,6 +160,29 @@ $ weather-tools silo search [OPTIONS]
 * `--log-level TEXT`: Logging level for SILO client (e.g. INFO, DEBUG, WARNING)  [default: INFO]
 * `--help`: Show this message and exit.
 
+### `weather-tools silo cache`
+
+View or manage the SILO API response cache.
+
+Examples:
+    # Show cache info
+    weather-tools silo cache
+    
+    # Clear the cache
+    weather-tools silo cache --clear
+
+**Usage**:
+
+```console
+$ weather-tools silo cache [OPTIONS]
+```
+
+**Options**:
+
+* `--clear`: Clear all cached API responses
+* `--cache-dir TEXT`: Cache directory (default: ~/.cache/weather_tools/silo_api)
+* `--help`: Show this message and exit.
+
 ## `weather-tools local`
 
 Work with local SILO netCDF files
@@ -196,10 +220,10 @@ $ weather-tools local extract [OPTIONS]
 
 * `--lat FLOAT`: Latitude coordinate  [required]
 * `--lon FLOAT`: Longitude coordinate  [required]
-* `--start-date TEXT`: Start date (YYYY-MM-DD format)  [required]
-* `--end-date TEXT`: End date (YYYY-MM-DD format)  [required]
+* `--start-date TEXT`: Start date (YYYY-MM-DD)  [required]
+* `--end-date TEXT`: End date (YYYY-MM-DD)  [required]
 * `--output TEXT`: Output CSV filename  [default: weather_data.csv]
-* `--variables TEXT`: Weather variables to extract. Use &#x27;daily&#x27; or &#x27;monthly&#x27; for presets, or specify individual variables
+* `--var TEXT`: Climate variables: daily_rain, monthly_rain, max_temp, min_temp, vp, vp_deficit, rh_tmax, rh_tmin, mslp, evap_pan, evap_syn, evap_comb, evap_morton_lake, radiation, et_short_crop, et_tall_crop, et_morton_actual, et_morton_potential, et_morton_wet. Repeat the option for multiple; leave blank for the default daily variables.
 * `--silo-dir PATH`: Path to SILO data directory
 * `--tolerance FLOAT`: Maximum distance (in degrees) for nearest neighbor selection  [default: 0.1]
 * `--keep-location / --no-keep-location`: Keep location columns (crs, lat, lon) in output CSV  [default: no-keep-location]
@@ -237,14 +261,14 @@ By default, existing files are skipped. Use --force to re-download.
 
 Examples:
     # Download daily variables for 2020-2023
-    weather-tools local download --var daily --start-year 2020 --end-year 2023
+    weather-tools local download --start-year 2020 --end-year 2023
 
     # Download specific variables
     weather-tools local download --var daily_rain --var max_temp \
         --start-year 2022 --end-year 2023
 
     # Download to custom directory
-    weather-tools local download --var monthly \
+    weather-tools local download --var monthly_rain \
         --start-year 2020 --end-year 2023 \
         --silo-dir /data/silo_grids
 
@@ -262,7 +286,7 @@ $ weather-tools local download [OPTIONS]
 
 * `--start-year INTEGER`: First year to download (inclusive)  [required]
 * `--end-year INTEGER`: Last year to download (inclusive)  [required]
-* `--var [daily_rain|monthly_rain|max_temp|min_temp|vp|vp_deficit|rh_tmax|rh_tmin|mslp|evap_pan|evap_syn|evap_comb|evap_morton_lake|radiation|et_short_crop|et_tall_crop|et_morton_actual|et_morton_potential|et_morton_wet|wind_speed|wind_speed_max|cloud_fraction|weather_symbol]`: Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.
+* `--var TEXT`: Variable names (daily_rain, max_temp, etc.). Can specify multiple. If omitted, uses default daily set (daily_rain, max_temp, min_temp, evap_syn).
 * `--silo-dir PATH`: Output directory for downloaded files
 * `--force / --no-force`: Overwrite existing files  [default: no-force]
 * `--timeout INTEGER`: Download timeout in seconds  [default: 600]
@@ -310,7 +334,7 @@ $ weather-tools metno forecast [OPTIONS]
 * `--lon FLOAT`: Longitude coordinate (113 to 154 for Australia)  [required]
 * `--days INTEGER`: Number of forecast days (1-9)  [default: 7]
 * `--output TEXT`: Output CSV filename (optional)
-* `--format-silo / --no-format-silo`: Convert to SILO column names  [default: format-silo]
+* `--silo-dates / --no-silo-dates`: Add SILO 'day' (day-of-year) and 'year' columns  [default: silo-dates]
 * `--user-agent TEXT`: Custom User-Agent for met.no API
 * `--help`: Show this message and exit.
 
@@ -422,9 +446,9 @@ $ weather-tools geotiff download [OPTIONS]
 
 **Options**:
 
-* `--start-date TEXT`: Start date (YYYY-MM-DD format)  [required]
-* `--end-date TEXT`: End date (YYYY-MM-DD format)  [required]
-* `--var TEXT`: Variable names (daily_rain, max_temp, etc.) or presets (daily, monthly). Can specify multiple.
+* `--start-date TEXT`: Start date (YYYY-MM-DD)  [required]
+* `--end-date TEXT`: End date (YYYY-MM-DD)  [required]
+* `--var TEXT`: Variable names (daily_rain, max_temp, etc.). Specify each variable explicitly; repeat the option for multiple.  [default: daily_rain]
 * `--output-dir PATH`: Output directory for downloaded GeoTIFF files
 * `--bbox FLOAT`: Bounding box: min_lon min_lat max_lon max_lat (4 values, mutually exclusive with --geometry)
 * `--geometry PATH`: Path to GeoJSON file with Polygon for clipping (mutually exclusive with --bbox)

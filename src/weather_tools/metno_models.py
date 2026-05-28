@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from weather_tools.silo_models import AustralianCoordinates
+
 
 class MetNoFormat(str, Enum):
     """
@@ -44,9 +46,9 @@ class MetNoQuery(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-    coordinates: Any = Field(
+    coordinates: AustralianCoordinates = Field(
         ...,
-        description="Australian coordinates (GDA94). Import AustralianCoordinates from silo_models.",
+        description="Australian coordinates (GDA94) validated at construction time.",
     )
     format: MetNoFormat = Field(
         default=MetNoFormat.COMPACT, description="Response format (compact or complete)"
@@ -70,16 +72,10 @@ class MetNoQuery(BaseModel):
         """
         # Truncate coordinates to 4 decimals as per met.no Terms of Service
         # https://developer.yr.no/doc/TermsOfService/
-        params: Dict[str, Any] = {
+        return {
             "lat": round(self.coordinates.latitude, 4),
             "lon": round(self.coordinates.longitude, 4),
         }
-
-        # Include altitude if available (altitude is not in AustralianCoordinates)
-        if hasattr(self.coordinates, "altitude") and self.coordinates.altitude is not None:
-            params["altitude"] = self.coordinates.altitude
-
-        return params
 
 
 class MetNoResponse(BaseModel):
@@ -161,52 +157,34 @@ class DailyWeatherSummary(BaseModel):
     """
     Daily aggregated weather summary from hourly forecasts.
 
-    Aggregates hourly met.no forecast data to daily values compatible with
-    SILO daily weather data format.
-
-    Examples:
-        >>> summary = DailyWeatherSummary(
-        ...     date=dt.date(2023, 1, 15),
-        ...     min_temperature=18.5,
-        ...     max_temperature=28.3,
-        ...     total_precipitation=5.2
-        ... )
+    Aggregates hourly met.no forecast data to daily values using canonical SILO
+    column names (the same names produced by :meth:`MetNoAPI._aggregate_daily`).
     """
 
     date: dt.date = Field(..., description="Date for this daily summary")
 
     # Temperature (°C)
-    min_temperature: Optional[float] = Field(
-        None, description="Minimum temperature for the day (°C)"
-    )
-    max_temperature: Optional[float] = Field(
-        None, description="Maximum temperature for the day (°C)"
-    )
+    min_temp: Optional[float] = Field(None, description="Minimum temperature for the day (°C)")
+    max_temp: Optional[float] = Field(None, description="Maximum temperature for the day (°C)")
 
     # Precipitation (mm)
-    total_precipitation: Optional[float] = Field(
-        None, description="Total precipitation for the day (mm)"
-    )
-
-    # Wind (m/s)
-    avg_wind_speed: Optional[float] = Field(None, description="Average wind speed (m/s)")
-    max_wind_speed: Optional[float] = Field(None, description="Maximum wind speed (m/s)")
-
-    # Humidity (%)
-    avg_relative_humidity: Optional[float] = Field(
-        None, description="Average relative humidity (%)"
-    )
+    daily_rain: Optional[float] = Field(None, description="Total precipitation for the day (mm)")
 
     # Pressure (hPa)
-    avg_pressure: Optional[float] = Field(None, description="Average sea level pressure (hPa)")
+    mslp: Optional[float] = Field(None, description="Mean sea level pressure (hPa)")
 
-    # Cloud cover (%)
-    avg_cloud_fraction: Optional[float] = Field(
-        None, description="Average cloud cover fraction (%)"
-    )
+    # Humidity (%) — met.no-only
+    relative_humidity: Optional[float] = Field(None, description="Average relative humidity (%)")
 
-    # Weather condition
-    dominant_weather_symbol: Optional[str] = Field(
+    # Wind (m/s) — met.no-only
+    wind_speed: Optional[float] = Field(None, description="Average wind speed (m/s)")
+    wind_speed_max: Optional[float] = Field(None, description="Maximum wind speed (m/s)")
+
+    # Cloud cover (%) — met.no-only
+    cloud_fraction: Optional[float] = Field(None, description="Average cloud cover fraction (%)")
+
+    # Weather condition — met.no-only
+    weather_symbol: Optional[str] = Field(
         None, description="Most common or severe weather symbol for the day"
     )
 

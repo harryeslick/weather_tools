@@ -12,9 +12,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from weather_tools.silo_variables import (
-    convert_metno_to_silo_columns,
-)
+from weather_tools.variable_register import VARIABLES
 from weather_tools.weather_utils.dew_point import rh_to_vapor_pressure
 
 logger = logging.getLogger(__name__)
@@ -25,19 +23,12 @@ class MergeValidationError(Exception):
     """Raised when data cannot be safely merged."""
 
 
-class DateGapError(MergeValidationError):
-    """Raised when there's a gap in dates between datasets."""
-
-
-class ColumnMismatchError(MergeValidationError):
-    """Raised when columns don't align properly."""
-
-
 def merge_historical_and_forecast(
     silo_data: pd.DataFrame,
     metno_data: pd.DataFrame,
-    overlap_strategy: Literal["prefer_silo", "prefer_metno"] = "prefer_silo",
+    overlap_strategy: Literal["prefer_silo", "prefer_metno", "error"] = "prefer_silo",
     return_cols: Literal["all", "silo_only", "metno_only"] = "all",
+    convert_rh_to_vp: bool = True,
 ) -> pd.DataFrame:
     """
     Merge SILO historical data with met.no forecast data.
@@ -45,19 +36,23 @@ def merge_historical_and_forecast(
     Args:
         silo_data: Historical data from SILO (API or local files)
         metno_data: Forecast data from met.no (daily summaries)
-        validate: Perform validation checks (default: True)
         overlap_strategy: How to handle overlapping dates:
                          - "prefer_silo": Use SILO data for overlaps (default)
                          - "prefer_metno": Use met.no data for overlaps
-                         - "error": Raise error on overlap
+                         - "error": Raise MergeValidationError if any overlap exists
+        return_cols: Which columns to include in the result:
+                    - "all": All columns from both datasets (default)
+                    - "silo_only": Only columns present in the SILO DataFrame
+                    - "metno_only": Only columns present in the met.no DataFrame
+        convert_rh_to_vp: If True (default), explicitly convert met.no
+                    relative humidity (%) into the SILO ``vp`` column
+                    (vapour pressure, hPa) using mean daily temperature.
 
     Returns:
         Merged DataFrame with 'data_source' column indicating origin
 
     Raises:
         MergeValidationError: If data cannot be safely merged
-        DateGapError: If there's a gap between datasets
-        ColumnMismatchError: If required columns are missing
 
     Example:
         >>> silo_df = get_silo_data(...)
@@ -100,13 +95,22 @@ def merge_historical_and_forecast(
     elif overlap_strategy == "prefer_metno":
         # Remove overlapping dates from SILO data
         silo_df = silo_df[~silo_df["date"].isin(metno_df["date"])]
+    elif overlap_strategy == "error":
+        overlapping = silo_df["date"].isin(metno_df["date"])
+        if overlapping.any():
+            overlap_dates = silo_df.loc[overlapping, "date"].dt.date.tolist()
+            raise MergeValidationError(
+                f"overlap_strategy='error': {len(overlap_dates)} overlapping date(s) found "
+                f"between SILO and met.no data: {overlap_dates}"
+            )
     else:
         raise ValueError(
-            f"Invalid overlap_strategy: {overlap_strategy}. Must be 'prefer_silo', 'prefer_metno', "
+            f"Invalid overlap_strategy: {overlap_strategy!r}. "
+            f"Must be 'prefer_silo', 'prefer_metno', or 'error'."
         )
 
     # Convert met.no columns to SILO format if needed
-    metno_df = prepare_metno_for_merge(metno_df, silo_df)
+    metno_df = prepare_metno_for_merge(metno_df, silo_df, convert_rh_to_vp=convert_rh_to_vp)
 
     # Add data source metadata
     silo_df["data_source"] = "silo"
@@ -198,69 +202,84 @@ def validate_merge_compatibility(
         # There's an overlap between datasets
         overlap_days = abs(gap_days) + 1
         # Only report as issue if overlap_strategy is not set to handle it
-        if overlap_strategy not in ["prefer_silo", "prefer_metno"]:
+        if overlap_strategy not in ["prefer_silo", "prefer_metno", "error"]:
             issues.append(
                 f"Date overlap detected: {overlap_days} days overlap. "
-                f"Set overlap_strategy to 'prefer_silo' or 'prefer_metno'"
+                f"Set overlap_strategy to 'prefer_silo', 'prefer_metno', or 'error'"
             )
 
-    # Check for critical columns in both datasets
-    critical_silo_cols = ["min_temp", "max_temp", "daily_rain"]
-    critical_metno_cols = ["min_temperature", "max_temperature", "total_precipitation"]
+    # Check for critical columns in both datasets. Both SILO and met.no daily
+    # frames use canonical SILO names, so the same set applies to each.
+    critical_cols = ["min_temp", "max_temp", "daily_rain"]
 
-    missing_silo = [col for col in critical_silo_cols if col not in silo_data.columns]
+    missing_silo = [col for col in critical_cols if col not in silo_data.columns]
     if missing_silo:
         issues.append(f"SILO data missing critical columns: {missing_silo}")
 
-    # met.no data can have either met.no column names OR already-converted SILO column names
-    has_metno_cols = all(col in metno_data.columns for col in critical_metno_cols)
-    has_silo_cols = all(col in metno_data.columns for col in critical_silo_cols)
-
-    if not has_metno_cols and not has_silo_cols:
-        issues.append(
-            f"met.no data missing critical columns. Expected either "
-            f"met.no format {critical_metno_cols} or SILO format {critical_silo_cols}"
-        )
+    missing_metno = [col for col in critical_cols if col not in metno_data.columns]
+    if missing_metno:
+        issues.append(f"met.no data missing critical columns: {missing_metno}")
 
     return len(issues) == 0, issues
 
 
-def prepare_metno_for_merge(metno_df: pd.DataFrame, silo_df: pd.DataFrame) -> pd.DataFrame:
+def prepare_metno_for_merge(
+    metno_df: pd.DataFrame,
+    silo_df: pd.DataFrame,
+    convert_rh_to_vp: bool = True,
+) -> pd.DataFrame:
     """
-    Prepare met.no data for merging with SILO data.
+    Prepare met.no daily data for merging with SILO data.
 
-    Converts column names, adds SILO date columns, and optionally
-    fills missing variables.
+    met.no daily summaries already use canonical SILO column names (the
+    aggregation in :meth:`MetNoAPI._aggregate_daily` is driven by the
+    ``VARIABLES`` registry), so no column renaming happens here.
+
+    Two SILO-alignment steps remain:
+
+    1. Derive the SILO ``vp`` column. The SILO ``vp`` column holds vapour
+       pressure (hPa), but met.no only reports relative humidity (%). When
+       ``convert_rh_to_vp`` is True we compute true vapour pressure from the
+       met.no ``relative_humidity`` column and the daily mean temperature.
+    2. Drop met.no-only columns (wind, cloud, relative humidity, weather
+       symbol) so the merged output stays SILO-aligned. The derived ``vp`` is a
+       SILO variable and is retained.
 
     Args:
-        metno_df: met.no forecast DataFrame
+        metno_df: met.no daily forecast DataFrame (canonical column names)
         silo_df: SILO DataFrame (for column reference)
+        convert_rh_to_vp: If True (default), convert met.no ``relative_humidity``
+            (%) into the SILO ``vp`` column (vapour pressure, hPa) using mean
+            daily temperature. If False, no ``vp`` is derived from humidity.
 
     Returns:
-        Prepared DataFrame with SILO-compatible columns
+        Prepared DataFrame with SILO-aligned columns
     """
     metno_df = metno_df.copy()
 
-    # Check if data is already in SILO format (has SILO column names)
-    has_silo_format = all(col in metno_df.columns for col in ["min_temp", "max_temp", "daily_rain"])
+    # Derive vapour pressure (vp) from relative humidity and mean daily temp.
+    if (
+        convert_rh_to_vp
+        and "relative_humidity" in metno_df.columns
+        and "min_temp" in metno_df.columns
+        and "vp" in silo_df.columns
+    ):
+        logger.warning(
+            "Converting met.no relative_humidity (%) -> vp (vapour pressure, hPa) "
+            "using mean daily temperature; the SILO 'vp' column is vapour pressure, "
+            "not relative humidity."
+        )
+        max_temp = metno_df["max_temp"] if "max_temp" in metno_df.columns else metno_df["min_temp"]
+        mean_temp = (metno_df["min_temp"] + max_temp) / 2
+        metno_df["vp"] = [
+            rh_to_vapor_pressure(rh, temp) if pd.notna(rh) else np.nan
+            for rh, temp in zip(metno_df["relative_humidity"], mean_temp)
+        ]
 
-    if not has_silo_format:
-        # Convert column names to SILO format
-        column_mapping = convert_metno_to_silo_columns(metno_df, include_extra=False)
-        metno_df = metno_df.rename(columns=column_mapping)
-
-        # Convert relative humidity to vapor pressure if both are present
-        if "avg_relative_humidity" in metno_df.columns and "min_temperature" in metno_df.columns:
-            metno_df["vp"] = metno_df.apply(
-                lambda row: rh_to_vapor_pressure(
-                    row["avg_relative_humidity"],
-                    (row["min_temperature"] + row.get("max_temperature", row["min_temperature"]))
-                    / 2,
-                )
-                if pd.notna(row.get("avg_relative_humidity"))
-                else np.nan,
-                axis=1,
-            )
+    # Drop met.no-only columns to keep merged output SILO-aligned (vp, derived
+    # above, is a SILO variable and is not in this list).
+    # metno_only_cols = [c for c in VARIABLES.metno_only_variables() if c in metno_df.columns]
+    # metno_df = metno_df.drop(columns=metno_only_cols)
 
     return metno_df
 

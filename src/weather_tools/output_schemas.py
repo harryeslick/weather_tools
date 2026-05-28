@@ -12,23 +12,25 @@ The following inconsistencies exist across the user-facing point-data functions:
 ### 1. Date column name (fixed)
 - SILO API (get_patched_point, get_data_drill): ``date``
 - Met.no daily (get_daily_forecast, to_dataframe): ``date``
-- Met.no hourly (to_dataframe(frequency='hourly')): ``time``
+- Met.no raw (to_dataframe(daily=False)): ``time``
 - Local xarray extract (CLI ``local extract``): ``time``  ← was inconsistent
 
 **Resolution:** All point-data DataFrames must use ``date`` as the temporal column.
 The ``local extract`` CLI command now renames ``time`` → ``date`` before output.
-The Met.no hourly path retains ``time`` because it represents sub-daily instants,
+The Met.no raw path retains ``time`` because it represents sub-daily instants,
 not daily observations, and is therefore excluded from the point-data schema.
 
 ### 2. Variable naming convention
 - SILO: snake_case canonical names (``daily_rain``, ``max_temp``, ``min_temp``, ``vp``)
-- Met.no raw columns: descriptive names (``min_temperature``, ``total_precipitation``, …)
+- Met.no raw columns: raw met.no API field names (``air_temperature``,
+  ``precipitation_amount``, ``wind_speed``, …)
 
-**Resolution:** SILO canonical names are the package standard. Met.no columns are
-converted via ``convert_metno_to_silo_columns()`` before returning merged output.
-Each source has its own schema reflecting its native naming, with mappings documented
-in :class:`MetNoForecastSchema`. Use :func:`merge_historical_and_forecast` to get
-a unified SILO-named DataFrame spanning both sources.
+**Resolution:** SILO canonical names are the package standard. Met.no *daily*
+summaries already emit canonical names directly (the aggregation is driven by the
+``VARIABLES`` registry), so no separate rename step is needed. Met.no *raw*
+(``to_dataframe(daily=False)``) keeps the raw met.no field names. Use
+:func:`merge_historical_and_forecast` for a unified SILO-named DataFrame spanning
+both sources.
 
 ### 3. Metadata embedded in data rows (not unified)
 - SILO API embeds a JSON string in the ``metadata`` column of row 0 only.
@@ -102,12 +104,10 @@ class PointMetadata(BaseModel):
 
     latitude: float = Field(..., description="Latitude in decimal degrees (WGS84)")
     longitude: float = Field(..., description="Longitude in decimal degrees (WGS84)")
-    station_code: Optional[str] = Field(
-        None, description="BOM station code (PatchedPoint only)"
+    station_code: Optional[str] = Field(None, description="BOM station code (PatchedPoint only)")
+    source: Literal["silo_patched_point", "silo_data_drill", "silo_local", "metno", "merged"] = (
+        Field(..., description="Data source identifier")
     )
-    source: Literal[
-        "silo_patched_point", "silo_data_drill", "silo_local", "metno", "merged"
-    ] = Field(..., description="Data source identifier")
     start_date: dt.date = Field(..., description="First date in the timeseries (inclusive)")
     end_date: dt.date = Field(..., description="Last date in the timeseries (inclusive)")
     variables: List[str] = Field(
@@ -198,9 +198,7 @@ class SiloPointSchema(BaseModel):
     )
 
     # Wind
-    wind: Optional[float] = Field(
-        None, description="Average daily wind speed at 2 m (m/s)"
-    )
+    wind: Optional[float] = Field(None, description="Average daily wind speed at 2 m (m/s)")
 
     #: Columns that must be present in any conforming DataFrame.
     REQUIRED_COLUMNS: ClassVar[List[str]] = [DATE_COLUMN]
@@ -232,20 +230,16 @@ class SiloPointSchema(BaseModel):
         if DATE_COLUMN in df.columns:
             if not pd.api.types.is_datetime64_any_dtype(df[DATE_COLUMN]):
                 issues.append(
-                    f"Column '{DATE_COLUMN}' must be datetime64, "
-                    f"got {df[DATE_COLUMN].dtype}"
+                    f"Column '{DATE_COLUMN}' must be datetime64, got {df[DATE_COLUMN].dtype}"
                 )
             elif df[DATE_COLUMN].dt.tz is not None:
                 issues.append(
-                    f"Column '{DATE_COLUMN}' must be timezone-naive, "
-                    f"got tz={df[DATE_COLUMN].dt.tz}"
+                    f"Column '{DATE_COLUMN}' must be timezone-naive, got tz={df[DATE_COLUMN].dt.tz}"
                 )
 
         # Index must be a RangeIndex
         if not isinstance(df.index, pd.RangeIndex):
-            issues.append(
-                f"DataFrame index must be RangeIndex, got {type(df.index).__name__}"
-            )
+            issues.append(f"DataFrame index must be RangeIndex, got {type(df.index).__name__}")
 
         # Metadata must not bleed into data rows
         if "metadata" in df.columns:
@@ -268,75 +262,68 @@ class SiloPointSchema(BaseModel):
             if col == DATE_COLUMN:
                 continue
             if col in known_fields and not pd.api.types.is_float_dtype(df[col]):
-                issues.append(
-                    f"Column '{col}' expected float64, got {df[col].dtype}"
-                )
+                issues.append(f"Column '{col}' expected float64, got {df[col].dtype}")
 
         return issues
 
     @classmethod
     def column_descriptions(cls) -> Dict[str, str]:
         """Return a mapping of column name → description for all defined variables."""
-        return {
-            name: (field.description or "")
-            for name, field in cls.model_fields.items()
-        }
+        return {name: (field.description or "") for name, field in cls.model_fields.items()}
 
 
 class MetNoForecastSchema(BaseModel):
     """Schema for one daily forecast row from met.no (via MetNoAPI.get_daily_forecast).
 
-    Met.no columns use descriptive names that differ from SILO canonical names.
-    When merging with SILO data, call :func:`merge_weather_data.merge_historical_and_forecast`,
-    which converts these to SILO names automatically.
+    Daily summaries use canonical SILO column names directly — the aggregation in
+    :meth:`MetNoAPI._aggregate_daily` is driven by the ``VARIABLES`` registry, so
+    no rename step is required. Columns labelled met.no-only have no SILO
+    equivalent; :func:`merge_weather_data.merge_historical_and_forecast` derives
+    ``vp`` from ``relative_humidity`` and drops the met.no-only columns.
 
-    SILO canonical → Met.no mapping (for reference):
+    Raw met.no field → canonical SILO name (for reference):
 
-    ============= ==================== ==========================
-    SILO name     Met.no name          Notes
-    ============= ==================== ==========================
-    daily_rain    total_precipitation  Sum over day (mm)
-    max_temp      max_temperature      Daily max (°C)
-    min_temp      min_temperature      Daily min (°C)
-    vp            avg_relative_humidity Converted via rh_to_vapor_pressure
-    mslp          avg_pressure         hPa
-    ============= ==================== ==========================
+    ========================== ===== =================== ====================
+    Raw met.no field           Agg   Canonical column    Notes
+    ========================== ===== =================== ====================
+    precipitation_amount       sum   daily_rain          mm
+    air_temperature            max   max_temp            °C
+    air_temperature            min   min_temp            °C
+    air_pressure_at_sea_level  mean  mslp                hPa
+    relative_humidity          mean  relative_humidity   % (→ vp in merge)
+    wind_speed                 mean  wind_speed          m/s (met.no-only)
+    wind_speed                 max   wind_speed_max      m/s (met.no-only)
+    cloud_area_fraction        mean  cloud_fraction      % (met.no-only)
+    symbol_code                dom.  weather_symbol      met.no-only
+    ========================== ===== =================== ====================
 
     DataFrame layout::
 
-        date         min_temperature  max_temperature  total_precipitation  ...
-        2026-02-17   18.4             29.2             0.0
-        2026-02-18   19.1             30.5             2.1
+        date         min_temp  max_temp  daily_rain  mslp  ...
+        2026-02-17   18.4      29.2      0.0         1014
+        2026-02-18   19.1      30.5      2.1         1012
         ...
     """
 
     date: dt.date = Field(..., description="Forecast date")
-    min_temperature: Optional[float] = Field(
-        None, description="Daily minimum air temperature (°C)"
+    min_temp: Optional[float] = Field(None, description="Daily minimum air temperature (°C)")
+    max_temp: Optional[float] = Field(None, description="Daily maximum air temperature (°C)")
+    daily_rain: Optional[float] = Field(None, description="Total daily precipitation (mm)")
+    mslp: Optional[float] = Field(None, description="Mean daily sea-level pressure (hPa)")
+    relative_humidity: Optional[float] = Field(
+        None, description="Mean daily relative humidity (%); met.no-only"
     )
-    max_temperature: Optional[float] = Field(
-        None, description="Daily maximum air temperature (°C)"
+    wind_speed: Optional[float] = Field(
+        None, description="Mean daily wind speed at 10 m (m/s); met.no-only"
     )
-    total_precipitation: Optional[float] = Field(
-        None, description="Total daily precipitation (mm)"
+    wind_speed_max: Optional[float] = Field(
+        None, description="Maximum daily wind speed at 10 m (m/s); met.no-only"
     )
-    avg_wind_speed: Optional[float] = Field(
-        None, description="Mean daily wind speed at 10 m (m/s)"
+    cloud_fraction: Optional[float] = Field(
+        None, description="Mean daily cloud area fraction (%); met.no-only"
     )
-    max_wind_speed: Optional[float] = Field(
-        None, description="Maximum daily wind speed at 10 m (m/s)"
-    )
-    avg_relative_humidity: Optional[float] = Field(
-        None, description="Mean daily relative humidity (%)"
-    )
-    avg_pressure: Optional[float] = Field(
-        None, description="Mean daily sea-level pressure (hPa)"
-    )
-    avg_cloud_fraction: Optional[float] = Field(
-        None, description="Mean daily cloud area fraction (%)"
-    )
-    dominant_weather_symbol: Optional[str] = Field(
-        None, description="Dominant met.no weather symbol code for the day"
+    weather_symbol: Optional[str] = Field(
+        None, description="Dominant met.no weather symbol code for the day; met.no-only"
     )
 
     REQUIRED_COLUMNS: ClassVar[List[str]] = [DATE_COLUMN]
@@ -355,19 +342,15 @@ class MetNoForecastSchema(BaseModel):
         if DATE_COLUMN in df.columns:
             if not pd.api.types.is_datetime64_any_dtype(df[DATE_COLUMN]):
                 issues.append(
-                    f"Column '{DATE_COLUMN}' must be datetime64, "
-                    f"got {df[DATE_COLUMN].dtype}"
+                    f"Column '{DATE_COLUMN}' must be datetime64, got {df[DATE_COLUMN].dtype}"
                 )
             elif df[DATE_COLUMN].dt.tz is not None:
                 issues.append(
-                    f"Column '{DATE_COLUMN}' must be timezone-naive, "
-                    f"got tz={df[DATE_COLUMN].dt.tz}"
+                    f"Column '{DATE_COLUMN}' must be timezone-naive, got tz={df[DATE_COLUMN].dt.tz}"
                 )
 
         if not isinstance(df.index, pd.RangeIndex):
-            issues.append(
-                f"DataFrame index must be RangeIndex, got {type(df.index).__name__}"
-            )
+            issues.append(f"DataFrame index must be RangeIndex, got {type(df.index).__name__}")
 
         return issues
 
@@ -437,27 +420,21 @@ class MergedPointSchema(BaseModel):
         if DATE_COLUMN in df.columns:
             if not pd.api.types.is_datetime64_any_dtype(df[DATE_COLUMN]):
                 issues.append(
-                    f"Column '{DATE_COLUMN}' must be datetime64, "
-                    f"got {df[DATE_COLUMN].dtype}"
+                    f"Column '{DATE_COLUMN}' must be datetime64, got {df[DATE_COLUMN].dtype}"
                 )
             elif df[DATE_COLUMN].dt.tz is not None:
                 issues.append(
-                    f"Column '{DATE_COLUMN}' must be timezone-naive, "
-                    f"got tz={df[DATE_COLUMN].dt.tz}"
+                    f"Column '{DATE_COLUMN}' must be timezone-naive, got tz={df[DATE_COLUMN].dt.tz}"
                 )
 
         if DATA_SOURCE_COLUMN in df.columns:
             valid_sources = {"silo", "metno"}
             bad = set(df[DATA_SOURCE_COLUMN].dropna().unique()) - valid_sources
             if bad:
-                issues.append(
-                    f"Column '{DATA_SOURCE_COLUMN}' contains unexpected values: {bad}"
-                )
+                issues.append(f"Column '{DATA_SOURCE_COLUMN}' contains unexpected values: {bad}")
 
         if not isinstance(df.index, pd.RangeIndex):
-            issues.append(
-                f"DataFrame index must be RangeIndex, got {type(df.index).__name__}"
-            )
+            issues.append(f"DataFrame index must be RangeIndex, got {type(df.index).__name__}")
 
         return issues
 
@@ -469,9 +446,7 @@ class MergedPointSchema(BaseModel):
 
 def validate_point_dataframe(
     df: pd.DataFrame,
-    schema: Union[
-        type[SiloPointSchema], type[MetNoForecastSchema], type[MergedPointSchema]
-    ],
+    schema: Union[type[SiloPointSchema], type[MetNoForecastSchema], type[MergedPointSchema]],
 ) -> List[str]:
     """Validate *df* against the given point-data schema.
 

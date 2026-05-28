@@ -68,13 +68,13 @@ uv run weather-tools --help
 
 # Query SILO API (requires SILO_API_KEY environment variable)
 export SILO_API_KEY="your.email@example.com"
-uv run weather-tools silo patched-point --station 30043 --start-date 2023-01-01 --end-date 2023-01-31 --var rainfall --var max_temp
+uv run weather-tools silo patched-point --station 30043 --start-date 2023-01-01 --end-date 2023-01-31 --var daily_rain --var max_temp
 
 # Work with local NetCDF files
 uv run weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --end-date 2020-12-31
 
-# Download SILO data from AWS S3
-uv run weather-tools local download --var daily --start-year 2020 --end-year 2023
+# Download SILO data from AWS S3 (omit --var to use default daily set)
+uv run weather-tools local download --start-year 2020 --end-year 2023
 
 # Search for stations near coordinates
 uv run weather-tools silo search --lat -27.47 --lon 153.03 --radius 20
@@ -87,15 +87,15 @@ uv run weather-tools geotiff download --var daily_rain \
 
 ### Download SILO Data
 ```bash
-# Download daily variables for 2020-2023
-weather-tools local download --var daily --start-year 2020 --end-year 2023
+# Download daily variables for 2020-2023 (default: daily_rain, max_temp, min_temp, evap_syn)
+weather-tools local download --start-year 2020 --end-year 2023
 
 # Download specific variables
 weather-tools local download --var daily_rain --var max_temp \
     --start-year 2022 --end-year 2023
 
-# Download to custom directory with force overwrite
-weather-tools local download --var monthly \
+# Download monthly rainfall
+weather-tools local download --var monthly_rain \
     --start-year 2020 --end-year 2023 \
     --silo-dir /data/silo_grids --force
 ```
@@ -125,33 +125,38 @@ weather-tools local download --var monthly \
 - `_response_to_dataframe()` converts API responses to pandas DataFrames
 - Error handling via `SiloAPIError` exception
 
-**`silo_variables.py`** - Central registry for climate variables
+**`variable_register.py`** - Central registry for climate variables
 - Maps between API codes (R, X, N) and NetCDF names (daily_rain, max_temp)
 - Variable metadata including units, start years, descriptions
-- Preset groups for common variable collections ("daily", "monthly", etc.)
+- Public symbols: `VARIABLES`, `VariableRegistry`, `SILO_VARIABLES`, `VariableMetadata`, `SiloDataError`, `SiloNetCDFError`, `SiloGeoTiffError`
+- Valid variable name lists come from the registry at runtime: `VARIABLES.silo_variables()` (SILO-only) and `VARIABLES.metno_only_variables()`; function signatures accept `str | list[str]`
+- Validation entry point via `validate()` function
 - Used by both API client and download module for consistency
 
-**`download_silo.py`** - NetCDF file downloader
-- Downloads files from AWS S3 public data (`s3-ap-southeast-2.amazonaws.com/silo-open-data`)
-- Constructs URLs: `{base}/annual/{variable}/{year}.{variable}.nc`
+**`silo_netcdf.py`** - NetCDF file downloader
+- `download_netcdf()` downloads files from AWS S3 public data (`s3-ap-southeast-2.amazonaws.com/silo-open-data`)
+- `construct_netcdf_url()` builds URLs: `{base}/annual/{variable}/{year}.{variable}.nc`
 - Rich progress bars with download speed and ETA
-- Validates year ranges based on variable availability
-- Skips existing files by default (override with `--force`)
+- `download_file()` validates files and retries on failure with atomic temp-file writes
+- Validates year ranges based on variable availability (`validate_year_for_variable()`)
+- Skips existing files by default (override with `force=True`)
 - Creates directory structure compatible with `read_silo_xarray()`
 
 **`read_silo_xarray.py`** - Local NetCDF file loader
 - `read_silo_xarray()` loads local SILO gridded data into xarray datasets
-- Supports variable presets: "daily", "monthly", or explicit variable lists
-- Uses centralized preset definitions from `silo_variables.py`
+- Variables specified explicitly by canonical name (e.g., `daily_rain`, `max_temp`, `monthly_rain`)
+- If no variables specified, defaults to: daily_rain, max_temp, min_temp, evap_syn
 - Default data directory: `~/DATA/silo_grids/`
 - Expected structure: `{variable_name}/{year}.{variable_name}.nc`
 
 **`silo_geotiff.py`** - Cloud-Optimized GeoTIFF support
-- `construct_daily_url()` and `construct_monthly_url()` - Build URLs for SILO GeoTIFF files on S3
-- `read_cog()` - Read COG data for Point/Polygon geometries using HTTP range requests
-- `download_geotiff_with_subset()` - Download GeoTIFF files with optional spatial clipping
-- `read_geotiff_timeseries()` - Read time series data (streaming or disk-cached)
-- `download_geotiff_range()` - Batch download GeoTIFFs with progress tracking
+- `construct_geotiff_daily_url()` and `construct_geotiff_monthly_url()` - Build URLs for SILO GeoTIFF files on S3
+- `read_cog()` - Read COG data for Point/Polygon geometries using HTTP range requests (module-internal, not exported)
+- `download_geotiff_with_subset()` - Download single GeoTIFF with optional spatial clipping (module-internal, not exported)
+- `download_geotiff()` - Download single GeoTIFF file
+- `download_geotiffs()` - Batch download GeoTIFFs with progress tracking
+- `read_geotiff_stack()` - Read time series data from cached GeoTIFF files
+- `download_and_read_geotiffs()` - Download and read GeoTIFF time series in one call
 - Leverages COG features: partial spatial reads, overview pyramids, HTTP range requests
 - Supports both in-memory streaming (no disk usage) and disk caching workflows
 - Error handling via `SiloGeoTiffError` exception
@@ -166,7 +171,7 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 - **`cli/local.py`** - Local NetCDF commands: `extract`, `info`, `download`
 - **`cli/metno.py`** - Met.no API commands: `forecast`, `merge`, `info`
 - **`cli/geotiff.py`** - GeoTIFF commands: `download` (with optional --bbox or --geometry clipping)
-- **`cli/utils.py`** - Shared CLI utilities (minimal, following YAGNI)
+- **`cli/date_utils.py`** - Shared date parsing and validation utilities for CLI commands
 - Entry point: `main()` function in `cli/__init__.py` registered as `weather-tools` script
 
 ### Data Flow
@@ -186,13 +191,13 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 4. User can use xarray's `.sel()` for location/time slicing, then `.to_dataframe()`
 
 **GeoTIFF Flow:**
-1. User provides Point or Polygon geometry (shapely) and date range
-2. `read_geotiff_timeseries()` or `read_cog()` constructs URLs using `construct_daily_url()`
-3. COG files read directly from S3 using HTTP range requests (rasterio)
+1. User provides Point or Polygon geometry (shapely) and date range via `download_and_read_geotiffs()` or `download_geotiffs()`
+2. Functions construct URLs using `construct_geotiff_daily_url()` and `construct_geotiff_monthly_url()`
+3. COG files read directly from S3 using HTTP range requests (via internal `read_cog()`)
 4. `geometry_window()` calculates spatial subset to read
 5. Only requested pixels transferred via HTTP range requests (COG efficiency)
 6. Returns numpy arrays with time dimension, ready for analysis
-7. Optional: Files cached to disk for reuse (via `save_to_disk=True`)
+7. Optional: Files cached to disk for reuse in `{cache_dir}/{variable}/{year}/` structure
 
 ### Key Design Patterns
 
@@ -220,8 +225,8 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 - PatchedPoint and DataDrill use different endpoints but share parameter structure
 - Some formats (NEAR, NAME, ID) only work with PatchedPoint dataset
 - Python SILO API date format is YYYYMMDD (no dashes); the CLI accepts ISO dates (YYYY-MM-DD) and converts
-- **CLI variables**: Use readable names (`rainfall`, `max_temp`, `min_temp`, `evaporation`, `radiation`, `vapour_pressure`, etc.)
-- **Low-level API variables**: SILO codes are single letters (R=rainfall, X=max_temp, N=min_temp, etc.)
+- **Variable names everywhere are canonical SILO/NetCDF names** from `variable_register.VARIABLES` (e.g. `daily_rain`, `max_temp`, `min_temp`, `evap_pan`, `radiation`, `vp`, `monthly_rain`). The CLI `--var`, the Pydantic query models, and the convenience methods all accept these same names. There is no `rainfall` alias.
+- **Single-letter SILO codes (R, X, N, ...) are an internal detail**: `to_api_params()` converts canonical names to API codes via `VARIABLES.silo_code_from_name()` when building the HTTP request. Callers never pass the single-letter codes directly.
 
 ### Local Data Structure
 - NetCDF files must be in `{variable_name}/{year}.{variable_name}.nc` structure
@@ -231,14 +236,14 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 
 ### Module Dependencies
 - CLI modules (`cli/silo.py`, `cli/local.py`, `cli/metno.py`, `cli/geotiff.py`) import respective domain modules
-- `cli/silo.py` imports `silo_api` and `silo_models`
-- `cli/local.py` imports `read_silo_xarray` and `silo_netcdf`
-- `cli/metno.py` imports `metno_api`, `silo_api`, and `merge_weather_data`
-- `cli/geotiff.py` imports `silo_geotiff`
+- `cli/silo.py` imports `silo_api`, `silo_models`, and `date_utils`
+- `cli/local.py` imports `read_silo_xarray`, `silo_netcdf`, and `date_utils`
+- `cli/metno.py` imports `metno_api`, `silo_api`, `merge_weather_data`, and `date_utils`
+- `cli/geotiff.py` imports `silo_geotiff` and `date_utils`
 - `silo_api` imports `silo_models` for all type definitions
-- `read_silo_xarray` imports `silo_variables` for preset expansion
-- `silo_netcdf` imports `silo_variables` for variable metadata
-- `silo_geotiff` imports `silo_variables` for variable metadata and preset expansion
+- `read_silo_xarray` imports `variable_register` for variable validation
+- `silo_netcdf` imports `variable_register` for variable metadata
+- `silo_geotiff` imports `variable_register` for variable metadata and validation
 - `silo_geotiff` uses `rasterio` for COG reading and `shapely` for geometry handling
 - No circular dependencies
 
@@ -260,6 +265,11 @@ Use the shared helpers in `weather_tools.logging_utils` for all CLI and SDK mess
 ### GeoTIFF Structure and Usage
 - **URL Pattern**: `https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/daily/{variable}/{year}/{YYYYMMDD}.{variable}.tif`
 - **File Organization** (when cached): `{cache_dir}/{variable}/{year}/{YYYYMMDD}.{variable}.tif`
+  - Full-resolution, unclipped downloads use this plain path.
+  - Requests with a `geometry` clip and/or an `overview_level` produce request-specific bytes,
+    so they are namespaced under `{cache_dir}/{variable}/{year}/_subset_{key}/{YYYYMMDD}.{variable}.tif`,
+    where `key` is a stable hash of the geometry WKT + overview level (`subset_cache_key()`).
+    This stops a raster clipped/down-sampled for one request being silently reused for another.
 - **COG Benefits**: Only download pixels you need via HTTP range requests (much faster than full file)
 - **Date Format**: GeoTIFF uses YYYY-MM-DD (unlike NetCDF which uses years)
 - **CRS**: All GeoTIFFs are in EPSG:4326 (WGS84 lat/lon)

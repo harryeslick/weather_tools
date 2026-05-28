@@ -17,7 +17,7 @@ from weather_tools.silo_netcdf import (
     download_netcdf,
     validate_year_for_variable,
 )
-from weather_tools.silo_variables import SiloNetCDFError
+from weather_tools.variable_register import SiloNetCDFError
 
 
 class TestURLConstruction:
@@ -198,18 +198,18 @@ class TestDownloadFile:
 class TestDownloadSiloGridded:
     """Test the main download function (using mocks)."""
 
-    def test_expand_daily_preset(self, tmp_path):
-        """Test that 'daily' preset expands to multiple variables."""
+    def test_download_multiple_daily_variables(self, tmp_path):
+        """Test downloading the four core daily variables specified explicitly."""
         # Mock successful downloads
         with patch("weather_tools.silo_netcdf.download_file", return_value=True):
             result = download_netcdf(
-                variables="daily",
+                variables=["daily_rain", "max_temp", "min_temp", "evap_syn"],
                 start_year=2023,
                 end_year=2023,
                 output_dir=tmp_path,
             )
 
-        # Should have downloaded 4 variables (daily preset)
+        # Should have downloaded all 4 requested variables
         assert "daily_rain" in result
         assert "max_temp" in result
         assert "min_temp" in result
@@ -248,7 +248,7 @@ class TestDownloadSiloGridded:
         # start_year > end_year
         with pytest.raises(ValueError, match="must be <="):
             download_netcdf(
-                variables="daily",
+                variables="daily_rain",
                 start_year=2023,
                 end_year=2020,
                 output_dir=tmp_path,
@@ -260,7 +260,7 @@ class TestDownloadSiloGridded:
 
         with pytest.raises(ValueError, match="cannot be in the future"):
             download_netcdf(
-                variables="daily",
+                variables="daily_rain",
                 start_year=future_year,
                 end_year=future_year,
                 output_dir=tmp_path,

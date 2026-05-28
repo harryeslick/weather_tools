@@ -26,21 +26,20 @@ pip install weather-tools
 
 ```python
 from weather_tools.silo_api import SiloAPI, SiloAPIError
+from weather_tools.silo_models import PatchedPointQuery, SiloDateRange
 
 # Initialize the API client
 api = SiloAPI(api_key="your_silo_api_key")
 
 try:
     # Query PatchedPoint data for a station
-    result = api.query(
-        dataset="PatchedPoint",
-        format="csv",
+    query = PatchedPointQuery(
         station_code="30043",
-        start_date="20230101",
-        end_date="20230131",
-        values=["rain", "maxtemp", "mintemp"]
+        date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+        variables=["daily_rain", "max_temp", "min_temp"]
     )
-    print(result)
+    response = api.query_patched_point(query)
+    print(response.to_csv())
 except SiloAPIError as e:
     print(f"API Error: {e}")
 ```
@@ -48,16 +47,16 @@ except SiloAPIError as e:
 ### DataDrill (Gridded Data)
 
 ```python
+from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates, SiloDateRange
+
 # Query DataDrill data for specific coordinates
-result = api.query(
-    dataset="DataDrill",
-    format="csv",
-    longitude=151.0,
-    latitude=-27.5,
-    start_date="20230101",
-    end_date="20230131",
-    values=["rain", "maxtemp", "mintemp"]
+query = DataDrillQuery(
+    coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain", "max_temp", "min_temp"]
 )
+response = api.query_data_drill(query)
+print(response.to_csv())
 ```
 
 ## Configuration Options
@@ -72,7 +71,7 @@ api = SiloAPI(
     timeout=60,              # Request timeout in seconds (default: 30)
     max_retries=5,           # Maximum retry attempts (default: 3)
     retry_delay=2.0,         # Base delay between retries (default: 1.0)
-    enable_cache=True        # Enable response caching (default: False)
+    enable_cache=True        # Enable response caching (default: True)
 )
 ```
 
@@ -84,45 +83,84 @@ api = SiloAPI(
 | `timeout` | float | 30 | Request timeout in seconds |
 | `max_retries` | int | 3 | Maximum number of retry attempts |
 | `retry_delay` | float | 1.0 | Base delay between retries (exponential backoff) |
-| `enable_cache` | bool | False | Enable response caching |
+| `enable_cache` | bool | True | Enable response caching |
 
 ## API Methods
 
-### query()
+### query_patched_point()
 
-Main method for querying the SILO API.
+Query PatchedPoint dataset (station-based data).
 
 ```python
-result = api.query(
-    dataset: str,
-    format: str = "csv",
-    station_code: Optional[str] = None,
-    longitude: Optional[float] = None,
-    latitude: Optional[float] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    values: Optional[List[str]] = None,
-    radius: Optional[float] = None
-) -> Union[str, Dict[str, Any]]
+from weather_tools.silo_models import PatchedPointQuery, SiloDateRange
+
+query = PatchedPointQuery(
+    station_code="30043",
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain", "max_temp", "min_temp"]
+)
+response = api.query_patched_point(query)
 ```
 
-**Parameters:**
+**Parameters:** Pass a `PatchedPointQuery` Pydantic model
 
-- `dataset`: 'PatchedPoint' or 'DataDrill'
-- `format`: 'csv', 'apsim', or 'near'
-- `station_code`: SILO station code (required for PatchedPoint)
-- `longitude`, `latitude`: Location coordinates (required for DataDrill)
-- `start_date`, `end_date`: Date range in YYYYMMDD format
-- `values`: List of weather variables to request
-- `radius`: Search radius for 'near' format
+**Returns:** `SiloResponse` with structured data
 
-**Returns:**
-- CSV/APSIM data as string
-- JSON data as dictionary (for non-standard formats)
+**Raises:** `SiloAPIError` for API request failures
 
-**Raises:**
-- `ValueError`: For invalid parameters
-- `SiloAPIError`: For API request failures
+### query_data_drill()
+
+Query DataDrill dataset (gridded data).
+
+```python
+from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates, SiloDateRange
+
+query = DataDrillQuery(
+    coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain", "max_temp"]
+)
+response = api.query_data_drill(query)
+```
+
+**Parameters:** Pass a `DataDrillQuery` Pydantic model
+
+**Returns:** `SiloResponse` with structured data
+
+**Raises:** `SiloAPIError` for API request failures
+
+### get_patched_point()
+
+Convenience method for PatchedPoint queries using simple string arguments.
+
+```python
+df, metadata = api.get_patched_point(
+    station_code="30043",
+    start_date="20230101",
+    end_date="20230131",
+    variables=["daily_rain", "max_temp"],
+    format="csv"
+)
+```
+
+**Returns:** Tuple of (DataFrame, metadata dict)
+
+### get_data_drill()
+
+Convenience method for DataDrill queries using simple string arguments.
+
+```python
+df, metadata = api.get_data_drill(
+    latitude=-27.5,
+    longitude=151.0,
+    start_date="20230101",
+    end_date="20230131",
+    variables=["daily_rain", "max_temp"],
+    format="csv"
+)
+```
+
+**Returns:** Tuple of (DataFrame, metadata dict)
 
 ### Cache Management
 
@@ -144,35 +182,37 @@ Station-based data with quality-controlled observations.
 - `csv`: Comma-separated values
 - `apsim`: APSIM format
 - `near`: Find nearby stations
+- `name`: Search stations by name
+- `id`: Get station details by ID
 
 **Example:**
 ```python
+from weather_tools.silo_models import PatchedPointQuery, SiloDateRange, SiloFormat
+
 # CSV format
-result = api.query(
-    dataset="PatchedPoint",
-    format="csv",
+query = PatchedPointQuery(
+    format=SiloFormat.CSV,
     station_code="30043",
-    start_date="20230101",
-    end_date="20230131",
-    values=["rain", "maxtemp", "mintemp"]
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain", "max_temp", "min_temp"]
 )
+response = api.query_patched_point(query)
 
 # APSIM format
-result = api.query(
-    dataset="PatchedPoint",
-    format="apsim",
+query = PatchedPointQuery(
+    format=SiloFormat.APSIM,
     station_code="30043",
-    start_date="20230101",
-    end_date="20230131"
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131")
 )
+response = api.query_patched_point(query)
 
 # Find nearby stations
-result = api.query(
-    dataset="PatchedPoint",
-    format="near",
+query = PatchedPointQuery(
+    format=SiloFormat.NEAR,
     station_code="30043",
     radius=50.0  # Search radius in km
 )
+response = api.query_patched_point(query)
 ```
 
 ### DataDrill Dataset
@@ -182,27 +222,28 @@ Gridded data interpolated to specific coordinates.
 **Supported Formats:**
 - `csv`: Comma-separated values
 - `apsim`: APSIM format
+- `json`: JSON format
 
 **Example:**
 ```python
-result = api.query(
-    dataset="DataDrill",
-    format="csv",
-    longitude=151.0,
-    latitude=-27.5,
-    start_date="20230101",
-    end_date="20230131",
-    values=["rain", "maxtemp", "mintemp"]
+from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates, SiloDateRange, SiloFormat
+
+query = DataDrillQuery(
+    format=SiloFormat.CSV,
+    coordinates=AustralianCoordinates(latitude=-27.5, longitude=151.0),
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain", "max_temp", "min_temp"]
 )
+response = api.query_data_drill(query)
 ```
 
 ## Weather Variables
 
-Common weather variables available from SILO:
+Common canonical variable names available from SILO:
 
-- `rain`: Daily rainfall (mm)
-- `maxtemp`: Maximum temperature (°C)
-- `mintemp`: Minimum temperature (°C)
+- `daily_rain`: Daily rainfall (mm)
+- `max_temp`: Maximum temperature (°C)
+- `min_temp`: Minimum temperature (°C)
 - `vp`: Vapor pressure (hPa)
 - `evap_pan`: Class A pan evaporation (mm)
 - `evap_syn`: Synthetic estimate of evaporation (mm)
@@ -275,37 +316,30 @@ ValueError: longitude and latitude are required for DataDrill queries
 
 ### Response Caching
 
-Enable caching to avoid redundant API calls:
+Enable caching to avoid redundant API calls (enabled by default):
 
 ```python
 import logging
+from weather_tools.silo_models import PatchedPointQuery, SiloDateRange
 
 # Configure logging to see cache activity
 logging.basicConfig(level=logging.INFO)
 
-# Create API with caching enabled
+# Create API with caching enabled (default)
 api = SiloAPI(api_key="your_key", enable_cache=True)
 
 # First query - hits the API
-result1 = api.query(
-    dataset="PatchedPoint",
+query = PatchedPointQuery(
     station_code="30043",
-    start_date="20230101",
-    end_date="20230131",
-    values=["rain"]
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain"]
 )
+response1 = api.query_patched_point(query)
 
 # Second identical query - uses cache
-result2 = api.query(
-    dataset="PatchedPoint",
-    station_code="30043",
-    start_date="20230101",
-    end_date="20230131",
-    values=["rain"]
-)
+response2 = api.query_patched_point(query)
 
 print(f"Cache size: {api.get_cache_size()}")  # Output: 1
-print(f"Results identical: {result1 == result2}")  # Output: True
 
 # Clear cache when done
 api.clear_cache()
@@ -397,12 +431,12 @@ The SILO API functionality is also available via the command-line interface:
 # Query PatchedPoint data
 weather-tools silo patched-point --station 30043 \
     --start-date 2023-01-01 --end-date 2023-01-31 \
-    --var rainfall --var max_temp --var min_temp --output silo_data.csv
+    --var daily_rain --var max_temp --var min_temp --output silo_data.csv
 
 # Query DataDrill data
 weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
     --start-date 2023-01-01 --end-date 2023-01-31 \
-    --var rainfall --var max_temp --output silo_data.csv
+    --var daily_rain --var max_temp --output silo_data.csv
 
 # Find nearby stations
 weather-tools silo search --station 30043 --radius 50
@@ -483,14 +517,13 @@ The weather_tools package provides Pydantic models for structured API queries:
 Model for PatchedPoint dataset queries:
 
 ```python
-from weather_tools import PatchedPointQuery
+from weather_tools.silo_models import PatchedPointQuery, SiloDateRange, SiloFormat
 
 query = PatchedPointQuery(
-    station="30043",
-    start_date="20230101",
-    end_date="20230131",
-    variables=["R", "X", "N"],  # Rain, Max temp, Min temp
-    format="csv"
+    station_code="30043",
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain", "max_temp", "min_temp"],  # Canonical variable names
+    format=SiloFormat.CSV
 )
 ```
 
@@ -499,26 +532,24 @@ query = PatchedPointQuery(
 Model for DataDrill dataset queries:
 
 ```python
-from weather_tools import DataDrillQuery
+from weather_tools.silo_models import DataDrillQuery, AustralianCoordinates, SiloDateRange, SiloFormat
 
 query = DataDrillQuery(
-    lat=-27.5,
-    lon=153.0,
-    start_date="20230101", 
-    end_date="20230131",
-    variables=["R", "X", "N"],
-    format="csv"
+    coordinates=AustralianCoordinates(latitude=-27.5, longitude=153.0),
+    date_range=SiloDateRange(start_date="20230101", end_date="20230131"),
+    variables=["daily_rain", "max_temp", "min_temp"],  # Canonical variable names
+    format=SiloFormat.CSV
 )
 ```
 
 ### Other Models
 
-- **`ClimateVariable`**: Enum for valid climate variable codes
-- **`SiloFormat`**: Enum for output formats (csv, json, apsim, standard)
+- **`SiloFormat`**: Enum for output formats (csv, json, apsim, standard, alldata, near, name, id)
 - **`SiloDataset`**: Enum for dataset types (PatchedPoint, DataDrill)
 - **`AustralianCoordinates`**: Validator for Australian lat/lon coordinates
 - **`SiloDateRange`**: Validator for SILO date format (YYYYMMDD)
 - **`SiloResponse`**: Response wrapper with metadata
+- **`SiloAPIError`**: Exception for API-related failures
 
 These models provide validation, type hints, and automatic parameter generation for SILO API requests.
 

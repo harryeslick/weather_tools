@@ -28,16 +28,26 @@ After installation, the `weather-tools` command will be available.
 
 ## Commands Overview
 
-The CLI provides two command groups:
+The CLI provides four command groups:
 
 ### SILO API Commands (Online)
 - **`silo patched-point`** - Query SILO PatchedPoint dataset (station-based data)
 - **`silo data-drill`** - Query SILO DataDrill dataset (gridded data)
 - **`silo search`** - Search for SILO stations by name or find nearby stations
+- **`silo cache`** - View or manage the SILO API response cache
 
 ### Local NetCDF Commands (Offline)
 - **`local info`** - Display information about available local SILO data
 - **`local extract`** - Extract weather data from local netCDF files
+- **`local download`** - Download SILO gridded NetCDF files from AWS S3
+
+### Met.no Forecast Commands
+- **`metno forecast`** - Get met.no weather forecast for an Australian location
+- **`metno merge`** - Merge SILO historical data with met.no forecast data
+- **`metno info`** - Display information about the met.no API and variable mappings
+
+### GeoTIFF Commands
+- **`geotiff download`** - Download SILO GeoTIFF files for a date range with optional spatial clipping
 
 ## Quick Start Examples
 
@@ -202,7 +212,9 @@ weather-tools silo search [OPTIONS]
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
-| `--radius` | FLOAT | Search radius in km | `50.0` |
+| `--radius` | INTEGER | Search radius in km | `50` |
+| `--state` | TEXT | Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT) | |
+| `--details` | BOOLEAN | Get detailed info for a specific station | False |
 | `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
 | `--output` | TEXT | Output filename (optional) | |
 
@@ -312,21 +324,25 @@ weather-tools local extract [OPTIONS]
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
 | `--output` | TEXT | Output CSV filename | `weather_data.csv` |
-| `--variables` | TEXT | Weather variables to extract (see below) | `daily` |
+| `--var` | TEXT | Weather variables to extract (see below; repeat for multiple) | daily_rain, max_temp, min_temp, evap_syn (if omitted) |
 | `--silo-dir` | PATH | Path to SILO data directory | `~/DATA/silo_grids` |
 | `--tolerance` | FLOAT | Maximum distance (in degrees) for nearest neighbor selection | `0.1` |
-| `--keep-location` | BOOLEAN | Keep location columns (crs, lat, lon) in output CSV | `False` (columns are dropped by default) |
+| `--keep-location` | BOOLEAN | Keep location columns (crs, lat, lon) in output CSV | False |
 | `--help` | | Show help message and exit | |
 
 #### Variable Options
 
-The `--variables` option accepts the following values:
+The `--var` option accepts individual variable names:
 
-| Value | Variables Included | Description |
-|-------|-------------------|-------------|
-| `daily` | max_temp, min_temp, daily_rain, evap_syn | Daily weather variables (default) |
-| `monthly` | monthly_rain | Monthly rainfall data |
-| Individual variables | Any combination of: `max_temp`, `min_temp`, `daily_rain`, `evap_syn`, `monthly_rain` | Specify individual variables |
+| Value | Description |
+|-------|-------------|
+| `daily_rain` | Daily rainfall |
+| `max_temp` | Maximum temperature |
+| `min_temp` | Minimum temperature |
+| `evap_syn` | Synthetic evaporation |
+| `monthly_rain` | Monthly rainfall |
+
+If `--var` is omitted, the default is: `daily_rain`, `max_temp`, `min_temp`, `evap_syn`
 
 #### Example Usage
 
@@ -344,7 +360,7 @@ weather-tools local extract --lat -27.5 --lon 153.0 --start-date 2020-01-01 --en
 weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
-  --variables monthly \
+  --var monthly_rain \
   --output monthly_rainfall.csv
 ```
 
@@ -355,7 +371,7 @@ weather-tools local extract \
 weather-tools local extract \
   --lat -27.5 --lon 153.0 \
   --start-date 2020-01-01 --end-date 2020-12-31 \
-  --variables max_temp --variables min_temp \
+  --var max_temp --var min_temp \
   --output temperatures.csv
 ```
 
@@ -403,7 +419,6 @@ weather-tools local extract \
 
 ```
 Loading SILO data from: /Users/user/Developer/DATA/silo_grids
-Variables: daily
 Loading SILO dataset...  [####################################]  100%
 Extracting data for location: lat=-27.5, lon=153.0
 Date range: 2020-01-01 to 2020-12-31

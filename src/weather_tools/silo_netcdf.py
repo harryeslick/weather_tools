@@ -3,9 +3,11 @@ Download SILO gridded NetCDF files from AWS S3 public data.
 
 This module provides functionality to download climate data files that can be
 used with the local NetCDF processing functions.
+Full list of NetCDF files can be found [here](https://s3-ap-southeast-2.amazonaws.com/silo-open-data/Official/index.html)
 """
 
 import logging
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -15,12 +17,11 @@ from rich.console import Console
 from rich.progress import Progress, TaskID
 
 from weather_tools.logging_utils import create_download_progress, get_console
-from weather_tools.silo_variables import (
+from weather_tools.variable_register import (
     DEFAULT_NETCDF_TIMEOUT,
     SILO_NETCDF_BASE_URL,
     VARIABLES,
     SiloNetCDFError,
-    VariableInput,
 )
 
 # SILO NetCDF data availability start years
@@ -115,46 +116,71 @@ def download_file(
     # Create parent directory if needed
     destination.parent.mkdir(parents=True, exist_ok=True)
 
+    # Write to a temp file in the same directory then rename atomically so that
+    # a failed or interrupted download never leaves a truncated file at the
+    # destination path (which the skip-if-exists check would otherwise trust).
+    tmp_path: Optional[Path] = None
+    response = None
     try:
-        # Stream download with progress tracking
+        # Stream the download; always call response.close() so the underlying
+        # connection is returned to the pool regardless of how we exit.
         response = requests.get(url, stream=True, timeout=timeout)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
 
-        # Get total file size
-        total_size = int(response.headers.get("content-length", 0))
+            # Get total file size
+            total_size = int(response.headers.get("content-length", 0))
 
-        # Initialize progress task if provided
-        if progress and task_id is not None:
-            progress.update(task_id, total=total_size)
+            # Initialize progress task if provided
+            if progress and task_id is not None:
+                progress.update(task_id, total=total_size)
 
-        # Download in chunks
-        chunk_size = 8192
-        downloaded = 0
+            # Download in chunks into a sibling temp file
+            chunk_size = 8192
+            downloaded = 0
 
-        with open(destination, "wb") as f:
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                if chunk:
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if progress and task_id is not None:
-                        progress.update(task_id, completed=downloaded)
+            fd, tmp_str = tempfile.mkstemp(dir=destination.parent, suffix=".tmp")
+            tmp_path = Path(tmp_str)
+            try:
+                with open(fd, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if progress and task_id is not None:
+                                progress.update(task_id, completed=downloaded)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                tmp_path = None
+                raise
+        finally:
+            response.close()
 
+        # Atomic rename: only reaches here if the full download succeeded
+        tmp_path.replace(destination)
+        tmp_path = None
         logger.info(f"Downloaded: {destination}")
         return True
 
     except requests.exceptions.HTTPError as e:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
         if e.response.status_code == 404:
             raise SiloNetCDFError(f"File not found: {url}") from e
         else:
             raise SiloNetCDFError(f"HTTP error downloading {url}: {e}") from e
     except requests.exceptions.RequestException as e:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
         raise SiloNetCDFError(f"Failed to download {url}: {e}") from e
     except IOError as e:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
         raise SiloNetCDFError(f"Failed to write file {destination}: {e}") from e
 
 
 def download_netcdf(
-    variables: VariableInput,
+    variables: str | list[str],
     start_year: int,
     end_year: int,
     output_dir: Path,
@@ -166,9 +192,8 @@ def download_netcdf(
     Download SILO NetCDF files from AWS S3.
 
     Args:
-        variables: Variable preset ("daily", "monthly", "temperature", etc.),
-                  variable name ("daily_rain", "max_temp", etc.),
-                  or list of presets/variable names
+        variables: Canonical variable name ("daily_rain", "max_temp", etc.) or a
+                  list of canonical names. Each variable must be specified explicitly.
         start_year: First year to download (inclusive)
         end_year: Last year to download (inclusive)
         output_dir: Directory to save files (will create subdirs per variable)
@@ -186,7 +211,7 @@ def download_netcdf(
     Example:
         >>> from pathlib import Path
         >>> downloaded = download_netcdf(
-        ...     variables="daily",
+        ...     variables=["daily_rain", "max_temp", "min_temp", "evap_syn"],
         ...     start_year=2020,
         ...     end_year=2023,
         ...     output_dir=Path.home() / "DATA/silo_grids"
