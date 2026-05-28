@@ -5,7 +5,6 @@ import typer
 
 from weather_tools.cli.date_utils import (
     iso_date_option,
-    iso_to_silo_yyyymmdd_option,
     parse_iso_date_strict,
     silo_yyyymmdd_to_iso,
 )
@@ -29,10 +28,6 @@ def test_parse_iso_date_strict_rejects_non_zero_padded(value: str) -> None:
 
 def test_iso_date_option_returns_canonical_string() -> None:
     assert iso_date_option("2023-01-01") == "2023-01-01"
-
-
-def test_iso_to_silo_yyyymmdd_option_converts() -> None:
-    assert iso_to_silo_yyyymmdd_option("2023-01-31") == "20230131"
 
 
 def test_silo_yyyymmdd_to_iso_converts_for_display() -> None:

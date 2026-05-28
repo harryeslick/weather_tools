@@ -55,11 +55,27 @@ class SiloDateRange(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     start_date: str = Field(
-        ..., pattern=r"^\d{8}$", description="Start date in YYYYMMDD format (e.g., '20230101')"
+        ...,
+        pattern=r"^\d{8}$",
+        description="Start date in YYYY-MM-DD or YYYYMMDD format (e.g., '2023-01-01')",
     )
     end_date: str = Field(
-        ..., pattern=r"^\d{8}$", description="End date in YYYYMMDD format (e.g., '20230131')"
+        ...,
+        pattern=r"^\d{8}$",
+        description="End date in YYYY-MM-DD or YYYYMMDD format (e.g., '2023-01-31')",
     )
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def normalize_iso_date(cls, v: Any) -> Any:
+        """Accept ISO YYYY-MM-DD input and normalise to YYYYMMDD before pattern check."""
+        if isinstance(v, str) and len(v) == 10 and v[4] == "-" and v[7] == "-":
+            try:
+                return datetime.strptime(v, "%Y-%m-%d").strftime("%Y%m%d")
+            except ValueError:
+                # Fall through and let the strict YYYYMMDD validator emit the error.
+                return v
+        return v
 
     @field_validator("start_date", "end_date")
     @classmethod

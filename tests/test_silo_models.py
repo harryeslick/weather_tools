@@ -235,3 +235,41 @@ class TestPatchedPointDataFormatRequirements:
         """NEAR format without station_code should still raise."""
         with pytest.raises(ValidationError):
             PatchedPointQuery(format=SiloFormat.NEAR)
+
+
+# ---------------------------------------------------------------------------
+# SiloDateRange accepts ISO (YYYY-MM-DD) input and normalises to YYYYMMDD
+# ---------------------------------------------------------------------------
+
+
+class TestSiloDateRangeIsoInput:
+    """SiloDateRange must accept either YYYY-MM-DD or YYYYMMDD; storage stays YYYYMMDD."""
+
+    def test_iso_input_normalised_to_yyyymmdd(self):
+        dr = SiloDateRange(start_date="2023-01-01", end_date="2023-01-31")
+        assert dr.start_date == "20230101"
+        assert dr.end_date == "20230131"
+
+    def test_yyyymmdd_input_unchanged(self):
+        dr = SiloDateRange(start_date="20230101", end_date="20230131")
+        assert dr.start_date == "20230101"
+        assert dr.end_date == "20230131"
+
+    def test_mixed_input_forms(self):
+        dr = SiloDateRange(start_date="2023-01-01", end_date="20230131")
+        assert dr.start_date == "20230101"
+        assert dr.end_date == "20230131"
+
+    def test_invalid_iso_month_rejected(self):
+        with pytest.raises(ValidationError):
+            SiloDateRange(start_date="2023-13-01", end_date="2023-12-31")
+
+    def test_malformed_string_rejected(self):
+        # Not ISO, not YYYYMMDD → pattern check rejects it.
+        with pytest.raises(ValidationError):
+            SiloDateRange(start_date="2023/01/01", end_date="20230131")
+
+    def test_iso_input_preserves_date_order_validation(self):
+        # start > end must still raise after normalisation.
+        with pytest.raises(ValidationError):
+            SiloDateRange(start_date="2023-12-31", end_date="2023-01-01")

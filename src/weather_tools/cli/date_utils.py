@@ -35,13 +35,6 @@ def iso_date_option(value: Optional[str]) -> Optional[str]:
     return parse_iso_date_strict(value).strftime(_ISO_FMT)
 
 
-def iso_to_silo_yyyymmdd_option(value: Optional[str]) -> Optional[str]:
-    """Typer option callback: validate ISO date and return YYYYMMDD for SILO API."""
-    if value is None:
-        return None
-    return parse_iso_date_strict(value).strftime("%Y%m%d")
-
-
 def silo_yyyymmdd_to_iso(value: str) -> str:
     """Convert a SILO YYYYMMDD string to ISO YYYY-MM-DD (for display)."""
     try:
