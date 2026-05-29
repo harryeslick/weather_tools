@@ -97,8 +97,7 @@ class DownloadQuery(BaseModel):
     variables: List[str] = Field(
         default_factory=lambda: list(DEFAULT_DAILY_VARIABLES),
         description=(
-            "Climate variables to download (canonical names, e.g. 'daily_rain', "
-            "'max_temp', 'monthly_rain'). Repeat the option for multiple."
+            f"Climate variables to download. Repeat the option for multiple. options: {VARIABLES.silo_variables()}"
         ),
     )
     start_year: int = Field(
