@@ -183,12 +183,11 @@ weather-tools silo search [OPTIONS]
 
 **Options:**
 - `--name TEXT` - Search for stations by name fragment (e.g., 'Brisbane')
-- `--station TEXT` - Station code for nearby search or details lookup
+- `--station TEXT` - Station code for exact or nearby search
 - `--lat FLOAT` - Latitude for location-based search (e.g., -27.47)
 - `--lon FLOAT` - Longitude for location-based search (e.g., 153.03)
 - `--radius INTEGER` - Search radius in km (default: 50)
 - `--state TEXT` - Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT)
-- `--details` - Get detailed info for a specific station
 - `--api-key TEXT` - SILO API key (or set SILO_API_KEY env var)
 - `--output, -o TEXT` - Output filename
 - `--log-level TEXT` - Logging level for SILO client (e.g., INFO, DEBUG)
@@ -208,11 +207,11 @@ weather-tools silo search --lat -27.47 --lon 153.03
 # Search by coordinates with custom radius and name filter
 weather-tools silo search --lat -27.47 --lon 153.03 --radius 20 --name Airport
 
+# Look up one station by code
+weather-tools silo search --station 30043
+
 # Find nearby stations by station code
 weather-tools silo search --station 30043 --radius 50
-
-# Get station details
-weather-tools silo search --station 30043 --details
 ```
 
 ## Local File Commands

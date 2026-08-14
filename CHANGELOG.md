@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-14
+
+### Changed
+
+- `silo search --station CODE` now performs an exact station lookup and renders
+  the result using the same table and CSV schema as other station searches.
+- SILO `format=id` metadata responses are normalized to the canonical station
+  columns instead of being exposed as raw pipe-delimited text.
+
+### Removed
+
+- Removed the redundant `silo search --details` option. Add `--radius` to a
+  station lookup only when nearby stations are required.
+
 ## [0.2.0] - 2026-05-28
 
 Realigned the CLI with the original Pydantic-first vision: query models own field names, types, defaults, validation, and help text; Typer options are auto-derived from the models; CLI commands are thin downloaders that write the upstream response to disk verbatim. Applied to four data commands across three CLI modules.
@@ -63,7 +77,6 @@ Realigned the CLI with the original Pydantic-first vision: query models own fiel
 
 - error handling non-matching arrays
 
-
 ## [0.0.2] - Earlier version
 
 ### Added
@@ -75,4 +88,3 @@ Realigned the CLI with the original Pydantic-first vision: query models own fiel
 - Persistent disk cache for API responses via diskcache
 - Met.no weather forecast integration and data merging
 - Comprehensive variable registry for climate data standardization
-

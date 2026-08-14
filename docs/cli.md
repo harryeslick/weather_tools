@@ -204,7 +204,7 @@ weather-tools silo search [OPTIONS]
 | Option | Type | Description |
 |--------|------|-------------|
 | `--name` | TEXT | Search stations by name |
-| `--station` | TEXT | Find stations near this station code |
+| `--station` | TEXT | Look up this station code, or use it as the centre of a radius search |
 | `--lat` | FLOAT | Latitude for proximity search (requires --lon) |
 | `--lon` | FLOAT | Longitude for proximity search (requires --lat) |
 
@@ -212,9 +212,8 @@ weather-tools silo search [OPTIONS]
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
-| `--radius` | INTEGER | Search radius in km | `50` |
+| `--radius` | INTEGER | Search radius in km; with `--station`, switches to nearby search | `50` for coordinate search |
 | `--state` | TEXT | Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT) | |
-| `--details` | BOOLEAN | Get detailed info for a specific station | False |
 | `--api-key` | TEXT | SILO API key (or set SILO_API_KEY env var) | |
 | `--output` | TEXT | Output filename (optional) | |
 
@@ -223,6 +222,9 @@ weather-tools silo search [OPTIONS]
 ```bash
 # Search by station name
 weather-tools silo search --name "Brisbane"
+
+# Look up one station by code
+weather-tools silo search --station 30043
 
 # Find stations near a specific station
 weather-tools silo search --station 30043 --radius 50

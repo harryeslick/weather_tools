@@ -136,11 +136,11 @@ Examples:
     # Search by name and filter by state
     weather-tools silo search --name Brisbane --state QLD
 
+    # Look up one station
+    weather-tools silo search --station 30043
+
     # Find nearby stations
     weather-tools silo search --station 30043 --radius 50
-
-    # Get station details
-    weather-tools silo search --station 30043 --details
 
 **Usage**:
 
@@ -151,10 +151,9 @@ $ weather-tools silo search [OPTIONS]
 **Options**:
 
 * `--name TEXT`: Search for stations by name fragment (e.g., &#x27;Brisbane&#x27;)
-* `--station TEXT`: Station code for nearby search or details lookup
+* `--station TEXT`: Station code for exact or nearby search
 * `--radius INTEGER`: Search radius in km (for nearby search)
 * `--state [QLD|NSW|VIC|TAS|SA|WA|NT|ACT]`: Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT)
-* `--details / --no-details`: Get detailed info for a specific station  [default: no-details]
 * `--api-key TEXT`: SILO API key (email address)  [env var: SILO_API_KEY]
 * `-o, --output TEXT`: Output filename
 * `--log-level TEXT`: Logging level for SILO client (e.g. INFO, DEBUG, WARNING)  [default: INFO]

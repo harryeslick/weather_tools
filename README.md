@@ -41,6 +41,9 @@ weather-tools silo patched-point --station 30043 \
 # Search for stations
 weather-tools silo search --name Brisbane --state QLD
 
+# Look up one station by code
+weather-tools silo search --station 30043
+
 # Search for stations by lat lon
 weather-tools silo search --lat -27.47 --lon 153.03 --radius 20 --name Airport
 

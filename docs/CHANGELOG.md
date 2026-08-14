@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
+## [0.3.0] - 2026-08-14
+
+### Changed
+
+- `silo search --station CODE` now performs an exact station lookup and renders
+  the result using the same table and CSV schema as other station searches.
+- SILO `format=id` metadata responses are normalized to the canonical station
+  columns instead of being exposed as raw pipe-delimited text.
+
+### Removed
+
+- Removed the redundant `silo search --details` option. Add `--radius` to a
+  station lookup only when nearby stations are required.
+
 ## [0.0.3] - 2026-03-10
 
 ### Added

@@ -438,6 +438,9 @@ weather-tools silo data-drill --latitude -27.5 --longitude 151.0 \
     --start-date 2023-01-01 --end-date 2023-01-31 \
     --var daily_rain --var max_temp --output silo_data.csv
 
+# Look up one station by code
+weather-tools silo search --station 30043
+
 # Find nearby stations
 weather-tools silo search --station 30043 --radius 50
 ```

@@ -833,9 +833,7 @@ class SiloAPI:
             else:
                 # Handle non-string data
                 return pd.DataFrame([csv_data])
-        elif response.format == SiloFormat.NAME:
-            return self.parse_station_data(response)
-        elif response.format == SiloFormat.NEAR:
+        elif response.format in {SiloFormat.ID, SiloFormat.NAME, SiloFormat.NEAR}:
             return self.parse_station_data(response)
 
         else:
@@ -859,12 +857,23 @@ class SiloAPI:
                 columns=["station_code", "name", "latitude", "longitude", "state", "elevation"]
             )
 
-        # Parse header and data rows
-        header_line = lines[0]
-        data_lines = lines[1:]
-
-        # Extract column names from header (split by |)
-        columns = [col.strip() for col in header_line.split("|")]
+        if response.format == SiloFormat.ID:
+            # ID responses contain one headerless row and an undocumented
+            # trailing data-category value (currently "Climate").
+            columns = [
+                "Number",
+                "Station name",
+                "Latitude",
+                "Longitud",
+                "Stat",
+                "Elevat.",
+                "Data category",
+            ]
+            data_lines = lines
+        else:
+            header_line = lines[0]
+            data_lines = lines[1:]
+            columns = [col.strip() for col in header_line.split("|")]
 
         # Parse data rows
         data_rows = []
@@ -891,5 +900,8 @@ class SiloAPI:
             "Elevat.": "elevation",
         }
         df = df.rename(columns=column_mapping)
+
+        if response.format == SiloFormat.ID:
+            df = df.drop(columns=["Data category"])
 
         return df

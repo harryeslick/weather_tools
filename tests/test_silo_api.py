@@ -48,6 +48,35 @@ class TestParseStationDataEmptyResponse:
         assert set(df.columns) == expected
 
 
+class TestParseStationDataIdResponse:
+    """Exact station metadata should use the canonical station table schema."""
+
+    def test_id_response_returns_one_canonical_station_row(self):
+        """The headerless ID response must render like NAME and NEAR search results."""
+        api = SiloAPI.__new__(SiloAPI)
+        response = SiloResponse(
+            raw_data=(
+                " 73142|COOTAMUNDRA AIRPORT                      | -34.630| 148.036|"
+                "NSW |  335.0|Climate \n"
+            ),
+            format=SiloFormat.ID,
+            dataset=SiloDataset.PATCHED_POINT,
+        )
+
+        df = api._response_to_dataframe(response)
+
+        assert df.to_dict(orient="records") == [
+            {
+                "station_code": 73142,
+                "name": "COOTAMUNDRA AIRPORT",
+                "latitude": -34.63,
+                "longitude": 148.036,
+                "state": "NSW",
+                "elevation": 335.0,
+            }
+        ]
+
+
 # ---------------------------------------------------------------------------
 # FIX 3: get_patched_point / get_data_drill must reject unknown format strings
 # ---------------------------------------------------------------------------

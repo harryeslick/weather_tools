@@ -292,7 +292,7 @@ def silo_search(
         Optional[str], typer.Option(help="Search for stations by name fragment (e.g., 'Brisbane')")
     ] = None,
     station: Annotated[
-        Optional[str], typer.Option(help="Station code for nearby search or details lookup")
+        Optional[str], typer.Option(help="Station code for exact or nearby search")
     ] = None,
     lat: Annotated[
         Optional[float], typer.Option(help="Latitude for location-based search (e.g., -27.47)")
@@ -305,7 +305,6 @@ def silo_search(
         Optional[Literal["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"]],
         typer.Option(help="Filter by state (QLD, NSW, VIC, TAS, SA, WA, NT, ACT)"),
     ] = None,
-    details: Annotated[bool, typer.Option(help="Get detailed info for a specific station")] = False,
     api_key: Annotated[
         Optional[str], typer.Option(envvar="SILO_API_KEY", help="SILO API key (email address)")
     ] = None,
@@ -323,8 +322,8 @@ def silo_search(
         weather-tools silo search --name Brisbane --state QLD
         weather-tools silo search --lat -27.47 --lon 153.03
         weather-tools silo search --lat -27.47 --lon 153.03 --radius 20 --name Airport
+        weather-tools silo search --station 30043
         weather-tools silo search --station 30043 --radius 50
-        weather-tools silo search --station 30043 --details
     """
     try:
         if api_key:
@@ -332,20 +331,7 @@ def silo_search(
         else:
             api = SiloAPI(log_level=log_level)
 
-        if details and station:
-            typer.echo(f"ℹ️ Getting details for station {station}...")
-            query = PatchedPointQuery(format=SiloFormat.ID, station_code=station)
-            response = api.query_patched_point(query)
-            typer.echo("✅ Search successful!")
-            if output:
-                output_path = Path(output)
-                output_path.write_text(response.to_csv())
-                typer.echo(f"💾 Saved to: {output_path.absolute()}")
-            else:
-                typer.echo("\n📍 Results:")
-                typer.echo(response.to_csv())
-
-        elif lat is not None and lon is not None:
+        if lat is not None and lon is not None:
             search_radius = radius if radius is not None else 50
             typer.echo(f"🔍 Searching for stations within {search_radius}km of ({lat}, {lon})...")
             if name:
@@ -395,10 +381,24 @@ def silo_search(
                 typer.echo("\n📍 Results:")
                 typer.echo(df.to_string(index=False))
 
+        elif station:
+            typer.echo(f"ℹ️ Getting station {station}...")
+            query = PatchedPointQuery(format=SiloFormat.ID, station_code=station)
+            response = api.query_patched_point(query)
+            df = api._response_to_dataframe(response)
+            typer.echo("✅ Search successful!")
+            if output:
+                output_path = Path(output)
+                df.to_csv(output_path, index=False)
+                typer.echo(f"💾 Saved to: {output_path.absolute()}")
+            else:
+                typer.echo("\n📍 Results:")
+                typer.echo(df.to_string(index=False))
+
         else:
             typer.echo(
                 "❌ Error: Provide --name for name search, --lat --lon for location search, "
-                "--station --radius for nearby search, or --station --details for info",
+                "--station for an exact lookup, or --station --radius for nearby search",
                 err=True,
             )
             raise typer.Exit(1)
